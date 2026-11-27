@@ -24,7 +24,7 @@ export function ExamTabs({ examId, className }: { examId: string; className?: st
 
   return (
     <nav aria-label="Exam sections" className={cn("-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
-      <ul className="flex w-max min-w-full border-b border-rule">
+      <ul className="flex w-max min-w-full border border-ink bg-paper-raised">
         {EXAM_TABS.map((tab) => {
           const href = tab.slug ? `${base}/${tab.slug}` : base;
           const active = tab.slug
@@ -36,8 +36,9 @@ export function ExamTabs({ examId, className }: { examId: string; className?: st
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "-mb-px inline-flex h-12 items-center border-b-2 px-4 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vermilion",
-                  active ? "border-ink text-ink" : "border-transparent text-ink-muted hover:text-ink",
+                  "relative inline-flex h-11 items-center border-r border-ink px-4 font-mono text-[12.5px] font-semibold tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
+                  "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-cobalt",
+                  active ? "bg-ink text-paper after:block" : "text-ink-soft after:hidden hover:bg-paper-sunk hover:text-ink",
                 )}
               >
                 {tab.label}

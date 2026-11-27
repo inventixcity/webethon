@@ -1184,3 +1184,61 @@ async fn blueprint_draw_stores_required_items_marks_and_facility(db: PgPool) -> 
     assert!(spread <= 0.05);
     Ok(())
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn blueprint_overlapping_rows_reassign_a_broad_pick(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("update exam_items set difficulty=1 where id=$1")
+        .bind(f.single)
+        .execute(&f.db)
+        .await?;
+    sqlx::query("update exam_items set difficulty=2 where id=$1")
+        .bind(f.written)
+        .execute(&f.db)
+        .await?;
+    sqlx::query("update exam_items set difficulty=5 where id=$1")
+        .bind(f.multi)
+        .execute(&f.db)
+        .await?;
+    // The broad row is deliberately first. Its only useful choice for a complete assignment is
+    // the difficulty-2 item, leaving the difficulty-1 item for the narrow row.
+    let rows = vec![
+        BlueprintDrawRow {
+            topic: "Security".into(),
+            min_difficulty: 1,
+            max_difficulty: 2,
+            count: 1,
+            marks_each: 15.0,
+        },
+        BlueprintDrawRow {
+            topic: "Security".into(),
+            min_difficulty: 1,
+            max_difficulty: 1,
+            count: 1,
+            marks_each: 15.0,
+        },
+    ];
+    sqlx::query(
+        "insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,true,$2,0.05)",
+    )
+    .bind(f.exam)
+    .bind(serde_json::to_value(rows)?)
+    .execute(&f.db)
+    .await?;
+    let mut tx = f.db.begin().await?;
+    let attempt = start_attempt_tx(&mut tx, f.exam, f.candidate.id, None).await?;
+    tx.commit().await?;
+    let order: Vec<Uuid> = sqlx::query_scalar("select item_order from attempts where id=$1")
+        .bind(attempt)
+        .fetch_one(&f.db)
+        .await?;
+    assert_eq!(order.len(), 2);
+    let difficulties: Vec<i16> =
+        sqlx::query_scalar("select difficulty from exam_items where id=any($1)")
+            .bind(&order)
+            .fetch_all(&f.db)
+            .await?;
+    assert!(difficulties.contains(&1));
+    assert!(difficulties.contains(&2));
+    Ok(())
+}

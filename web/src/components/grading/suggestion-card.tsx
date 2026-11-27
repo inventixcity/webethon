@@ -23,7 +23,7 @@ export function SuggestionCard({
   return (
     <section
       aria-labelledby={headingId}
-      className="grid gap-4 border border-cobalt bg-paper-raised p-5"
+      className="grid gap-4 border-l-4 border-cobalt bg-paper-raised p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h4 id={headingId} className="font-mono text-[11px] tracking-[0.14em] text-cobalt-deep uppercase">

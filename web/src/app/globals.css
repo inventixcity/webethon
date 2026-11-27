@@ -34,7 +34,8 @@
   /* Integrity and caution. Amber-deep is darkened from #A85A10 so small text clears 4.5:1 on paper and sunk surfaces. */
   --amber: #e0862c;
   --amber-deep: #944e0e;
-  --rule: rgb(18 17 14 / 0.16);
+  /* Hairlines also define input and disabled boundaries; keep them visible against paper. */
+  --rule: rgb(18 17 14 / 0.45);
   /* Behind a modal: dims the page without inverting it in dark mode. */
   --scrim: rgb(18 17 14 / 0.42);
   /* Semantic fills. Light mode: ink fills with paper text. */
@@ -78,7 +79,7 @@
   --cobalt-deep: #a9bbff;
   --amber: #f0a85a;
   --amber-deep: #f7c48a;
-  --rule: rgb(243 238 227 / 0.12);
+  --rule: rgb(243 238 227 / 0.4);
   --scrim: rgb(0 0 0 / 0.72);
 }
 

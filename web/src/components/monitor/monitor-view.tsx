@@ -7,12 +7,9 @@ import { ToastProvider as LiveToasts, useToast as useLiveToast } from "@/compone
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Label } from "@/components/ui/label";
 import { Meter } from "@/components/ui/meter";
 import { SectionIntro } from "@/components/exams/section-intro";
-import { Stat, StatGrid } from "@/components/ui/stat";
 import { formatAge, formatClock, messageOf } from "@/components/analytics/format";
 import { cn } from "@/lib/utils";
 import { AnnouncementsPanel } from "./announcements-panel";
@@ -32,7 +29,7 @@ const GRID = "grid items-center gap-x-4 px-3 md:grid-cols-[minmax(0,2fr)_7.5rem_
 type SortKey = "priority" | "name" | "deadline" | "progress";
 
 const selectClass =
-  "h-12 min-w-44 border border-rule bg-paper-raised px-3 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion";
+  "h-10 min-w-44 border border-rule bg-paper-raised px-3 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 /**
  * The control room for one live exam. Counters sit on top, the board of candidates is in the middle, and an
@@ -58,8 +55,6 @@ function ControlRoom({ examId }: { examId: string }) {
   const [flashes, setFlashes] = useState<Record<string, number>>({});
   const [announced, setAnnounced] = useState("");
   const sortId = useId();
-  const offlineId = useId();
-  const highId = useId();
   const seen = useRef<Map<string, { incidents: number; signature: string }> | null>(null);
   const reduced = useReducedMotion();
 
@@ -132,7 +127,7 @@ function ControlRoom({ examId }: { examId: string }) {
         title="Control room"
         summary="Every candidate in this exam, updated from the server while this tab is open."
         actions={
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 border-y border-rule bg-paper-raised px-3 py-2">
             <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-ink-muted" aria-live="off">
               <LiveIndicator mode={poll.mode} />
               <span>{poll.updatedAt !== null ? `Updated ${formatAge(now - poll.updatedAt)} ago` : "Not updated yet"}</span>
@@ -171,12 +166,12 @@ function ControlRoom({ examId }: { examId: string }) {
       {!data && poll.error === null && <BrailleSpinner label="Loading monitor" className="text-ink" />}
 
       {data && (
-        <StatGrid columns={4} className="border-b border-rule pb-2">
-          <Stat label="Enrolled" value={data.enrolled} />
-          <Stat label="Not started" value={data.notStarted} tone="caution" />
-          <Stat label="In progress" value={liveCount} focal note="Running now" />
-          <Stat label="Submitted" value={data.submitted} />
-        </StatGrid>
+        <dl className="grid grid-cols-2 border-y border-rule md:grid-cols-4">
+          <Kpi label="Enrolled" value={data.enrolled} detail="Candidates" tone="neutral" />
+          <Kpi label="Not started" value={data.notStarted} detail={`${percent(data.notStarted, data.enrolled)}% enrolled`} tone="amber" />
+          <Kpi label="In progress" value={liveCount} detail={`${percent(liveCount, data.enrolled)}% enrolled · live`} tone="cobalt" />
+          <Kpi label="Submitted" value={data.submitted} detail={`${percent(data.submitted, data.enrolled)}% enrolled`} tone="ink" />
+        </dl>
       )}
 
       {data && (
@@ -188,16 +183,10 @@ function ControlRoom({ examId }: { examId: string }) {
                 <span aria-hidden="true" className="text-ink-muted"> / </span>
                 Board
               </h2>
-              <div className="flex items-center gap-3">
-                <Checkbox id={offlineId} checked={offlineOnly} onCheckedChange={(value) => setOfflineOnly(value === true)} />
-                <Label htmlFor={offlineId}>Offline only</Label>
-              </div>
-              <div className="flex items-center gap-3">
-                <Checkbox id={highId} checked={highOnly} onCheckedChange={(value) => setHighOnly(value === true)} />
-                <Label htmlFor={highId}>High priority only</Label>
-              </div>
+              <Button variant="secondary" size="sm" className="aria-pressed:bg-fill aria-pressed:text-on-fill" aria-pressed={offlineOnly} onClick={() => setOfflineOnly(!offlineOnly)}>Offline only</Button>
+              <Button variant="secondary" size="sm" className="aria-pressed:bg-fill aria-pressed:text-on-fill" aria-pressed={highOnly} onClick={() => setHighOnly(!highOnly)}>High priority only</Button>
               <div className="grid gap-2">
-                <Label htmlFor={sortId}>Sort by</Label>
+                <label htmlFor={sortId} className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Sort by</label>
                 <select id={sortId} className={selectClass} value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>
                   <option value="priority">Review priority</option>
                   <option value="name">Name</option>
@@ -213,7 +202,7 @@ function ControlRoom({ examId }: { examId: string }) {
               <EmptyState eyebrow="No matches / 00" title="No attempts match these filters." variant="inline" />
             ) : (
               <div className="overflow-x-auto border border-ink">
-                <div role="table" aria-label="Attempts for this exam" className="min-w-[860px] md:min-w-0">
+                <div role="table" aria-label="Attempts for this exam" className="min-w-[1000px]">
                   <div
                     role="row"
                     className={cn(GRID, "h-11 border-b border-ink bg-paper-sunk font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase")}
@@ -294,6 +283,26 @@ function LiveIndicator({ mode }: { mode: LiveMode }) {
   );
 }
 
+function percent(value: number, total: number): number {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+function Kpi({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: "neutral" | "amber" | "cobalt" | "ink" }) {
+  const rule = tone === "amber" ? "border-t-amber" : tone === "cobalt" ? "border-t-cobalt" : tone === "ink" ? "border-t-ink" : "border-t-rule";
+  return (
+    <div className={cn("grid min-h-32 content-between gap-3 border-t-4 bg-paper-raised p-4", rule)}>
+      <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{label}</dt>
+      <dd className={cn("text-4xl leading-none font-semibold tabular-nums", tone === "cobalt" && "text-cobalt-deep")}>
+        {value}
+      </dd>
+      <dd className="font-mono text-[11px] text-ink-soft">
+        {tone === "cobalt" && <span className="mr-2 inline-block size-2 animate-breathe bg-cobalt" aria-hidden="true" />}
+        {detail}
+      </dd>
+    </div>
+  );
+}
+
 /** The one-line summary for screen readers. It describes counts only, never a verdict about a candidate. */
 function summaryText(data: ExamMonitor): string {
   const offline = data.rows.filter((row) => row.status === "in_progress" && !row.online).length;
@@ -335,18 +344,27 @@ function BoardRow({
   return (
     <motion.div
       role="row"
+      tabIndex={0}
+      aria-label={`${row.displayName}, ${row.status.replace("_", " ")}, ${row.answered} of ${row.total} answered. Open integrity details.`}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       layout={reduced ? false : "position"}
       transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.8 }}
       className={cn(
         GRID,
-        "min-h-16 border-b border-rule py-2 transition-colors duration-(--duration-slow) hover:bg-paper-raised",
+        "min-h-16 cursor-pointer border-b border-rule py-2 transition-colors duration-(--duration-slow) odd:bg-paper-raised hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus",
         flashing ? "bg-cobalt/10" : "bg-paper",
       )}
     >
       <span role="cell" className="grid min-w-0">
-        <button type="button" onClick={onOpen} className="cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline">
+        <span className="truncate text-left font-medium underline-offset-4 hover:underline">
           {row.displayName}
-        </button>
+        </span>
         <span className="truncate font-mono text-[11px] text-ink-muted">{row.email}</span>
       </span>
       <span role="cell">

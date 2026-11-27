@@ -11,3 +11,10 @@ STATUS: BLOCKED
 - Open / known gaps: None for the CX2 brief.
 - Requests to lead: None.
 STATUS: COMPLETE
+
+### CX2 · pass 3 · 15:02
+- Done: Made a failed all-device sign-out recoverable: the hold control resets after a failed request so the user can retry.
+- Verified: `cd web && pnpm typecheck` -> passed (`tsc --noEmit`, exit 0). No visual changes from pass 2; the full screenshot matrix remains valid.
+- Open / known gaps: None for the CX2 brief.
+- Requests to lead: None.
+STATUS: COMPLETE

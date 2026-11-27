@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 import type { GradingItem } from "@/lib/exam/types";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Label } from "@/components/ui/label";
 import { Meter } from "@/components/ui/meter";
 import { SectionIntro } from "@/components/exams/section-intro";
 import { formatPercent, messageOf } from "@/components/analytics/format";
@@ -23,7 +22,7 @@ const key = (item: GradingItem) => `${item.attemptId}:${item.itemId}`;
 export function GradingView({ examId }: { examId: string }) {
   const [all, setAll] = useState<GradingItem[] | null>(null);
   const [pending, setPending] = useState<GradingItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; requestId?: string } | null>(null);
   const [mode, setMode] = useState<Mode>("pending");
   const [questionFilter, setQuestionFilter] = useState("all");
   const [version, setVersion] = useState(0);
@@ -43,7 +42,7 @@ export function GradingView({ examId }: { examId: string }) {
         setPending(queue);
       })
       .catch((cause: unknown) => {
-        if (live) setError(messageOf(cause));
+        if (live) setError({ message: messageOf(cause), requestId: cause instanceof ApiError ? cause.requestId : undefined });
       });
     return () => {
       live = false;
@@ -93,8 +92,8 @@ export function GradingView({ examId }: { examId: string }) {
         summary="Scripts are blind-graded. Each one is shown by its label, not by the candidate's name. Grades can be changed until results are published."
       >
         {all && (
-          <div className="grid max-w-xl gap-3">
-            <div className="flex items-baseline justify-between gap-4 font-mono text-xs" aria-live="polite">
+          <div className="grid max-w-xl gap-3 border-l-4 border-amber bg-paper-raised p-4">
+            <div className="flex items-baseline justify-between gap-4 font-mono text-sm" aria-live="polite">
               <span>
                 {graded} of {total} graded
               </span>
@@ -106,8 +105,9 @@ export function GradingView({ examId }: { examId: string }) {
       </SectionIntro>
 
       {error && (
-        <div className="grid gap-3 border border-vermilion-deep p-5">
-          <p className="text-sm text-vermilion-deep">{error}</p>
+        <div className="grid gap-3 border-l-4 border-vermilion-deep bg-paper-raised p-5">
+          <p className="text-sm text-vermilion-deep">{error.message}</p>
+          {error.requestId && <p className="font-mono text-[11px] text-ink-muted">Request ID: {error.requestId}</p>}
           <div>
             <Button variant="secondary" size="sm" onClick={() => setVersion((value) => value + 1)}>
               Try again
@@ -143,24 +143,15 @@ export function GradingView({ examId }: { examId: string }) {
             </Button>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor={questionId}>Question</Label>
-            <select
-              id={questionId}
-              value={questionFilter}
-              onChange={(event) => {
-                setQuestionFilter(event.target.value);
-                setIndex(0);
-              }}
-              className="h-12 w-full max-w-md border border-rule bg-paper-raised px-3 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
-            >
-              <option value="all">All questions</option>
+            <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Filter by question</p>
+            <div id={questionId} role="group" aria-label="Filter by question" className="flex max-w-3xl flex-wrap gap-2">
+              <Button variant="secondary" size="sm" className="aria-pressed:bg-fill aria-pressed:text-on-fill" aria-pressed={questionFilter === "all"} onClick={() => { setQuestionFilter("all"); setIndex(0); }}>All questions</Button>
               {questions.map((question) => (
-                <option key={question.itemId} value={question.itemId}>
-                  Q{question.position} ({question.marks} marks): {question.stem.slice(0, 60)}
-                  {question.stem.length > 60 ? "…" : ""}
-                </option>
+                <Button key={question.itemId} variant="secondary" size="sm" className="aria-pressed:bg-fill aria-pressed:text-on-fill" aria-pressed={questionFilter === question.itemId} onClick={() => { setQuestionFilter(question.itemId); setIndex(0); }}>
+                  Q{question.position} · {question.marks} marks
+                </Button>
               ))}
-            </select>
+            </div>
           </div>
         </div>
       )}

@@ -83,19 +83,33 @@ fn build_prompt(stem: &str, rubric: &str, max_marks: f64, answer: &str) -> Strin
 }
 
 fn parse_suggestion(raw: &str, max_marks: f64) -> AppResult<RawSuggestion> {
-    let parsed: RawSuggestion = serde_json::from_str(raw).map_err(|_| unavailable())?;
-    if !parsed.suggested_marks.is_finite()
-        || parsed.rationale.chars().count() > 600
-        || parsed.rubric_hits.len() > 6
-        || parsed.rubric_hits.iter().any(|s| s.chars().count() > 200)
-    {
+    // Models sometimes wrap JSON in Markdown fences; take the outermost object.
+    let trimmed = raw.trim();
+    let json_text = match (trimmed.find('{'), trimmed.rfind('}')) {
+        (Some(start), Some(end)) if end > start => &trimmed[start..=end],
+        _ => trimmed,
+    };
+    let parsed: RawSuggestion = serde_json::from_str(json_text).map_err(|error| {
+        tracing::warn!(%error, "grading suggestion was not valid JSON");
+        unavailable()
+    })?;
+    if !parsed.suggested_marks.is_finite() {
+        tracing::warn!("grading suggestion had non-finite marks");
         return Err(unavailable());
     }
+    // Untrusted output is bounded, not rejected: trim to the documented limits.
+    let rationale: String = parsed.rationale.chars().take(600).collect();
+    let rubric_hits: Vec<String> = parsed
+        .rubric_hits
+        .into_iter()
+        .take(6)
+        .map(|hit| hit.chars().take(200).collect())
+        .collect();
     let marks = (parsed.suggested_marks.clamp(0.0, max_marks) * 4.0).round() / 4.0;
     Ok(RawSuggestion {
         suggested_marks: marks.min(max_marks),
-        rationale: parsed.rationale,
-        rubric_hits: parsed.rubric_hits,
+        rationale,
+        rubric_hits,
     })
 }
 
@@ -107,20 +121,55 @@ fn unavailable() -> AppError {
 }
 
 async fn call_model(http: &reqwest::Client, config: &AiConfig, prompt: &str) -> AppResult<String> {
+    // The free tier is sometimes overloaded (429/503): retry once, then fall back to a lighter model.
+    let fallback =
+        std::env::var("AI_FALLBACK_MODEL").unwrap_or_else(|_| "gemini-2.5-flash-lite".to_owned());
+    let attempts = [
+        config.model.as_str(),
+        config.model.as_str(),
+        fallback.as_str(),
+    ];
+    for (index, model) in attempts.iter().enumerate() {
+        match call_once(http, config, model, prompt).await {
+            Ok(content) => return Ok(content),
+            Err(retryable) if retryable && index + 1 < attempts.len() => {
+                tokio::time::sleep(Duration::from_millis(600 * (index as u64 + 1))).await;
+            }
+            Err(_) => break,
+        }
+    }
+    Err(unavailable())
+}
+
+/// One model call. `Err(true)` means the failure is worth retrying (overloaded, rate limited or a network error).
+async fn call_once(
+    http: &reqwest::Client,
+    config: &AiConfig,
+    model: &str,
+    prompt: &str,
+) -> Result<String, bool> {
     let url = format!("{}/chat/completions", config.base.trim_end_matches('/'));
     let response = http.post(url).bearer_auth(&config.key).timeout(Duration::from_secs(20)).json(&json!({
-        "model": config.model,
+        "model": model,
         "messages": [
-            {"role":"system","content":"Act as a strict, fair examiner. Evaluate only the supplied question, rubric and candidate answer. Return JSON {suggestedMarks:number,rationale:string (<=600 chars),rubricHits:string[] (<=6)}. Never exceed maximum marks. Marks must use 0.25 steps. Return no HTML."},
+            {"role":"system","content":"Act as a strict, fair examiner. Evaluate only the supplied question, rubric and candidate answer. Return only a JSON object {\"suggestedMarks\":number,\"rationale\":string (at most 600 characters),\"rubricHits\":string[] (at most 6 short items)}. Never exceed the maximum marks. Marks use 0.25 steps. Return no HTML."},
             {"role":"user","content":prompt}
         ],
         "response_format":{"type":"json_object"}
-    })).send().await.map_err(|_| unavailable())?.error_for_status().map_err(|_| unavailable())?;
-    let body: Value = response.json().await.map_err(|_| unavailable())?;
+    })).send().await.map_err(|error| {
+        tracing::warn!(%error, model, "grading suggestion request failed");
+        true
+    })?;
+    let status = response.status();
+    if !status.is_success() {
+        tracing::warn!(%status, model, "grading suggestion provider returned an error");
+        return Err(status.as_u16() == 429 || status.is_server_error());
+    }
+    let body: Value = response.json().await.map_err(|_| false)?;
     body.pointer("/choices/0/message/content")
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .ok_or_else(unavailable)
+        .ok_or(false)
 }
 
 async fn suggest(
@@ -214,16 +263,16 @@ mod tests {
         .expect("valid suggestion");
         assert_eq!(got.suggested_marks, 4.0);
         assert!(parse_suggestion("not json", 4.0).is_err());
-        assert!(
-            parse_suggestion(
-                &format!(
-                    r#"{{"suggestedMarks":1,"rationale":"{}","rubricHits":[]}}"#,
-                    "x".repeat(601)
-                ),
-                4.0
-            )
-            .is_err()
-        );
+        // Over-long rationale is trimmed to 600 characters rather than rejected.
+        let long = parse_suggestion(
+            &format!(
+                r#"```json {{"suggestedMarks":1,"rationale":"{}","rubricHits":[]}} ```"#,
+                "x".repeat(601)
+            ),
+            4.0,
+        )
+        .expect("fenced, long suggestion is accepted");
+        assert_eq!(long.rationale.chars().count(), 600);
     }
 
     #[test]

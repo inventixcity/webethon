@@ -315,10 +315,17 @@ pub async fn publish_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResu
                 - total)
                 .abs()
                 < 0.009;
-        for row in rows {
-            let available: i64 = sqlx::query_scalar("select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 and q.topic=$2 and q.difficulty between $3 and $4").bind(id).bind(row.topic).bind(row.min_difficulty as i16).bind(row.max_difficulty as i16).fetch_one(&mut **tx).await?;
-            blueprint_ready &= available >= i64::from(row.count);
-        }
+        let candidate_rows=sqlx::query("select q.id,q.topic,q.difficulty,case when q.observed_count>=5 and q.observed_facility is not null then q.observed_facility else (array[0.85,0.7,0.55,0.4,0.25]::numeric[])[q.difficulty] end::float8 facility from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1")
+            .bind(id).fetch_all(&mut **tx).await?;
+        let candidates: Vec<BlueprintCandidate> = candidate_rows
+            .into_iter()
+            .map(|r| BlueprintCandidate {
+                topic: r.get("topic"),
+                difficulty: i32::from(r.get::<i16, _>("difficulty")),
+                facility: r.get("facility"),
+            })
+            .collect();
+        blueprint_ready &= blueprint_assignment(&rows, &candidates, 0).is_some();
     }
     let ready = ready && blueprint_ready && (blueprint_enabled || marks_ok);
     if !ready {
@@ -616,6 +623,96 @@ struct BlueprintInput {
     tolerance: f64,
 }
 
+#[derive(Clone)]
+struct BlueprintCandidate {
+    topic: String,
+    difficulty: i32,
+    facility: f64,
+}
+
+fn blueprint_assignment(
+    rows: &[BlueprintRow],
+    candidates: &[BlueprintCandidate],
+    seed: u64,
+) -> Option<Vec<(usize, usize)>> {
+    if rows.iter().any(|row| row.count < 1)
+        || rows.iter().map(|row| row.count as usize).sum::<usize>() > candidates.len()
+    {
+        return None;
+    }
+    let mut row_pools = Vec::with_capacity(rows.len());
+    let mut slots = Vec::new();
+    for (row_index, row) in rows.iter().enumerate() {
+        let mut eligible: Vec<usize> = candidates
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                item.topic == row.topic
+                    && (row.min_difficulty..=row.max_difficulty).contains(&item.difficulty)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        examcore::shuffle(
+            &mut eligible,
+            seed.wrapping_add((row_index as u64).wrapping_mul(0x9e3779b97f4a7c15)),
+        );
+        if eligible.len() < row.count as usize {
+            return None;
+        }
+        row_pools.push(eligible);
+        for _ in 0..row.count {
+            slots.push((row_index, row_pools[row_index].clone()));
+        }
+    }
+    if slots.len() > candidates.len() {
+        return None;
+    }
+    let mut order: Vec<usize> = (0..slots.len()).collect();
+    order.sort_by_key(|slot| (slots[*slot].1.len(), slots[*slot].0, *slot));
+    let mut candidate_slots = vec![None; candidates.len()];
+    let mut slot_candidates = vec![None; slots.len()];
+    for slot in order {
+        let mut seen = vec![false; candidates.len()];
+        if !augment_blueprint_slot(
+            slot,
+            &slots,
+            &mut candidate_slots,
+            &mut slot_candidates,
+            &mut seen,
+        ) {
+            return None;
+        }
+    }
+    slot_candidates
+        .into_iter()
+        .enumerate()
+        .map(|(slot, candidate)| candidate.map(|candidate| (slots[slot].0, candidate)))
+        .collect()
+}
+
+fn augment_blueprint_slot(
+    slot: usize,
+    slots: &[(usize, Vec<usize>)],
+    candidate_slots: &mut [Option<usize>],
+    slot_candidates: &mut [Option<usize>],
+    seen: &mut [bool],
+) -> bool {
+    for &candidate in &slots[slot].1 {
+        if seen[candidate] {
+            continue;
+        }
+        seen[candidate] = true;
+        if candidate_slots[candidate].is_none_or(|previous| {
+            augment_blueprint_slot(previous, slots, candidate_slots, slot_candidates, seen)
+        }) {
+            candidate_slots[candidate] = Some(slot);
+            slot_candidates[slot] = Some(candidate);
+            return true;
+        }
+    }
+    false
+}
+
 fn validate_blueprint(input: &BlueprintInput, total: f64) -> AppResult<()> {
     let mut errors = Vec::new();
     if !input.tolerance.is_finite() || !(0.01..=0.3).contains(&input.tolerance) {
@@ -779,6 +876,14 @@ async fn blueprint_preview(
     .bind(id)
     .fetch_all(&s.db)
     .await?;
+    let candidates: Vec<BlueprintCandidate> = pool
+        .iter()
+        .map(|q| BlueprintCandidate {
+            topic: q.get("topic"),
+            difficulty: i32::from(q.get::<i16, _>("difficulty")),
+            facility: q.get::<Option<f64>, _>("facility").unwrap_or(0.55),
+        })
+        .collect();
     let mut problems = Vec::new();
     let mut needed = 0usize;
     let mut target_sum = 0.0;
@@ -808,6 +913,12 @@ async fn blueprint_preview(
                 matching.iter().sum::<f64>() / matching.len() as f64 * row.count.max(0) as f64;
         }
     }
+    if enabled && problems.is_empty() && blueprint_assignment(&spec, &candidates, 0).is_none() {
+        problems.push(
+            "Blueprint rows overlap in a way that leaves too few distinct eligible questions."
+                .into(),
+        );
+    }
     let target = if needed == 0 {
         0.0
     } else {
@@ -819,38 +930,16 @@ async fn blueprint_preview(
             let mut best_mean = target;
             let mut best_distance = f64::INFINITY;
             for variant in 0..200u64 {
-                let mut selected = Vec::new();
-                let mut used = std::collections::HashSet::new();
-                for (ri, row) in spec.iter().enumerate() {
-                    let mut subset: Vec<(Uuid, f64)> = pool
-                        .iter()
-                        .filter(|q| {
-                            q.get::<String, _>("topic") == row.topic
-                                && (row.min_difficulty..=row.max_difficulty)
-                                    .contains(&i32::from(q.get::<i16, _>("difficulty")))
-                                && !used.contains(&q.get::<Uuid, _>("id"))
-                        })
-                        .map(|q| {
-                            (
-                                q.get("id"),
-                                q.get::<Option<f64>, _>("facility").unwrap_or(0.55),
-                            )
-                        })
-                        .collect();
-                    examcore::shuffle(
-                        &mut subset,
-                        seed.wrapping_add(variant)
-                            .wrapping_add((ri as u64).wrapping_mul(0x9e3779b97f4a7c15)),
-                    );
-                    for (item, facility) in subset.into_iter().take(row.count as usize) {
-                        used.insert(item);
-                        selected.push(facility);
-                    }
-                }
-                if selected.len() != needed {
+                let Some(assignment) =
+                    blueprint_assignment(&spec, &candidates, seed.wrapping_add(variant))
+                else {
                     break;
-                }
-                let mean = selected.iter().sum::<f64>() / selected.len().max(1) as f64;
+                };
+                let mean = assignment
+                    .iter()
+                    .map(|(_, candidate)| candidates[*candidate].facility)
+                    .sum::<f64>()
+                    / assignment.len().max(1) as f64;
                 let distance = (mean - target).abs();
                 if distance < best_distance {
                     best_distance = distance;
@@ -925,7 +1014,20 @@ async fn review(
         .iter()
         .map(|r| f64::from(r.count) * r.marks_each)
         .sum();
-    let bp_ok = !bp_enabled || ((bp_marks - total).abs() < 0.009 && !bp_spec.is_empty());
+    let bp_candidates_rows = sqlx::query("select id,topic,difficulty,facility from (select id,topic,difficulty,predicted_facility::float8 facility from exam_items where exam_id=$1 and not sandbox union all select q.id,q.topic,q.difficulty,(case when q.observed_count>=5 and q.observed_facility is not null then q.observed_facility else (array[0.85,0.7,0.55,0.4,0.25]::numeric[])[q.difficulty] end)::float8 facility from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 and q.deleted_at is null and not exists(select 1 from exam_items i where i.exam_id=$1 and not i.sandbox)) p")
+        .bind(id).fetch_all(&s.db).await?;
+    let bp_candidates: Vec<BlueprintCandidate> = bp_candidates_rows
+        .into_iter()
+        .map(|r| BlueprintCandidate {
+            topic: r.get("topic"),
+            difficulty: i32::from(r.get::<i16, _>("difficulty")),
+            facility: r.get::<Option<f64>, _>("facility").unwrap_or(0.55),
+        })
+        .collect();
+    let bp_assignment_ok =
+        !bp_enabled || blueprint_assignment(&bp_spec, &bp_candidates, 0).is_some();
+    let bp_ok = !bp_enabled
+        || ((bp_marks - total).abs() < 0.009 && !bp_spec.is_empty() && bp_assignment_ok);
     let checks = json!([{"key":"title","ok":true,"message":"Exam has a title."},{"key":"questions","ok":count>0,"message":format!("Exam has {} questions.",count)},{"key":"marks","ok":bp_enabled||(marks-total).abs()<0.01,"message":if bp_enabled{format!("Question pool holds {} marks; each candidate's paper is drawn by the blueprint.",marks)}else{format!("Assigned marks: {} of {}.",marks,total)}},{"key":"blueprint","ok":bp_ok,"message":if !bp_enabled{"No enabled blueprint.".to_owned()}else if bp_ok{format!("Blueprint marks: {} of {}.",bp_marks,total)}else{format!("Enabled blueprint marks: {} of {}; they must equal the exam total.",bp_marks,total)}},{"key":"window","ok":end>examcore::now(),"message":"The exam window ends in the future."},{"key":"duration","ok":i64::from(duration)*60<=(end-start).whole_seconds(),"message":"The duration fits within the exam window."},{"key":"candidates","ok":candidates>0,"message":format!("{} candidates enrolled.",candidates)},{"key":"objectiveKeys","ok":missing_keys==0,"message":if missing_keys==0{"Objective questions have answer keys.".to_owned()}else{format!("{} objective questions are missing answer keys.",missing_keys)}}]);
     let ready = checks.as_array().is_some_and(|a| {
         a.iter()
@@ -1354,6 +1456,28 @@ mod tests {
             .await
             .expect("read exam with frozen question");
         assert_eq!(exam["questions"][0]["question"]["stem"], "Original prompt");
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn publish_rejects_infeasible_overlapping_blueprint_rows(db: PgPool) {
+        let (_, exam, _) = fixture(&db, 5.0, 5.0).await;
+        sqlx::query(
+            "insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,true,$2,0.05)",
+        )
+        .bind(exam)
+        .bind(json!([
+            {"topic":"algebra","minDifficulty":2,"maxDifficulty":2,"count":1,"marksEach":2.5},
+            {"topic":"algebra","minDifficulty":2,"maxDifficulty":2,"count":1,"marksEach":2.5}
+        ]))
+        .execute(&db)
+        .await
+        .expect("save overlapping blueprint");
+        let mut tx = db.begin().await.expect("begin publish");
+        let error = publish_tx(&mut tx, exam)
+            .await
+            .expect_err("one item cannot fill two distinct slots");
+        assert_eq!(error.code, examcore::ErrorCode::Conflict);
+        tx.rollback().await.expect("rollback rejected publish");
     }
 
     #[sqlx::test(migrations = "../../migrations")]

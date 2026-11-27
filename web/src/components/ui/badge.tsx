@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
  *   accent  - vermilion, the one focal accent, for danger and failure. Errors stay vermilion.
  */
 const badgeVariants = cva(
-  "inline-flex h-7 max-w-full shrink-0 items-center gap-2 px-2.5 font-mono text-[11px] leading-none tracking-[0.12em] whitespace-nowrap uppercase",
+  "inline-flex h-7 max-w-full shrink-0 items-center gap-2 px-2.5 font-mono text-[12px] leading-none tracking-[0.1em] whitespace-nowrap uppercase",
   {
     variants: {
       tone: {
@@ -24,13 +24,13 @@ const badgeVariants = cva(
         info: "border border-cobalt text-cobalt-deep",
         outline: "border border-ink text-ink",
         dashed: "border border-dashed border-ink-muted text-ink-soft",
-        muted: "border border-rule text-ink-soft",
+        muted: "border border-ink-muted text-ink-soft",
         caution: "bg-amber text-on-amber",
         chip: "border border-chip-border bg-surface-1 text-ink",
         accent: "bg-vermilion-deep text-paper",
       },
       size: {
-        sm: "h-6 px-2 text-[10px]",
+        sm: "h-6 px-2 text-[11px]",
         md: "",
       },
     },

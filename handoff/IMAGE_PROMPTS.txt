@@ -130,3 +130,29 @@ silhouette is cut out of the black block in ivory negative space.
 23) favicon-mark.png  (1024 x 1024)
 A flat geometric mark: a bold ink-black square on ivory with a single vermilion square notch cut into its
 lower-right corner. Perfectly flat, with no texture and no gradient, centred with a 12% margin.
+
+==========================================================
+F. EXTRA PAGE BANNERS (requested in the admin review)
+Size 2000 x 750 (wide). Keep the SUBJECT ON THE RIGHT THIRD, left two-thirds mostly empty cream paper.
+Save as .png into web/public/images/ with these exact names.
+==========================================================
+
+24) bg-users.png
+A row of small square paper name cards pinned to a cork-free ivory board on the right third, one card cobalt
+blue, the rest ivory with ink hairline borders; soft hard-light shadows. Left two-thirds empty ivory paper.
+
+25) bg-audit.png
+An open ledger book with ruled ink columns on the right third, a magnifying glass resting on the page, one entry
+underlined in vermilion. Left two-thirds empty ivory paper.
+
+26) bg-system.png
+A small, neat ink-black server rack on the right third with a single glowing cobalt indicator light and one amber
+light, clean cables. Left two-thirds empty ivory paper.
+
+27) bg-settings.png
+A precision screwdriver and a round analogue dial (knob with tick marks) arranged on the right third, the dial
+pointer in vermilion. Left two-thirds empty ivory paper.
+
+28) bg-monitor.png
+A row of small exam desks with desk lamps seen from the side on the right third, one lamp glowing cobalt, the rest
+off. Left two-thirds empty ivory paper.

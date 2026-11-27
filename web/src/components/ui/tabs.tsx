@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
  */
 
 const itemClass =
-  "relative inline-flex h-12 shrink-0 items-center gap-2 px-4 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
+  "relative inline-flex h-12 shrink-0 items-center gap-2 px-4 font-mono text-[12px] tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
 
 function Count({ value, active }: { value: number; active: boolean }) {
   return (
     <span
       className={cn(
         "inline-grid h-5 min-w-5 place-items-center px-1 text-[10px] tabular-nums",
-        active ? "bg-fill text-on-fill" : "border border-rule text-ink-muted hover:text-ink",
+        active ? "bg-cobalt text-paper" : "border border-rule text-ink-soft hover:text-ink",
       )}
     >
       {value}
@@ -71,7 +71,7 @@ export function NavTabs({ items, label, className }: { items: NavTab[]; label: s
             <Link
               href={item.href}
               aria-current={item.active ? "page" : undefined}
-              className={cn(itemClass, item.active ? "text-ink" : "text-ink-muted hover:text-ink")}
+              className={cn(itemClass, item.active ? "text-ink" : "text-ink-soft hover:bg-hover hover:text-ink")}
             >
               {item.label}
               {item.count !== undefined ? <Count value={item.count} active={item.active} /> : null}
@@ -114,7 +114,7 @@ export function SegmentedControl<T extends string>({
               aria-pressed={active}
               data-active={active ? "true" : undefined}
               onClick={() => onChange(option.value)}
-              className={cn(itemClass, "cursor-pointer", active ? "text-ink" : "text-ink-muted hover:text-ink")}
+              className={cn(itemClass, "cursor-pointer", active ? "text-ink" : "text-ink-soft hover:bg-hover hover:text-ink")}
             >
               {option.label}
               {option.count !== undefined ? <Count value={option.count} active={active} /> : null}
@@ -140,7 +140,7 @@ export function TabsTrigger({ className, children, ...props }: React.ComponentPr
     <TabsPrimitive.Trigger
       className={cn(
         itemClass,
-        "-mb-px cursor-pointer border-b-2 border-transparent text-ink-muted hover:text-ink data-[state=active]:border-ink data-[state=active]:text-ink",
+        "-mb-px cursor-pointer border-b-2 border-transparent text-ink-soft hover:bg-hover hover:text-ink data-[state=active]:border-cobalt data-[state=active]:text-ink",
         className,
       )}
       {...props}

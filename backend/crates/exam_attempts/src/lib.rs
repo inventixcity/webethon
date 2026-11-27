@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 pub const JOURNAL_GRACE_SECS: i64 = 120;
 
-#[derive(Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BlueprintDrawRow {
     topic: String,
@@ -27,6 +27,85 @@ struct DrawItem {
     topic: String,
     difficulty: i16,
     facility: f64,
+}
+
+/// Assign every blueprint slot to a distinct item. Candidate item orders vary by seed, while
+/// augmenting paths guarantee that an earlier broad row can yield an item to a narrower row.
+fn blueprint_assignment(
+    rows: &[BlueprintDrawRow],
+    items: &[DrawItem],
+    seed: u64,
+) -> Option<Vec<(usize, usize)>> {
+    if rows.iter().any(|row| row.count < 1)
+        || rows.iter().map(|row| row.count as usize).sum::<usize>() > items.len()
+    {
+        return None;
+    }
+    let mut row_pools = Vec::with_capacity(rows.len());
+    let mut slots = Vec::new();
+    for (row_index, row) in rows.iter().enumerate() {
+        let mut eligible: Vec<usize> = items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                item.topic == row.topic
+                    && (row.min_difficulty..=row.max_difficulty).contains(&item.difficulty)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        examcore::shuffle(
+            &mut eligible,
+            seed.wrapping_add((row_index as u64).wrapping_mul(0x9e3779b97f4a7c15)),
+        );
+        if eligible.len() < row.count as usize {
+            return None;
+        }
+        row_pools.push(eligible);
+        for _ in 0..row.count {
+            slots.push((row_index, row_pools[row_index].clone()));
+        }
+    }
+    if slots.len() > items.len() {
+        return None;
+    }
+    let mut order: Vec<usize> = (0..slots.len()).collect();
+    order.sort_by_key(|slot| (slots[*slot].1.len(), slots[*slot].0, *slot));
+    let mut item_slots = vec![None; items.len()];
+    let mut slot_items = vec![None; slots.len()];
+    for slot in order {
+        let mut seen = vec![false; items.len()];
+        if !augment_blueprint_slot(slot, &slots, &mut item_slots, &mut slot_items, &mut seen) {
+            return None;
+        }
+    }
+    slot_items
+        .into_iter()
+        .enumerate()
+        .map(|(slot, item)| item.map(|item| (slots[slot].0, item)))
+        .collect()
+}
+
+fn augment_blueprint_slot(
+    slot: usize,
+    slots: &[(usize, Vec<usize>)],
+    item_slots: &mut [Option<usize>],
+    slot_items: &mut [Option<usize>],
+    seen: &mut [bool],
+) -> bool {
+    for &item in &slots[slot].1 {
+        if seen[item] {
+            continue;
+        }
+        seen[item] = true;
+        if item_slots[item].is_none_or(|previous| {
+            augment_blueprint_slot(previous, slots, item_slots, slot_items, seen)
+        }) {
+            item_slots[item] = Some(slot);
+            slot_items[slot] = Some(item);
+            return true;
+        }
+    }
+    false
 }
 
 /// Shared online/journal validation. `item` contains `kind`, `options`, and `max_words` columns.
@@ -251,8 +330,8 @@ pub async fn start_attempt_tx(
                     .unwrap_or(0.55),
             });
         }
+        let total: usize = rows.iter().map(|row| row.count.max(0) as usize).sum();
         let mut target = 0.0;
-        let mut total = 0usize;
         for row in &rows {
             let pool: Vec<f64> = choices
                 .iter()
@@ -262,51 +341,38 @@ pub async fn start_attempt_tx(
                 })
                 .map(|item| item.facility)
                 .collect();
-            if pool.len() < row.count as usize {
+            if pool.is_empty() {
                 return Err(examcore::conflict(
                     "blueprint_pool",
-                    "The published blueprint no longer has enough items.",
+                    "The published blueprint has no eligible items.",
                 ));
             }
             target += pool.iter().sum::<f64>() / pool.len() as f64 * row.count as f64;
-            total += row.count as usize;
         }
         target /= total.max(1) as f64;
-        let mut best_selected = None;
+        let mut best_selected: Option<Vec<(Uuid, f64, f64)>> = None;
         let mut best_distance = f64::INFINITY;
         for variant in 0..200u64 {
-            let mut selected = Vec::new();
-            let mut used = std::collections::HashSet::new();
-            let mut facilities = Vec::new();
-            for (ri, row) in rows.iter().enumerate() {
-                let mut pool: Vec<DrawItem> = choices
-                    .iter()
-                    .filter(|item| {
-                        item.topic == row.topic
-                            && (row.min_difficulty..=row.max_difficulty).contains(&item.difficulty)
-                            && !used.contains(&item.id)
-                    })
-                    .cloned()
-                    .collect();
-                examcore::shuffle(
-                    &mut pool,
-                    (seed as u64)
-                        .wrapping_add(variant)
-                        .wrapping_add((ri as u64).wrapping_mul(0x9e3779b97f4a7c15)),
-                );
-                for item in pool.into_iter().take(row.count as usize) {
-                    used.insert(item.id);
-                    facilities.push(item.facility);
-                    selected.push((item.id, item.facility, row.marks_each));
-                }
-            }
-            if selected.len() != total {
-                return Err(examcore::conflict(
-                    "blueprint_pool",
-                    "Blueprint rows cannot be filled with distinct questions.",
-                ));
-            }
-            let mean = facilities.iter().sum::<f64>() / facilities.len().max(1) as f64;
+            let Some(assignment) =
+                blueprint_assignment(&rows, &choices, (seed as u64).wrapping_add(variant))
+            else {
+                continue;
+            };
+            let selected: Vec<(Uuid, f64, f64)> = assignment
+                .iter()
+                .map(|(row_index, item_index)| {
+                    (
+                        choices[*item_index].id,
+                        choices[*item_index].facility,
+                        rows[*row_index].marks_each,
+                    )
+                })
+                .collect();
+            let mean = selected
+                .iter()
+                .map(|(_, facility, _)| *facility)
+                .sum::<f64>()
+                / selected.len().max(1) as f64;
             let distance = (mean - target).abs();
             if distance < best_distance {
                 best_distance = distance;
@@ -317,7 +383,12 @@ pub async fn start_attempt_tx(
                 break;
             }
         }
-        let selected = best_selected.ok_or_else(|| AppError::internal("Blueprint draw failed."))?;
+        let selected = best_selected.ok_or_else(|| {
+            examcore::conflict(
+                "blueprint_pool",
+                "Blueprint rows cannot be filled with distinct questions.",
+            )
+        })?;
         predicted_facility =
             Some(selected.iter().map(|(_, f, _)| *f).sum::<f64>() / selected.len().max(1) as f64);
         item_ids = selected.iter().map(|(id, _, _)| *id).collect();

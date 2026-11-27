@@ -1,14 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useRef, type ReactNode } from "react";
 import { Art, hasArt } from "@/components/ui/art";
 import { cn } from "@/lib/utils";
 
 export type Crumb = { label: string; href?: string };
 
 /** Wide, quiet images in public/images. Each one is shown only when its file exists. */
-export type PageBanner = "bg-candidate" | "bg-examiner" | "bg-admin" | "bg-results";
+export type PageBanner = "bg-candidate" | "bg-examiner" | "bg-admin" | "bg-results" | "bg-users" | "bg-audit" | "bg-system" | "bg-settings";
+
+function separateActionArt(actions: ReactNode): { art: ReactNode; controls: ReactNode } {
+  if (!isValidElement<{ children?: ReactNode }>(actions)) return { art: null, controls: actions };
+
+  const parts = Children.toArray(actions.props.children);
+  const artIndex = parts.findIndex((part) => isValidElement(part) && part.type === Art);
+  if (artIndex < 0) return { art: null, controls: actions };
+
+  const actionArt = parts[artIndex];
+  if (!isValidElement<{ className?: string; position?: string }>(actionArt)) return { art: null, controls: actions };
+
+  const classes = actionArt.props.className?.split(/\s+/).filter((name) => !["hidden", "sm:block", "aspect-[4/3]", "w-60"].includes(name)) ?? [];
+  const art = cloneElement(actionArt, {
+    position: "object-right",
+    className: cn(...classes, "block aspect-[16/7] w-full md:aspect-[4/3] md:max-w-72"),
+  });
+  const controls = parts.filter((_, index) => index !== artIndex);
+  return { art, controls };
+}
 
 type PageHeaderProps = {
   /** Two-digit section number, for example "02". Shown before the eyebrow. */
@@ -29,6 +48,8 @@ type PageHeaderProps = {
   /** A small editorial image on the right of the header. Nothing renders when the file is absent. Never behind the text. */
   /** A halftone figure on the right of the header, drawn from the image in public/images. Decorative. Never behind the text. */
   banner?: PageBanner;
+  /** Explicit mono caption for a page banner. */
+  bannerCaption?: string;
   id?: string;
   className?: string;
 };
@@ -143,16 +164,33 @@ export function PageHeader({
   children,
   level = 1,
   banner,
+  bannerCaption,
   id,
   className,
 }: PageHeaderProps) {
   const showBanner = banner !== undefined && hasArt(banner);
+  const separated = !showBanner && actions ? separateActionArt(actions) : { art: null, controls: actions };
+  const headerArt = showBanner && banner ? (
+    <>
+      <Art name={banner} alt="" sizes="(max-width: 767px) 100vw, 288px" position="object-right" className="aspect-[16/7] w-full border border-ink md:aspect-[4/3]" />
+      <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
+        {bannerCaption ?? `FIG. ${index ?? "01"} / ${eyebrow}`}
+      </figcaption>
+    </>
+  ) : separated.art ? (
+    <>
+      {separated.art}
+      <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
+        FIG. {index ?? "01"} / {eyebrow}
+      </figcaption>
+    </>
+  ) : null;
   const Heading = level === 1 ? "h1" : "h2";
 
   return (
-    <header className={cn("grid gap-5", level === 1 ? "pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
-      <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
-        <div className="grid min-w-0 flex-[1_1_18rem] gap-3">
+    <header className={cn("grid w-full min-w-0 max-w-[calc(100vw-2.5rem)] gap-4 md:max-w-full", level === 1 ? "pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
+      <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:items-center md:gap-8">
+        <div className="grid min-w-0 content-center gap-3">
           <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
             {eyebrow}
           </Eyebrow>
@@ -168,14 +206,11 @@ export function PageHeader({
             {title}
           </Heading>
           {description ? <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">{description}</p> : null}
+          {separated.controls ? <div className="mt-1 flex flex-wrap items-center gap-3">{separated.controls}</div> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
-        {showBanner && banner ? (
-          <figure aria-hidden="true" className="hidden w-72 shrink-0 md:block lg:w-80">
-            <Art name={banner} alt="" sizes="320px" className="aspect-[4/3] w-full border border-ink" />
-            <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
-              FIG. {index ?? "01"} / {eyebrow}
-            </figcaption>
+        {headerArt ? (
+          <figure aria-hidden="true" className="w-full min-w-0 md:w-full">
+            {headerArt}
           </figure>
         ) : null}
       </div>

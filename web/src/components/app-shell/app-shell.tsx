@@ -9,7 +9,6 @@ import { LogOut, Menu, X } from "lucide-react";
 import { useExam } from "@/components/exams/use-resource";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Badge } from "@/components/ui/badge";
-import { HoldButton } from "@/components/effects/hold-button";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 import { api } from "@/lib/api/client";
@@ -71,16 +70,13 @@ type FrameProps = { user: ShellUser; home: string; groups: ReturnType<typeof nav
 function SidebarBody({ user, home, groups, onNavigate }: FrameProps & { onNavigate?: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative flex h-24 shrink-0 items-end overflow-hidden border-b border-ink px-5 pb-4">
+      <div className="relative flex h-16 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-ink px-4">
         <SidebarTide />
         <Link href={home} onClick={onNavigate} className="relative flex min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
           <span className="grid size-8 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill">{siteConfig.mark}</span>
-          <span className="truncate font-mono text-[12px] tracking-[0.14em] uppercase">{siteConfig.name}</span>
+          <span className="truncate font-mono text-[12px] tracking-[0.1em] uppercase">{siteConfig.name}</span>
         </Link>
-      </div>
-
-      <div className="shrink-0 px-5 pt-5">
-        <Badge tone="chip">{ROLE_LABEL[user.role] ?? "Account"}</Badge>
+        <Badge tone="chip" className="relative h-7 px-2">{ROLE_LABEL[user.role] ?? "Account"}</Badge>
       </div>
 
       <nav aria-label="Main" className="grid min-h-0 flex-1 content-start gap-7 overflow-y-auto px-3 py-6">
@@ -138,7 +134,7 @@ function SignOut() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function signOut(everywhere = false) {
+  async function signOut(everywhere = false): Promise<boolean> {
     setPending(true);
     setError(null);
     try {
@@ -146,10 +142,11 @@ function SignOut() {
     } catch {
       setError("Could not sign out. Try again.");
       setPending(false);
-      return;
+      return false;
     }
     // The API has cleared the cookie, so the sign-in page is the right next stop.
     window.location.assign("/login");
+    return true;
   }
 
   return (
@@ -158,19 +155,95 @@ function SignOut() {
         <LogOut aria-hidden="true" />
         {pending ? "Signing out" : "Sign out"}
       </Button>
-      <HoldButton
-        label="Hold: all devices"
-        doneLabel="Signing out everywhere"
-        duration={1400}
-        onConfirm={() => void signOut(true)}
-        className="w-full min-w-0 overflow-hidden"
-      />
+      <HoldSignOut onConfirm={() => signOut(true)} />
       {error ? (
         <p role="alert" className="flex items-center gap-2 font-mono text-[11px] tracking-[0.04em] text-vermilion-deep">
           <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function HoldSignOut({ onConfirm }: { onConfirm: () => Promise<boolean> }) {
+  const [progress, setProgress] = useState(0);
+  const [done, setDone] = useState(false);
+  const startAt = useRef<number | null>(null);
+  const frame = useRef<number>(0);
+  const duration = 1400;
+  const stop = useCallback(() => {
+    startAt.current = null;
+    cancelAnimationFrame(frame.current);
+    setProgress(0);
+  }, []);
+  const tick = useCallback((time: number) => {
+    if (startAt.current === null) return;
+    const next = Math.min(1, (time - startAt.current) / duration);
+    setProgress(next);
+    if (next >= 1) {
+      startAt.current = null;
+      setDone(true);
+      void onConfirm()
+        .then((success) => {
+          if (success) return;
+          setDone(false);
+          setProgress(0);
+        })
+        .catch(() => {
+          setDone(false);
+          setProgress(0);
+        });
+      return;
+    }
+    frame.current = requestAnimationFrame(tick);
+  }, [onConfirm]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  const start = () => {
+    if (done || startAt.current !== null) return;
+    startAt.current = performance.now();
+    frame.current = requestAnimationFrame(tick);
+  };
+
+  return (
+    <div className="grid gap-1">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={done}
+        aria-label={done ? "Signing out of all devices" : "Sign out of all devices. Press and hold, or hold Space or Enter, to confirm"}
+        aria-describedby="signout-all-help"
+        onPointerDown={start}
+        onPointerUp={stop}
+        onPointerLeave={stop}
+        onPointerCancel={stop}
+        onKeyDown={(event) => {
+          if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+            event.preventDefault();
+            start();
+          }
+        }}
+        onKeyUp={(event) => {
+          if (event.key === " " || event.key === "Enter") stop();
+        }}
+        onBlur={stop}
+        className="relative w-full touch-none"
+      >
+        <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-rule" />
+        <span
+          role="progressbar"
+          aria-label="Hold progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          aria-valuetext={`${Math.round(progress * 100)}% held`}
+          className="absolute bottom-0 left-0 h-1 bg-cobalt transition-[width] duration-75"
+          style={{ width: `${progress * 100}%` }}
+        />
+        <span className="relative">{done ? "Signing out everywhere" : progress ? "Keep holding" : "Sign out everywhere"}</span>
+      </Button>
+      <p id="signout-all-help" className="font-mono text-[10px] tracking-[0.08em] text-ink-muted">Hold to confirm · Space or Enter</p>
     </div>
   );
 }

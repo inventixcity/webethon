@@ -8,7 +8,7 @@ import { api } from "@/lib/api/client";
 import { messageFor } from "@/lib/errors/describe";
 import type { ExamStatus, ExamSummary, Page } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
-import { formatWindow, STATUS_LABEL } from "./format";
+import { formatWindow, PHASE_LABEL, STATUS_LABEL } from "./format";
 import { PhaseChip } from "./phase-chip";
 import { EmptyState, ErrorState, LoadingState } from "./states";
 
@@ -77,7 +77,7 @@ export function ExamList() {
         <h2 id="exam-list-heading" className="sr-only">
           Exams
         </h2>
-        <div role="group" aria-label="Filter exams by status" className="-mx-5 flex max-w-full overflow-x-auto px-5 md:mx-0 md:px-0">
+        <div role="group" aria-label="Filter exams by status" className="flex max-w-full overflow-x-auto border border-ink bg-paper-raised">
           {FILTERS.map((filter) => {
             const active = status === filter.value;
             return (
@@ -87,8 +87,9 @@ export function ExamList() {
                 aria-pressed={active}
                 onClick={() => setStatus(filter.value)}
                 className={cn(
-                  "-mb-px h-12 border-b-2 px-4 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vermilion",
-                  active ? "border-ink text-ink" : "border-transparent text-ink-muted hover:text-ink",
+                  "relative h-11 border-r border-ink px-5 font-mono text-[12.5px] font-semibold tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cobalt",
+                  "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-cobalt after:transition-transform after:duration-(--duration-fast)",
+                  active ? "bg-ink text-paper after:scale-x-100" : "text-ink-soft after:scale-x-0 hover:bg-paper-sunk hover:text-ink",
                 )}
               >
                 {filter.label}
@@ -157,7 +158,9 @@ export function ExamListItem({ exam }: { exam: ExamSummary }) {
 
       <div className="flex flex-wrap items-center gap-3 md:col-span-3">
         <PhaseChip phase={exam.phase} />
-        <span className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{STATUS_LABEL[exam.status]}</span>
+        {STATUS_LABEL[exam.status].toLowerCase() !== PHASE_LABEL[exam.phase].toLowerCase() ? (
+          <span className="font-mono text-[11px] tracking-[0.12em] text-ink-soft uppercase">{STATUS_LABEL[exam.status]}</span>
+        ) : null}
       </div>
 
       <dl className="grid grid-cols-3 gap-3 md:col-span-4">

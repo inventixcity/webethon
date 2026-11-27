@@ -1,0 +1,17 @@
+# R2 - Phase 2 review - pass 3 - 14:53 PKT
+
+Final snapshot: the findings below remain open by source inspection. Full scenarios and fixes are recorded in `handoff/reviews/R2-pass1.md` and `handoff/reviews/R2-pass2.md`.
+
+- **BLOCKER - Incorrect per-paper marks, totals, percentages and certificate denominators** (`backend/crates/exam_grading/src/lib.rs:244`, `backend/crates/exam_grading/src/lib.rs:846`, `backend/crates/exam_disputes/src/lib.rs:299`). Drawn papers with mark overrides use pool or base-item totals. Use each attempt's effective drawn marks consistently across score caps, displays, pass calculations and re-signing; cover different override values and pool sizes.
+- **BLOCKER - Accepted multi-select alternatives change the original key** (`backend/crates/exam_grading/src/lib.rs:812`). A previously correct selection can lose marks after an alternative is accepted. Model alternative answer sets without changing the semantics of existing correct sets, and test all scoring rules.
+- **MAJOR - Pairwise fairness tolerance not guaranteed** (`backend/crates/exam_attempts/src/lib.rs:315`). Individual distances to a target permit twice the configured pairwise spread and unsuccessful searches silently accept the best draw. Serialize against relevant existing draws and refuse infeasible draws; test boundary and opposite-side cases.
+- **MAJOR - Feasible overlapping blueprint rows can block attempt start** (`backend/crates/exam_attempts/src/lib.rs:303`). Greedy early choices can starve later rows and immediately return conflict. Validate distinct-item feasibility before publishing and use a globally feasible assignment algorithm; test broad/narrow overlapping pools.
+- **MAJOR - Candidate or author-provided PII may be sent to the model** (`backend/crates/exam_assist/src/lib.rs:75`). Prompt fields include raw free text, including any names or contact details typed into answers, stems or rubrics. Apply a privacy-preserving policy before external transmission, accounting for unstructured PII, and test each field; if no reliable guarantee is possible, disable forwarding or explicitly resolve the requirement with the lead.
+- **MAJOR - Voiding all items produces a zero denominator** (`backend/crates/exam_grading/src/lib.rs:248`, `backend/crates/exam_grading/src/lib.rs:399`). Results can fail and certificate percentage lacks a defined outcome. Establish and implement one all-void result/pass/certificate policy with end-to-end tests.
+- **MAJOR - All-disputes filter returns validation error** (`web/src/components/disputes/disputes-view.tsx:48`, `backend/crates/exam_disputes/src/lib.rs:173`). The UI sends `status=all`, which the API rejects. Omit the filter for All or support the value on the server and add an integration test.
+
+The reported 15-second SSE proxy cutoff was fixed by the lead; the current route recognizes the stream. Bulk cap and interval reuse are covered by existing tests; long-lived browser SSE, privacy redaction, the failure scenarios above, and the requested screenshots were not independently exercised.
+
+## Verification
+
+`cd backend && bash scripts/cargo.sh test -p exam_assist` (3 passed), `-p exam_grading` (8 passed), `-p exam_disputes` (5 passed after a transient concurrent-edit compile failure), `-p exam_resilience` (9 passed), `-p exam_integrity` (4 passed), `-p exam_authoring` (7 passed), and `-p exam_attempts` (23 passed). `cd web && pnpm typecheck` passed at 14:25 and again at 14:53. Passing tests do not exercise the listed regressions.
