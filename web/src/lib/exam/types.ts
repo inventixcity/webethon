@@ -401,6 +401,10 @@ export type CandidateResult = {
   publishedAt: string;
   verifyCode: string;
   breakdown: Array<{
+    /** The exam item, so a candidate can dispute this question (5.4). */
+    itemId: string;
+    /** True when the question was voided after a dispute: it no longer counts for anyone. */
+    voided?: boolean;
     position: number;
     kind: QuestionKind;
     stem: string;
@@ -534,6 +538,13 @@ export type Dispute = {
   /** Score before and after resolution, when it changed. */
   scoreBefore: number | null;
   scoreAfter: number | null;
+  /** Examiner view: the question's marks, the marks currently awarded, its kind and options (for accept-alternative). */
+  itemMarks?: number;
+  awardedMarks?: number | null;
+  kind?: QuestionKind;
+  options?: QuestionOption[];
+  /** Display name of the examiner who resolved it (examiner view and audit line). */
+  resolvedBy?: string | null;
 };
 
 // ------------------------------------------------------------------ AI grading assistant (optional)

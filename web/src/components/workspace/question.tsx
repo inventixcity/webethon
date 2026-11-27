@@ -205,7 +205,7 @@ function ChoiceAnswer({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "mt-0.5 grid size-6 shrink-0 place-items-center border border-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-vermilion",
+                    "mt-0.5 grid size-6 shrink-0 place-items-center border border-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus",
                     checked && "bg-ink text-paper",
                   )}
                 >
@@ -283,7 +283,7 @@ function WrittenAnswer({
           onAnswer({ text: value }, accumulate());
         }}
         className={cn(
-          "mt-2 block min-h-56 w-full resize-y border border-(--ws-line) bg-paper-raised p-4 font-sans text-base text-ink caret-vermilion outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+          "mt-2 block min-h-56 w-full resize-y border border-(--ws-line) bg-paper-raised p-4 font-sans text-base text-ink caret-vermilion outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
           spacing === "relaxed" ? "leading-loose" : "leading-relaxed",
         )}
       />

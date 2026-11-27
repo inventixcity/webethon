@@ -41,7 +41,7 @@ export function Shell({ scene, children }: ShellProps) {
           <Link href="/" className="font-heading text-xl font-light italic">
             {siteConfig.name}
           </Link>
-          <ThemeToggle className="bg-paper-raised px-3 py-1.5 text-[11px] tracking-[0.08em] uppercase" />
+          <ThemeToggle className="min-h-6 bg-paper-raised px-3 py-1.5 text-[11px] tracking-[0.08em] uppercase" />
         </header>
         <div className="flex flex-1 items-center justify-end px-4 pb-6 max-lg:items-end max-lg:pt-[32dvh] md:px-10">
           <section className="w-full max-w-[27rem] border border-rule bg-paper-raised p-7 sm:p-9">{children}</section>

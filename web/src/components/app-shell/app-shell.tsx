@@ -260,7 +260,7 @@ function TopBar({ crumbs, home, onMenu }: { crumbs: Crumb[]; home: string; onMen
                   </span>
                 ) : (
                   <>
-                    <Link href={crumb.href ?? home} className="shrink-0 underline-offset-4 transition-colors duration-(--duration-fast) hover:text-ink hover:underline">
+                    <Link href={crumb.href ?? home} className="inline-flex min-h-6 shrink-0 items-center py-1 underline-offset-4 transition-colors duration-(--duration-fast) hover:text-ink hover:underline">
                       {"label" in crumb ? crumb.label : <ExamTitle examId={crumb.examId} />}
                     </Link>
                     <span aria-hidden="true" className="shrink-0">/</span>

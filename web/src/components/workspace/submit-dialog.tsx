@@ -163,7 +163,7 @@ function JumpList({ items, onJump }: { items: PaletteItem[]; onJump: (index: num
               type="button"
               onClick={() => onJump(index)}
               aria-label={`Go to question ${index + 1}${item.flagged ? ", flagged" : ""}`}
-              className="cursor-pointer border border-ink px-3 py-2 font-mono text-xs underline-offset-4 hover:bg-paper-sunk hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+              className="cursor-pointer border border-ink px-3 py-2 font-mono text-xs underline-offset-4 hover:bg-paper-sunk hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               {pad2(index + 1)}
             </button>

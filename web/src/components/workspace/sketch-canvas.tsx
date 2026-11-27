@@ -204,7 +204,7 @@ function ToolButton({
       aria-pressed={active === undefined ? undefined : active}
       title={label}
       className={cn(
-        "grid size-10 cursor-pointer place-items-center border border-ink transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion disabled:cursor-not-allowed disabled:border-(--ws-line) disabled:text-ink-muted",
+        "grid size-10 cursor-pointer place-items-center border border-ink transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:border-(--ws-line) disabled:text-ink-muted",
         active ? "bg-ink text-paper" : "text-ink hover:bg-paper-sunk",
       )}
     >

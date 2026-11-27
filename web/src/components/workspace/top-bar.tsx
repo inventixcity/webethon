@@ -80,7 +80,7 @@ export const TopBar = forwardRef<HTMLElement, TopBarProps>(function TopBar(
             aria-pressed={simulated}
             title="Demo aid: Shift+Alt+O"
             className={cn(
-              "flex h-8 cursor-pointer items-center gap-2 border px-2.5 font-mono text-[11px] tracking-[0.1em] uppercase transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+              "flex h-8 cursor-pointer items-center gap-2 border px-2.5 font-mono text-[11px] tracking-[0.1em] uppercase transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
               simulated ? "border-ink bg-ink text-paper" : "border-dashed border-ink text-ink-soft hover:bg-paper-sunk",
             )}
           >

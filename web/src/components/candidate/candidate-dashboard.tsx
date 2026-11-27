@@ -12,6 +12,7 @@ import { CtaLink } from "@/components/app-shell/cta-link";
 import { useTick, serverOffset } from "./clock";
 import { ACCESS_LABEL, describeError, formatClock, formatCountdown, formatDuration, formatWindow } from "./format";
 import { EmptyState, PanelError, PanelLoading } from "./notice";
+import { MyDisputes } from "@/components/disputes/my-disputes";
 
 export function AccessChip({ access }: { access: CandidateExamCard["access"] }) {
   // Cobalt marks what is running or open now; upcoming is informational; everything else is settled and quiet.
@@ -209,7 +210,7 @@ function ResultBadge({ attemptId }: { attemptId: string }) {
       </span>
       <Link
         href={`/verify/${encodeURIComponent(result.verifyCode)}`}
-        className="font-mono text-[11px] tracking-[0.12em] text-cobalt-deep uppercase underline underline-offset-4 hover:text-ink"
+        className="inline-flex min-h-6 items-center py-1 font-mono text-[11px] tracking-[0.12em] text-cobalt-deep uppercase underline underline-offset-4 hover:text-ink"
       >
         Verify code
       </Link>
@@ -323,6 +324,8 @@ export function CandidateDashboard() {
           </dl>
         </>
       ) : null}
+
+      <MyDisputes />
     </div>
   );
 }

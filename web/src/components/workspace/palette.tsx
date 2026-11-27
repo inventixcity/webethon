@@ -159,7 +159,7 @@ function PaletteBody({
                 aria-label={paletteLabel(item, current)}
                 aria-current={current ? "step" : undefined}
                 className={cn(
-                  "ws-cell relative grid aspect-square w-full min-w-11 cursor-pointer place-items-center font-mono text-xs tabular-nums transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+                  "ws-cell relative grid aspect-square w-full min-w-11 cursor-pointer place-items-center font-mono text-xs tabular-nums transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
                   item.answered ? "bg-ink text-paper" : "border border-ink text-ink hover:bg-paper-sunk",
                   item.failed && "border-2 border-dashed border-ink bg-paper text-ink",
                   current && "ring-2 ring-ink ring-offset-2 ring-offset-paper",

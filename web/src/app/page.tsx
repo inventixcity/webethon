@@ -117,16 +117,16 @@ export default function LandingPage() {
         </Link>
         <nav aria-label="Page sections" className="hidden items-center gap-6 lg:flex">
           {NAV.map((item) => (
-            <SectionLink key={item.href} href={item.href} className="opacity-70 transition-opacity hover:opacity-100">
+            <SectionLink key={item.href} href={item.href} className="inline-flex min-h-6 items-center py-1 text-ink-soft transition-colors hover:text-ink">
               {item.label}
             </SectionLink>
           ))}
-          <Link href="/verify" className="opacity-70 transition-opacity hover:opacity-100">
+          <Link href="/verify" className="inline-flex min-h-6 items-center py-1 text-ink-soft transition-colors hover:text-ink">
             Verify
           </Link>
         </nav>
         <div className="flex items-center gap-4">
-          <ThemeToggle className="hidden uppercase opacity-70 transition-opacity hover:opacity-100 sm:flex" />
+          <ThemeToggle className="hidden min-h-6 min-w-6 py-1 uppercase sm:flex" />
           <Button asChild size="sm">
             <Link href="/login">Sign in</Link>
           </Button>

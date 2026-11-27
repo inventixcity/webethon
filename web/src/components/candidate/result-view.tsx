@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import type { AnswerResponse, CandidateResult, QuestionOption } from "@/lib/exam/types";
+import { ApiError } from "@/lib/api/client";
+import { RaiseDisputeDialog, type DisputeTarget } from "@/components/disputes/raise-dispute-dialog";
+import { QuestionDispute } from "@/components/disputes/question-dispute";
+import { disputeWindowEnd, formatDay } from "@/components/disputes/format";
+import type { AnswerResponse, CandidateResult, Dispute, QuestionOption } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { describeError, formatDateTime } from "./format";
 import { PanelError, PanelLoading } from "./notice";
@@ -30,8 +35,18 @@ function correctText(correct: string[] | null, options: QuestionOption[]): strin
 }
 
 type Breakdown = NonNullable<CandidateResult["breakdown"]>[number];
+/** The server may send each question's id. It is needed to raise a dispute; without it no action is offered. */
+type BreakdownItem = Breakdown & { itemId?: string };
 
-function BreakdownRows({ item }: { item: Breakdown }) {
+function BreakdownRows({ item, voided, dispute, windowEnd, now, verifyCode, onRaise }: {
+  item: BreakdownItem;
+  voided: boolean;
+  dispute: Dispute | undefined;
+  windowEnd: number;
+  now: number;
+  verifyCode: string;
+  onRaise: (target: DisputeTarget) => void;
+}) {
   return (
     <>
       <tr className="align-top">
@@ -45,7 +60,13 @@ function BreakdownRows({ item }: { item: Breakdown }) {
         <td className="py-4 pr-4 whitespace-pre-wrap">{answerText(item.response, item.options)}</td>
         <td className="py-4 pr-4 whitespace-pre-wrap">{correctText(item.correct, item.options)}</td>
         <td className="py-4 font-mono text-[11px] tracking-[0.12em] tabular-nums whitespace-nowrap">
-          {item.awarded} / {item.marks}
+          {voided ? (
+            <span className="font-sans tracking-normal normal-case">Voided after review</span>
+          ) : (
+            <>
+              {item.awarded} / {item.marks}
+            </>
+          )}
         </td>
       </tr>
       {(item.feedback || item.explanation) && (
@@ -57,12 +78,24 @@ function BreakdownRows({ item }: { item: Breakdown }) {
           </td>
         </tr>
       )}
+      <QuestionDispute
+        dispute={dispute}
+        itemId={item.itemId}
+        windowEnd={windowEnd}
+        now={now}
+        verifyCode={verifyCode}
+        onRaise={() => {
+          if (item.itemId) onRaise({ itemId: item.itemId, position: item.position });
+        }}
+      />
     </>
   );
 }
 
 export function ResultView({ attemptId }: { attemptId: string }) {
   const { state, reload } = useApiData<CandidateResult>(`/me/results/${attemptId}`);
+  const disputes = useApiData<Dispute[]>("/me/disputes");
+  const [raising, setRaising] = useState<DisputeTarget | null>(null);
 
   if (state.status === "loading") return <PanelLoading label="Loading your result" />;
   if (state.status === "error") {
@@ -81,6 +114,12 @@ export function ResultView({ attemptId }: { attemptId: string }) {
 
   const result = state.data;
   const percent = percentFormat.format(result.percent);
+  const windowEnd = disputeWindowEnd(result.publishedAt);
+  // The page renders only after the result arrives on the client, so reading the clock here cannot mismatch the server.
+  const now = Date.now();
+  const windowOpen = now < windowEnd;
+  const myDisputes = disputes.state.status === "ready" ? disputes.state.data.filter((d) => d.attemptId === attemptId) : [];
+  const disputeByPosition = new Map(myDisputes.map((d) => [d.position, d]));
 
   return (
     <div className="grid gap-14">
@@ -152,9 +191,27 @@ export function ResultView({ attemptId }: { attemptId: string }) {
       </section>
 
       <section aria-labelledby="breakdown" className="grid gap-5">
-        <h2 id="breakdown" className="font-mono text-[11px] tracking-[0.14em] uppercase">
-          Question breakdown
-        </h2>
+        <div className="grid gap-3">
+          <h2 id="breakdown" className="font-mono text-[11px] tracking-[0.14em] uppercase">
+            Question breakdown
+          </h2>
+          {result.breakdown !== null && result.breakdown.length > 0 ? (
+            <p className="max-w-[62ch] text-sm text-ink-soft" aria-live="polite">
+              {windowOpen
+                ? `You can dispute one mark per question until ${formatDay(new Date(windowEnd).toISOString())}. Your examiner decides each one, and the decision is recorded.`
+                : `The dispute window closed on ${formatDay(new Date(windowEnd).toISOString())}.`}
+            </p>
+          ) : null}
+          {disputes.state.status === "error" && !(disputes.state.error instanceof ApiError && disputes.state.error.status === 404) ? (
+            <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-vermilion-deep">
+              <span>We couldn&apos;t load your disputes.</span>
+              <Button type="button" variant="secondary" size="sm" onClick={disputes.reload}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
         {result.breakdown === null ? (
           <p className="border-t border-rule py-8 text-base text-ink-soft">
             Your institution has chosen not to show the question breakdown for this exam.
@@ -175,14 +232,35 @@ export function ResultView({ attemptId }: { attemptId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
-                {result.breakdown.map((item) => (
-                  <BreakdownRows key={item.position} item={item} />
-                ))}
+                {result.breakdown.map((item: BreakdownItem) => {
+                  const dispute = disputeByPosition.get(item.position);
+                  return (
+                    <BreakdownRows
+                      key={item.position}
+                      item={item}
+                      voided={dispute?.status === "accepted" && dispute.resolution === "void_item"}
+                      dispute={dispute}
+                      windowEnd={windowEnd}
+                      now={now}
+                      verifyCode={result.verifyCode}
+                      onRaise={setRaising}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </section>
+
+      {raising ? (
+        <RaiseDisputeDialog
+          attemptId={attemptId}
+          target={raising}
+          onClose={() => setRaising(null)}
+          onRaised={disputes.reload}
+        />
+      ) : null}
     </div>
   );
 }

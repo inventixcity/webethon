@@ -1,14 +1,18 @@
 "use client";
 
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { api } from "@/lib/api/client";
-import type { GradingItem } from "@/lib/exam/types";
+import type { GradingItem, GradingSuggestion } from "@/lib/exam/types";
 import { RotaryKnob } from "@/components/effects/rotary-knob";
 import { FieldError } from "@/components/feedback/field-error";
+import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { conflictReason, formatMarks, messageOf } from "@/components/analytics/format";
+import { describeError } from "@/lib/errors/describe";
+import { isUnavailableError, requestSuggestion, useSuggestAvailable } from "./ai-suggest";
+import { SuggestionCard } from "./suggestion-card";
 import { checkMarks, FEEDBACK_MAX, halfMarks, MARKS_STEP } from "./marks";
 
 /**
@@ -29,7 +33,36 @@ export function GradeCard({
   const [feedback, setFeedback] = useState(item.feedback ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [suggestion, setSuggestion] = useState<GradingSuggestion | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const aiAvailable = useSuggestAvailable();
+  const marksRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const errorId = `${ids}-error`;
+
+  // Advisory only: this fills the marks field and leaves saving to the examiner.
+  async function suggest() {
+    if (suggesting) return;
+    setSuggesting(true);
+    try {
+      setSuggestion(await requestSuggestion(item.attemptId, item.itemId));
+    } catch (cause) {
+      if (isUnavailableError(cause)) {
+        toast.info("AI suggestions are not set up, so the button is hidden for this session.");
+      } else {
+        toast.error(describeError(cause));
+      }
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function useSuggestedMark() {
+    if (!suggestion) return;
+    setMarks(String(suggestion.suggestedMarks));
+    setError(null);
+    marksRef.current?.focus();
+  }
 
   async function save(next: boolean) {
     if (busy) return;
@@ -148,6 +181,7 @@ export function GradeCard({
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-40">
               <Input
+                ref={marksRef}
                 id={`${ids}-marks`}
                 data-grade-marks
                 type="number"
@@ -179,8 +213,20 @@ export function GradeCard({
                 {option.label}
               </Button>
             ))}
+            {aiAvailable && (
+              <Button type="button" variant="secondary" size="sm" loading={suggesting} onClick={() => void suggest()}>
+                Suggest a mark
+              </Button>
+            )}
           </div>
           <FieldError id={errorId} message={error} />
+          {suggestion && (
+            <SuggestionCard
+              suggestion={suggestion}
+              onUse={useSuggestedMark}
+              onDismiss={() => setSuggestion(null)}
+            />
+          )}
         </div>
 
         <div className="grid gap-2">

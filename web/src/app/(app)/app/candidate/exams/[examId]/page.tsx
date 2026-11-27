@@ -16,8 +16,8 @@ export default async function ExamLobbyPage({ params }: Props) {
   if (!UUID.test(examId)) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-4xl min-w-0 px-5 py-10 md:px-8 md:py-16">
+    <div className="mx-auto w-full max-w-4xl min-w-0 px-5 py-10 md:px-8 md:py-16">
       <ExamLobby examId={examId} />
-    </main>
+    </div>
   );
 }

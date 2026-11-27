@@ -22,10 +22,10 @@ export function VerifyTopBar() {
           <ArrowLeft aria-hidden="true" />
           Back
         </Button>
-        <Link href="/login" className="underline underline-offset-4 hover:text-cobalt-deep">
+        <Link href="/login" className="inline-flex min-h-6 items-center py-1 underline underline-offset-4 hover:text-cobalt-deep">
           Sign in
         </Link>
-        <ThemeToggle className="uppercase opacity-70 transition-opacity hover:opacity-100" />
+        <ThemeToggle className="min-h-6 min-w-6 py-1 uppercase" />
       </div>
     </header>
   );

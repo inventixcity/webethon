@@ -40,7 +40,7 @@ export function Shell({ sky, title, note, children }: ShellProps) {
             <h1 className={titleClass}>{title}</h1>
             <p className="mt-2 max-w-sm text-[15px] text-ink-soft">{note}</p>
           </div>
-          <ThemeToggle className="shrink-0 font-mono text-[11px] tracking-[0.12em] uppercase opacity-80 hover:opacity-100" />
+          <ThemeToggle className="min-h-6 min-w-6 shrink-0 py-1 font-mono text-[11px] tracking-[0.12em] uppercase" />
         </div>
       </section>
       <section className="border-t-2 border-ink pb-14">{children}</section>

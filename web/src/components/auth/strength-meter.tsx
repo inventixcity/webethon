@@ -36,7 +36,7 @@ export function StrengthMeter({ password, className }: { password: string; class
         {passwordRules.map((rule) => {
           const met = rule.test(password);
           return (
-            <li key={rule.label} className={cn("transition-opacity", met ? "opacity-100" : "opacity-55")}>
+            <li key={rule.label} className={cn("transition-opacity", met ? "text-ink" : "text-ink-muted")}>
               <span aria-hidden="true">{met ? "■" : "□"}</span> {rule.label}
               <span className="sr-only">{met ? " (met)" : " (not met)"}</span>
             </li>

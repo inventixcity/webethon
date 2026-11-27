@@ -64,8 +64,8 @@ export default function Login({ side, demo }: { side?: ReactNode; demo?: ReactNo
               {/* One tight phrase. The padlock sits on the line at cap height and follows the password as it is typed. */}
               <h1
                 aria-label="Back in."
-                className="leading-none font-semibold tracking-[-0.03em] whitespace-nowrap"
-                style={{ fontSize: "clamp(72px, min(15vh, 24vw), 184px)" }}
+                className="leading-none font-semibold tracking-[-0.03em]"
+                style={{ fontSize: "clamp(44px, min(15vh, 20vw), 184px)" }}
               >
                 <Reveal>Back</Reveal>{" "}
                 <Reveal delay={0.12}>

@@ -14,7 +14,7 @@ import { Field } from "../field";
 import { SubmitButton } from "../submit-button";
 
 const quietLink =
-  "font-mono text-[11px] tracking-[0.12em] uppercase underline underline-offset-4 hover:text-vermilion-deep";
+  "inline-flex min-h-6 items-center font-mono text-[11px] tracking-[0.12em] uppercase underline underline-offset-4 hover:text-vermilion-deep";
 
 type ForgotFieldProps = {
   /** Called on every change, with how much was typed and whether it's a valid address. */

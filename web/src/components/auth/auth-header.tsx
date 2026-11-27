@@ -26,7 +26,7 @@ export function AuthHeader({ index, section, className }: AuthHeaderProps) {
           <span className="size-1.5 animate-blink bg-vermilion motion-reduce:animate-none" />
           {index} / {section}
         </span>
-        <ThemeToggle className="uppercase opacity-70 transition-opacity hover:opacity-100" />
+        <ThemeToggle className="min-h-6 min-w-6 py-1 uppercase" />
       </div>
     </header>
   );

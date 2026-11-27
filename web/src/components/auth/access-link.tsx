@@ -79,7 +79,7 @@ export function AccessLinkReveal({
           value={link.inviteUrl}
           aria-label={`New access link for ${email}`}
           onFocus={(event) => event.currentTarget.select()}
-          className="h-10 w-full min-w-0 border border-rule bg-paper-raised px-3 font-mono text-xs text-current outline-none focus-visible:outline-2 focus-visible:outline-vermilion"
+          className="h-10 w-full min-w-0 border border-rule bg-paper-raised px-3 font-mono text-xs text-current outline-none focus-visible:outline-2 focus-visible:outline-focus"
         />
         <Button variant="secondary" size="sm" onClick={copy}>
           {copied ? "Copied" : "Copy link"}

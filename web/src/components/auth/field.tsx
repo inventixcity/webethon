@@ -34,7 +34,10 @@ export function Field({
   return (
     <div className={cn("group/field", className)}>
       <div className="flex items-baseline justify-between gap-4">
-        <Label htmlFor={fieldId}>{label}</Label>
+        <Label htmlFor={fieldId}>
+          {label}
+          {props.required ? <span aria-hidden="true" className="ml-1 text-vermilion-deep">*</span> : null}
+        </Label>
         {action}
       </div>
       <div className="relative">
@@ -90,7 +93,7 @@ export function PasswordField({ inputClassName, onVisibleChange, ...props }: Pas
           }}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="font-mono text-[11px] tracking-[0.12em] no-underline overflow-visible opacity-60 transition-opacity duration-(--duration-fast) ease-(--ease-enter) motion-reduce:transition-none hover:text-current hover:no-underline hover:opacity-100"
+          className="font-mono text-[11px] tracking-[0.12em] no-underline min-h-6 overflow-visible transition-colors duration-(--duration-fast) ease-(--ease-enter) motion-reduce:transition-none hover:text-current hover:no-underline"
         >
           {visible ? "Hide" : "Show"}
         </Button>

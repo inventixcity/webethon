@@ -12,6 +12,7 @@ export const EXAM_TABS = [
   { slug: "review", label: "Review" },
   { slug: "monitor", label: "Monitor" },
   { slug: "grading", label: "Grading" },
+  { slug: "disputes", label: "Disputes" },
   { slug: "results", label: "Results" },
   { slug: "analytics", label: "Analytics" },
 ] as const;

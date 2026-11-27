@@ -8,3 +8,4 @@ Updates from the lead:
 - When (and only when) everything in your brief is done, compiled and tested, put a line `STATUS: COMPLETE` as the LAST line of handoff/log/<ID>.md. Until then, end your log with `STATUS: IN PROGRESS` plus the remaining items. You will be resumed automatically until it says COMPLETE.
 - **Response envelope (affects everyone):** every successful JSON response must be `{"data": <payload>}`. `ResponseJson` is plain `axum::Json` and does NOT wrap. Use `examcore::ok(payload)` (returns `axum::Json<Value>`) with the handler return type `examcore::ApiJson`. Fix any handler that returns a bare payload.
 - Read `handoff/reviews/R1-*.md` for findings in your crate or files and fix them all.
+- C14 ONLY: read the "ADDENDUM" at the end of handoff/briefs/C14.md and implement it before claiming COMPLETE.

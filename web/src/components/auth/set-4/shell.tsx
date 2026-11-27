@@ -38,7 +38,7 @@ export function Shell({ children, className }: { children: React.ReactNode; clas
         <Link href="/" className="justify-self-center">
           <span className="font-heading text-2xl tracking-normal normal-case italic">{siteConfig.mark}</span>
         </Link>
-        <ThemeToggle className="justify-self-end uppercase opacity-70 transition-opacity hover:opacity-100" />
+        <ThemeToggle className="min-h-6 min-w-6 justify-self-end py-1 uppercase" />
       </header>
       {children}
     </main>

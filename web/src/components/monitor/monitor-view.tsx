@@ -1,8 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api/client";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ExamMonitor, MonitorRow, ReviewPriority } from "@/lib/exam/types";
 import { ToastProvider as LiveToasts, useToast as useLiveToast } from "@/components/effects/toast-stack";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
@@ -19,10 +18,14 @@ import { cn } from "@/lib/utils";
 import { AnnouncementsPanel } from "./announcements-panel";
 import { IncidentPanel, INDICATOR_NOTICE } from "./incident-panel";
 import { LeakTracer } from "./leak-tracer";
+import { OutageCreditDialog } from "./outage-credit-dialog";
 import { PriorityChip } from "./priority-chip";
-import { useNow, usePoll } from "./use-poll";
+import { LiveMode, POLL_MS, useLiveMonitor, useNow } from "./use-live-monitor";
 
-const POLL_MS = 5000;
+/** How long a changed row stays highlighted. */
+const FLASH_MS = 1600;
+/** The screen reader summary is updated at most this often. */
+const ANNOUNCE_MS = 15000;
 const PRIORITY_RANK: Record<ReviewPriority, number> = { high: 3, medium: 2, low: 1, none: 0 };
 const GRID = "grid items-center gap-x-4 px-3 md:grid-cols-[minmax(0,2fr)_7.5rem_minmax(0,1.5fr)_4.5rem_6rem_9rem_5.5rem_8.5rem]";
 
@@ -44,35 +47,42 @@ export function MonitorView({ examId }: { examId: string }) {
 }
 
 function ControlRoom({ examId }: { examId: string }) {
-  const load = useCallback(() => api<ExamMonitor>(`/exams/${examId}/monitor`), [examId]);
-  const poll = usePoll(load, POLL_MS);
+  const poll = useLiveMonitor(examId);
   const now = useNow(1000);
   const live = useLiveToast();
   const [sort, setSort] = useState<SortKey>("priority");
   const [offlineOnly, setOfflineOnly] = useState(false);
   const [highOnly, setHighOnly] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [flashes, setFlashes] = useState<Record<string, number>>({});
+  const [announced, setAnnounced] = useState("");
   const sortId = useId();
   const offlineId = useId();
   const highId = useId();
-  const seen = useRef<Map<string, number> | null>(null);
+  const seen = useRef<Map<string, { incidents: number; signature: string }> | null>(null);
   const reduced = useReducedMotion();
 
   const data = poll.data;
-  // Deadlines use the server clock: the offset from the last response, never the candidate's clock.
+  // Deadlines use the server clock: the offset from the last snapshot, never the candidate's clock.
   const offset = data && poll.updatedAt !== null ? Date.parse(data.serverNow) - poll.updatedAt : 0;
   const serverNow = now + offset;
 
-  // Toast each new incident that arrived since the last poll. The first load only records the baseline.
+  // Toast each new incident, and flash each row whose visible state changed, since the last snapshot. The first
+  // snapshot only records the baseline.
   useEffect(() => {
     if (!data) return;
     const previous = seen.current;
-    const next = new Map<string, number>();
+    const next = new Map<string, { incidents: number; signature: string }>();
+    const changed: string[] = [];
     for (const row of data.rows) {
-      next.set(row.attemptId, row.incidents);
+      const signature = rowSignature(row);
+      next.set(row.attemptId, { incidents: row.incidents, signature });
       const before = previous?.get(row.attemptId);
-      if (previous && before !== undefined && row.incidents > before) {
-        const added = row.incidents - before;
+      if (before === undefined) continue;
+      if (before.signature !== signature) changed.push(row.attemptId);
+      if (row.incidents > before.incidents) {
+        const added = row.incidents - before.incidents;
         live.show({
           title: `${row.displayName}: ${added} new ${added === 1 ? "incident" : "incidents"}`,
           body: "Open the candidate to see the timeline. Indicators are for review.",
@@ -82,9 +92,28 @@ function ControlRoom({ examId }: { examId: string }) {
       }
     }
     seen.current = next;
+    if (changed.length > 0) {
+      setFlashes((current) => {
+        const updated = { ...current };
+        for (const id of changed) updated[id] = (updated[id] ?? 0) + 1;
+        return updated;
+      });
+    }
     // `live.show` is stable for the life of the provider.
     // biome-ignore lint/correctness/useExhaustiveDependencies: see above.
   }, [data]);
+
+  // One summary for screen readers, at most every 15 seconds. Row-by-row changes are not announced.
+  const summary = data ? summaryText(data) : "";
+  const summaryRef = useRef(summary);
+  useEffect(() => {
+    summaryRef.current = summary;
+    if (announced === "" && summary !== "") setAnnounced(summary);
+  }, [summary, announced]);
+  useEffect(() => {
+    const id = setInterval(() => setAnnounced(summaryRef.current), ANNOUNCE_MS);
+    return () => clearInterval(id);
+  }, []);
 
   const rows = useMemo(() => {
     const filtered = (data?.rows ?? []).filter(
@@ -101,23 +130,27 @@ function ControlRoom({ examId }: { examId: string }) {
       <SectionIntro
         eyebrow="Monitor / live"
         title="Control room"
-        summary="Every candidate in this exam, updated every five seconds while this tab is open."
+        summary="Every candidate in this exam, updated from the server while this tab is open."
         actions={
           <div className="flex flex-wrap items-center gap-4">
-            <p className="flex items-center gap-2 font-mono text-[11px] text-ink-muted" aria-live="off">
-              <Badge tone="live" dot="live" size="sm">
-                Live
-              </Badge>
-              {poll.updatedAt !== null ? `Updated ${formatAge(now - poll.updatedAt)} ago` : "Not updated yet"}
-            </p>
+            <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-ink-muted" aria-live="off">
+              <LiveIndicator mode={poll.mode} />
+              <span>{poll.updatedAt !== null ? `Updated ${formatAge(now - poll.updatedAt)} ago` : "Not updated yet"}</span>
+            </div>
             <Button variant="secondary" size="sm" onClick={poll.refresh}>
               Refresh
+            </Button>
+            <Button variant="secondary" size="sm" disabled={!data} onClick={() => setCreditOpen(true)}>
+              Credit an outage
             </Button>
           </div>
         }
       >
         <p className="font-mono text-[11px] text-ink-soft">{INDICATOR_NOTICE}</p>
       </SectionIntro>
+      <p role="status" aria-live="polite" className="sr-only">
+        {announced}
+      </p>
 
       {poll.error !== null && !data && (
         <div className="grid gap-3 border border-vermilion-deep p-5">
@@ -200,6 +233,7 @@ function ControlRoom({ examId }: { examId: string }) {
                       row={row}
                       serverNow={serverNow}
                       reduced={reduced ?? false}
+                      flashKey={flashes[row.attemptId] ?? 0}
                       onOpen={() => setOpenId(row.attemptId)}
                     />
                   ))}
@@ -225,30 +259,89 @@ function ControlRoom({ examId }: { examId: string }) {
           onChanged={poll.refresh}
         />
       )}
+      {creditOpen && data && (
+        <OutageCreditDialog
+          examId={examId}
+          serverNow={serverNow}
+          onCredited={poll.refresh}
+          onOpenChange={setCreditOpen}
+        />
+      )}
     </div>
   );
+}
+
+/** The live state of the stream, as text and a mark. Colour is never the only signal. */
+function LiveIndicator({ mode }: { mode: LiveMode }) {
+  if (mode === "live") {
+    return (
+      <Badge tone="live" dot="live" size="sm">
+        Live
+      </Badge>
+    );
+  }
+  if (mode === "polling") {
+    return (
+      <Badge tone="outline" size="sm">
+        Polling every {POLL_MS / 1000} s
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone="dashed" size="sm">
+      {mode === "reconnecting" ? "Reconnecting" : "Connecting"}
+    </Badge>
+  );
+}
+
+/** The one-line summary for screen readers. It describes counts only, never a verdict about a candidate. */
+function summaryText(data: ExamMonitor): string {
+  const offline = data.rows.filter((row) => row.status === "in_progress" && !row.online).length;
+  const high = data.rows.filter((row) => row.reviewPriority === "high").length;
+  return `${data.inProgress} in progress, ${data.submitted} submitted, ${offline} offline, ${high} high review priority.`;
+}
+
+/** The fields a board row shows that can change between snapshots. Heartbeat time is left out: it moves every few seconds. */
+function rowSignature(row: MonitorRow): string {
+  return [row.status, row.answered, row.flagged, row.online, row.incidents, row.reviewPriority].join("|");
 }
 
 function BoardRow({
   row,
   serverNow,
   reduced,
+  flashKey,
   onOpen,
 }: {
   row: MonitorRow;
   serverNow: number;
   reduced: boolean;
+  /** Changes each time the row's visible state changes, which starts a short highlight. */
+  flashKey: number;
   onOpen: () => void;
 }) {
   const remaining = Date.parse(row.deadlineAt) - serverNow;
   const lastSeen = row.lastHeartbeatAt ? serverNow - Date.parse(row.lastHeartbeatAt) : null;
   const running = row.status === "in_progress";
+  const [flashing, setFlashing] = useState(false);
+  const lastFlash = useRef(flashKey);
+  useEffect(() => {
+    if (lastFlash.current === flashKey) return;
+    lastFlash.current = flashKey;
+    setFlashing(true);
+    const id = setTimeout(() => setFlashing(false), FLASH_MS);
+    return () => clearTimeout(id);
+  }, [flashKey]);
   return (
     <motion.div
       role="row"
       layout={reduced ? false : "position"}
       transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.8 }}
-      className={cn(GRID, "min-h-16 border-b border-rule bg-paper py-2 transition-colors duration-(--duration-fast) hover:bg-paper-raised")}
+      className={cn(
+        GRID,
+        "min-h-16 border-b border-rule py-2 transition-colors duration-(--duration-slow) hover:bg-paper-raised",
+        flashing ? "bg-cobalt/10" : "bg-paper",
+      )}
     >
       <span role="cell" className="grid min-w-0">
         <button type="button" onClick={onOpen} className="cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline">

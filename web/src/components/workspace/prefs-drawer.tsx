@@ -171,7 +171,7 @@ function Segmented<T extends string | number>({
               onChange={() => onChange(option.value)}
               className="peer sr-only"
             />
-            <span className="peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-vermilion">
+            <span className="peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus">
               {option.label}
             </span>
           </label>

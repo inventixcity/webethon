@@ -16,7 +16,7 @@ export function useWorkspaceRoot(): HTMLElement | null {
 }
 
 const CLOSE_CLASS =
-  "flex size-12 shrink-0 cursor-pointer items-center justify-center text-ink-muted transition-colors duration-(--duration-base) hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion";
+  "flex size-12 shrink-0 cursor-pointer items-center justify-center text-ink-muted transition-colors duration-(--duration-base) hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 type DrawerProps = {
   open: boolean;
@@ -192,7 +192,7 @@ function ResizeHandle({
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
-      className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none hover:bg-rule focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vermilion hidden sm:block"
+      className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none hover:bg-rule focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus hidden sm:block"
     />
   );
 }

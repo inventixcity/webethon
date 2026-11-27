@@ -67,8 +67,8 @@ function bodyLimit(path: string[], method: string): number {
 /** Long-lived streams. No deadline: the client leaving is what ends them. AI enforces its own deadline upstream. */
 function isStream(path: string[], method: string): boolean {
   return (path.at(-1) === "events" && method === "GET")
-    || (path.length === 2 && path[0] === "ai" && (path[1] === "chat" || path[1] === "complete") && method === "POST")
-    || (path.length === 2 && path[0] === "assist" && path[1] === "ask" && method === "POST");
+    // The examiner's live room: GET /exams/{id}/monitor/stream (Server-Sent Events).
+    || (path.length === 4 && path[0] === "exams" && path[2] === "monitor" && path[3] === "stream" && method === "GET");
 }
 
 /**

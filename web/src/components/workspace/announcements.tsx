@@ -62,7 +62,7 @@ export function AnnouncementsPanel({ items }: { items: Announcement[] }) {
               aria-expanded={expanded}
               aria-controls="ws-announcements-earlier"
               onClick={() => setExpanded((value) => !value)}
-              className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 font-mono text-[11px] tracking-[0.12em] text-ink-soft uppercase underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+              className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 font-mono text-[11px] tracking-[0.12em] text-ink-soft uppercase underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               <ChevronDown
                 className={cn("size-3.5 transition-transform duration-(--duration-base)", expanded && "rotate-180")}

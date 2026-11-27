@@ -17,7 +17,6 @@ export function shortcutList(sandbox: boolean): Shortcut[] {
     { keys: ["Alt", "S"], action: "Open the scratchpad" },
     { keys: ["Alt", "R"], action: "Review and submit" },
     { keys: ["Alt", "K"], action: "Show these shortcuts" },
-    { keys: ["?"], action: "Show these shortcuts (outside a text box)" },
     { keys: ["Esc"], action: "Close a panel or dialog" },
   ];
   if (sandbox) list.push({ keys: ["Shift", "Alt", "O"], action: "Demo: simulate going offline, or reconnect" });
@@ -46,7 +45,7 @@ export function ShortcutTable({ sandbox }: { sandbox: boolean }) {
   );
 }
 
-/** The shortcuts popover in the top bar. Controlled, so Alt+K and "?" can open it too. */
+/** The shortcuts popover in the top bar. Controlled, so Alt+K can open it too. */
 export function HelpPopover({
   open,
   onOpenChange,
@@ -77,7 +76,7 @@ export function HelpPopover({
             <p className="font-mono text-[11px] tracking-[0.14em] uppercase">Keyboard shortcuts</p>
             <Popover.Close
               aria-label="Close shortcuts"
-              className="-mt-2 -mr-2 grid size-10 cursor-pointer place-items-center text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+              className="-mt-2 -mr-2 grid size-10 cursor-pointer place-items-center text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               <X className="size-4" aria-hidden />
             </Popover.Close>

@@ -159,7 +159,7 @@ export function Scratchpad({
             disabled={!loaded}
             onChange={(event) => changeText(event.target.value)}
             rows={18}
-            className="mt-2 block min-h-72 w-full flex-1 resize-y border border-(--ws-line) bg-paper-raised p-4 font-sans text-base leading-relaxed text-ink caret-vermilion outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion disabled:opacity-60"
+            className="mt-2 block min-h-72 w-full flex-1 resize-y border border-(--ws-line) bg-paper-raised p-4 font-sans text-base leading-relaxed text-ink caret-vermilion outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-60"
           />
         </Tabs.Content>
 
@@ -177,7 +177,7 @@ export function Scratchpad({
 
 function tabClass(active: boolean): string {
   return cn(
-    "cursor-pointer px-4 py-3 font-mono text-xs tracking-[0.12em] uppercase transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vermilion",
+    "cursor-pointer px-4 py-3 font-mono text-xs tracking-[0.12em] uppercase transition-colors duration-(--duration-fast) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
     active ? "bg-ink text-paper" : "text-ink hover:bg-paper-sunk",
   );
 }

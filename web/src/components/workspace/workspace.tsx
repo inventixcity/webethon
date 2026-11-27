@@ -167,17 +167,12 @@ function Workspace({
 
   // Alt+N, Alt+P and Alt+F work in both layouts. Codes are used, so the shortcuts hold on any keyboard layout.
   // The remaining shortcuts are the ones listed in the help popover: Alt+J palette, Alt+S scratchpad,
-  // Alt+R review, Alt+K help, and "?" outside a text field.
+  // Alt+R review, Alt+K help. Every shortcut uses Alt.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey) return;
-      if (!event.altKey) {
-        if (event.key === "?" && !isEditableTarget(event.target)) {
-          event.preventDefault();
-          setHelpOpen(true);
-        }
-        return;
-      }
+      // Alt only: plain keys belong to the screen reader and to typing, so there are no single-key shortcuts.
+      if (!event.altKey) return;
       const item = items[safeIndex];
       switch (event.code) {
         case "KeyN":
@@ -526,11 +521,6 @@ function Workspace({
       </div>
     </WorkspaceRootContext.Provider>
   );
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 function StatePanel({
