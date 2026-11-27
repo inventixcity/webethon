@@ -1,0 +1,15 @@
+# CX4: Exam workspace (preview as candidate) breakage, login demo buttons, footer contact. Web, plus the backend only if the workspace bug is server-side.
+You fix three findings from the user's reviews. Screenshots: handoff/review/examiner/page2.png (bottom: the workspace shows only a thin strip and then black; "UI flickering"; "errors upon option click") and handoff/review/admin/img13.png (clipped "SIGN IN AS CANDIDATE" button). Rules: handoff/HANDOFF.md "USER UI RULES".
+
+You own: web/src/app/(exam)/**, web/src/components/workspace/**, web/src/lib/exam/** (the sync and journal engine; be careful), web/src/app/(auth)/login/demo-accounts.tsx, web/src/app/page.tsx (footer only) and web/src/config/site.ts. If the workspace bug is caused by an API response, you may fix it in backend/crates/exam_attempts or exam_resilience (run `cd backend && bash scripts/cargo.sh test -p <crate>` and clippy).
+
+1. **Preview as candidate / exam workspace is broken** (examiner sandbox at /exam/<attemptId>):
+   - It flickers. In the screenshot the content area collapsed to a thin strip with the rest black, and clicking an option causes errors.
+   - Reproduce LOCALLY: sign in as examiner (C:/Users/umerf/AppData/Local/Temp/claude/46368f72d808e358/3d64d5b3-0eee-4935-9e2c-1276c595d01d/scratchpad/.session-examiner_invigil_app.json has a cookie), POST /api/v1/exams/{id}/sandbox for a published exam to get an attemptId, then drive /exam/<attemptId> in headless Chrome. Adapt scratchpad/ws-test.mjs, which already clicks options, takes over the device, goes offline and prints console errors; for a sandbox the examiner cookie is used.
+   - Capture console errors, failing network calls and the layout.
+   - Find the root cause (likely candidates: a render loop from state updates on save, the toast store re-mounting, device takeover looping in sandbox, the fullscreen overlay, or a CSS height collapse in the workspace root and grid).
+   - Fix it, and prove it: zero console errors, a stable layout (screenshot before and after clicking options), and answers saving ("Saved") in the sandbox.
+   - Also check a real candidate attempt still works (ws-test.mjs flow: takeover, online save, offline store, reconnect sync).
+2. **Login demo buttons clipped (admin review, last item).** In demo-accounts.tsx the 3-column grid clips "SIGN IN AS CANDIDATE" and "…EXAMINER". Show the role name as the label ("Admin", "Examiner", "Candidate") with `aria-label="Sign in as <role>"`, allow wrapping, and use `lg:grid-cols-3` instead of `md:`. Keep it on one screen (check 1280x720 and 1366x768 with shots.mjs).
+3. **Footer contact details (admin review item 1).** Add `contact` to web/src/config/site.ts (email `info@inventixhq.com`, address "COMSATS University Lahore, Pakistan", hours "Mon–Fri, 9:00–17:00 PKT") and render a Contact column in the landing footer, plus "Built by the Inventix Invigil team · Technoverse 5.0 Web-e-Thon, COMSATS University Lahore" and "© 2026 Inventix Invigil".
+`cd web && pnpm typecheck` must be clean. Write handoff/log/CX4.md, ending with `STATUS: COMPLETE`, including the workspace root cause and the evidence.
