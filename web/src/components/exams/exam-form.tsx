@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api/client";
-import { messageFor } from "@/lib/errors/describe";
+import { describeError } from "@/lib/errors/describe";
 import type { Exam, ExamInput, ExamSettings } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import {
@@ -274,7 +274,6 @@ export function ExamForm({
   const [baseline, setBaseline] = useState<Values | null>(exam ? valuesFromExam(exam) : null);
   const [values, setValues] = useState<Values | null>(exam ? valuesFromExam(exam) : null);
   const [errors, setErrors] = useState<Errors>({});
-  const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   // The create form sets its defaults after mount, so the server and the first client render match.
@@ -299,7 +298,6 @@ export function ExamForm({
   function set<K extends Field>(field: K, value: Values[K]) {
     setValues((current) => (current ? { ...current, [field]: value } : current));
     setErrors((current) => ({ ...current, [field]: undefined }));
-    setFormError(null);
   }
 
   function errorId(field: Field) {
@@ -316,7 +314,6 @@ export function ExamForm({
 
     const result = validate(values);
     setErrors(result.errors);
-    setFormError(null);
     if (!result.input) return;
     setPending(true);
 
@@ -343,10 +340,11 @@ export function ExamForm({
         if (serverErrors[field]) mapped[field] = serverErrors[field];
       }
       setErrors((current) => ({ ...current, ...mapped }));
-      setFormError(
+      // A save that failed on the server is a toast. Field messages stay beside their fields.
+      toast.error(
         isConflict(cause)
           ? "This exam was changed somewhere else. Reload the page to see the latest version, then try again."
-          : messageFor(cause),
+          : describeError(cause, { context: "action" }),
       );
     } finally {
       setPending(false);
@@ -356,7 +354,6 @@ export function ExamForm({
   function discard() {
     setValues(baseline);
     setErrors({});
-    setFormError(null);
   }
 
   const endsHint =
@@ -495,11 +492,6 @@ export function ExamForm({
       </Section>
 
       <div className="sticky bottom-0 z-10 -mx-5 grid gap-4 border-t border-ink bg-paper px-5 py-5 md:-mx-8 md:px-8">
-        {formError ? (
-          <p role="alert" className="text-sm text-vermilion-deep">
-            {formError}
-          </p>
-        ) : null}
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" loading={pending} disabled={!dirty && mode === "edit"}>
             {mode === "create" ? "Create draft" : "Save changes"}

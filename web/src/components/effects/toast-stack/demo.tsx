@@ -32,6 +32,17 @@ function Triggers() {
       },
     },
     {
+      label: "Error + id",
+      run: () =>
+        show({
+          tone: "error",
+          title: "Could not save the exam",
+          body: "The server did not respond. Your changes are still here, so try again.",
+          requestId: "req_7f3a9c21b04e",
+          action: { label: "Try again", onClick: () => show({ tone: "info", title: "Retrying" }) },
+        }),
+    },
+    {
       label: "With undo",
       run: () =>
         show({

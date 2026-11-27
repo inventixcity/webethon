@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api/client";
-import { messageFor } from "@/lib/errors/describe";
+import { describeError } from "@/lib/errors/describe";
 import type { Exam, Page, Question, QuestionKind } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { SectionIntro } from "./section-intro";
@@ -159,7 +159,12 @@ function PaperEditor({ exam }: { exam: Exam }) {
       toast.success("Paper saved.");
       notifyExamChanged(exam.id);
     } catch (cause) {
-      setSaveError(cause instanceof ApiError && cause.status === 409 ? "The paper changed while you were editing. Reload to see it." : messageFor(cause));
+      // A failed save is a toast. Only the mark validation above stays inline.
+      toast.error(
+        cause instanceof ApiError && cause.status === 409
+          ? "The paper changed while you were editing. Reload to see it."
+          : describeError(cause, { context: "action" }),
+      );
     } finally {
       setSaving(false);
     }

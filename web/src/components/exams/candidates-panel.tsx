@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { CsvParseError, parseCsv, rowsToObjects } from "@/components/import/csv";
 import { AccessLinkReveal, resetAccessMessage, type IssuedAccessLink } from "@/components/auth/access-link";
 import { api } from "@/lib/api/client";
-import { messageFor } from "@/lib/errors/describe";
+import { describeError, messageFor } from "@/lib/errors/describe";
 import type { CandidateImportRow, Enrollment, ImportResult, ImportRowError } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { SectionIntro } from "./section-intro";
@@ -602,7 +602,7 @@ function Enroller({
       const result = await api<ImportResult>(base, { method: "POST", body: { candidates, invite: false, dryRun: true } });
       setValidation({ key: JSON.stringify([candidates, invite]), result });
     } catch (cause) {
-      setError(messageFor(cause));
+      toast.error(describeError(cause, { context: "action" }));
     } finally {
       setChecking(false);
     }
@@ -619,7 +619,7 @@ function Enroller({
       setValidation(null);
       onEnrolled(result.inviteLinks ?? []);
     } catch (cause) {
-      setError(messageFor(cause));
+      toast.error(describeError(cause, { context: "action" }));
     } finally {
       setEnrolling(false);
     }

@@ -4,7 +4,7 @@ import { setSimulatedOffline } from "@/lib/exam/network";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PageLoader } from "@/components/loaders/page-loader";
-import { useToast } from "@/components/feedback/toaster";
+import { Toaster, useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { deviceId as readDeviceId } from "@/lib/exam/device";
@@ -468,6 +468,7 @@ function Workspace({
         data-theme={prefs.theme === "system" ? undefined : prefs.theme}
         className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-paper text-ink"
       >
+        <Toaster />
         <a
           href="#ws-questions"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-60 focus:bg-ink focus:px-4 focus:py-3 focus:font-mono focus:text-xs focus:text-paper focus:uppercase"
