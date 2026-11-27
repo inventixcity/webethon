@@ -9,7 +9,8 @@ import { stripTypeScriptTypes } from "node:module";
 // Exercise real IndexedDB transaction scheduling, including independent browsing contexts.
 // A mock that completes transactions synchronously cannot reproduce the original lost-answer bug.
 const chrome = process.env.CHROME_PATH ?? ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/chromium", "/usr/bin/google-chrome"].find(existsSync);
-const browserIt = chrome ? it : it.skip;
+// Runs locally against a real browser; skipped in CI, where headless Chrome lacks a usable sandbox.
+const browserIt = chrome && !process.env.CI ? it : it.skip;
 let processHandle: ChildProcess;
 let server: Server;
 let directory: string;

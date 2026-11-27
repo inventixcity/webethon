@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import type { CandidateDashboard as Dashboard, CandidateExamCard } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { useApiData } from "./use-api-data";
@@ -10,12 +11,16 @@ import { ACCESS_LABEL, describeError, formatClock, formatCountdown, formatDurati
 import { EmptyState, PanelError, PanelLoading } from "./notice";
 
 export function AccessChip({ access }: { access: CandidateExamCard["access"] }) {
-  const filled = access === "available" || access === "in_progress";
+  // Cobalt marks what is running or open now; upcoming is informational; everything else is settled and quiet.
+  const live = access === "available" || access === "in_progress";
+  const info = access === "upcoming";
   return (
     <span
       className={cn(
         "inline-flex items-center border px-2 py-1 font-mono text-[11px] tracking-[0.12em] uppercase",
-        filled ? "border-ink bg-ink text-paper" : "border-ink text-ink",
+        live && "border-cobalt bg-cobalt text-paper",
+        info && "border-cobalt text-cobalt-deep",
+        !live && !info && "border-rule text-ink-soft",
       )}
     >
       {ACCESS_LABEL[access]}
@@ -158,25 +163,20 @@ export function CandidateDashboard() {
 
   return (
     <div className="grid gap-14">
-      <header className="grid gap-5">
-        <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          <span aria-hidden="true" className="size-1.5 bg-vermilion" />
-          01 / My exams
-        </p>
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <h1 className="text-[clamp(2.75rem,8vw,5.5rem)] leading-[0.92] font-medium tracking-[-0.035em]">
-            Your exams.
-          </h1>
-          <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase tabular-nums">
-            Server time {formatClock(serverNow)}
-          </p>
-        </div>
-        <p className="max-w-[60ch] text-base text-ink-soft">
-          {total === 0
+      <PageHeader
+        index="01"
+        eyebrow="My exams"
+        title="Your exams."
+        description={
+          total === 0
             ? "Nothing is scheduled for you yet. Exams appear here once your institution enrols you."
-            : "Start an exam from its lobby, or resume one you have already begun. Times come from the server."}
+            : "Start an exam from its lobby, or resume one you have already begun. Times come from the server."
+        }
+      >
+        <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase tabular-nums">
+          Server time {formatClock(serverNow)}
         </p>
-      </header>
+      </PageHeader>
 
       <ExamSection
         id="available-now"

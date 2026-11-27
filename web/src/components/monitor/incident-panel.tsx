@@ -12,6 +12,7 @@ import { formatDateTime, formatSeconds, messageOf } from "@/components/analytics
 import { describeError } from "@/lib/errors/describe";
 import { ConfirmDialog } from "./confirm-dialog";
 import { PriorityChip } from "./priority-chip";
+import { BrailleSpinner } from "@/components/loaders/text-loaders";
 
 export const INDICATOR_NOTICE = "Indicators support human review. They are not evidence of misconduct.";
 const TIMELINE_LIMIT = 200;
@@ -138,7 +139,7 @@ export function IncidentPanel({
           {report && <PriorityChip priority={report.reviewPriority} className="w-fit" />}
         </header>
 
-        {loading && <p role="status" className="font-mono text-xs text-ink-muted">Loading review data</p>}
+        {loading && <BrailleSpinner label="Loading review data" className="text-xs text-ink-muted" />}
         {error && (
           <div className="grid gap-3 border border-vermilion-deep p-4">
             <p className="text-sm text-vermilion-deep">{error}</p>

@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { useToast } from "@/components/feedback/toaster";
 import { messageFor } from "@/lib/errors/describe";
 import { STATUS_LABEL, formatWindow, notifyExamChanged } from "./format";
@@ -48,10 +49,8 @@ export function ExamHeader({ examId }: { examId: string }) {
     return (
       <header className="grid gap-6 border-b border-ink pb-0">
         {loading ? (
-          <div role="status" className="grid gap-3 pb-6">
-            <span className="sr-only">Loading exam</span>
-            <div className="h-10 w-2/3 animate-pulse bg-paper-sunk motion-reduce:animate-none" aria-hidden="true" />
-            <div className="h-5 w-1/3 animate-pulse bg-paper-sunk motion-reduce:animate-none" aria-hidden="true" />
+          <div className="pb-6">
+            <BrailleSpinner label="Loading exam" className="text-ink" />
           </div>
         ) : (
           <div className="pb-6">
@@ -63,49 +62,39 @@ export function ExamHeader({ examId }: { examId: string }) {
   }
 
   return (
-    <header className="grid gap-6 border-b border-ink">
-      <nav aria-label="Breadcrumb" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-        <Link href="/app/examiner/exams" className="underline-offset-4 hover:text-ink hover:underline">
-          Exams
-        </Link>
-        <span aria-hidden="true"> / </span>
-        <span className="text-ink-soft">{STATUS_LABEL[exam.status]}</span>
-      </nav>
-
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="grid min-w-0 flex-1 gap-4">
-          <h1 className="text-[clamp(2rem,5vw,3.5rem)] leading-[0.95] font-medium tracking-[-0.03em] break-words">
-            {exam.title}
-          </h1>
-          <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[11px] tracking-[0.12em] uppercase">
-            <div className="flex items-center gap-2">
-              <dt className="sr-only">Phase</dt>
-              <dd>
-                <PhaseChip phase={exam.phase} />
-              </dd>
-            </div>
-            <div className="grid gap-1 normal-case tracking-normal">
-              <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Window</dt>
-              <dd className="font-sans text-sm text-ink-soft">{formatWindow(exam.startsAt, exam.endsAt)}</dd>
-            </div>
-            <div className="grid gap-1 normal-case tracking-normal">
-              <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Duration</dt>
-              <dd className="font-sans text-sm text-ink-soft">{exam.durationMinutes} min</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
+    <PageHeader
+      index="03"
+      eyebrow="Exam"
+      title={exam.title}
+      breadcrumb={[{ label: "Exams", href: "/app/examiner/exams" }, { label: STATUS_LABEL[exam.status] }]}
+      actions={
+        <>
           <Button variant="secondary" size="sm" loading={busy === "preview"} disabled={busy !== null && busy !== "preview"} onClick={preview}>
             Preview as candidate
           </Button>
           <Button variant="secondary" size="sm" loading={busy === "duplicate"} disabled={busy !== null && busy !== "duplicate"} onClick={duplicate}>
             Duplicate
           </Button>
+        </>
+      }
+    >
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[11px] tracking-[0.12em] uppercase">
+        <div className="flex items-center gap-2">
+          <dt className="sr-only">Phase</dt>
+          <dd>
+            <PhaseChip phase={exam.phase} />
+          </dd>
         </div>
-      </div>
-
+        <div className="grid gap-1 normal-case tracking-normal">
+          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Window</dt>
+          <dd className="font-sans text-sm text-ink-soft">{formatWindow(exam.startsAt, exam.endsAt)}</dd>
+        </div>
+        <div className="grid gap-1 normal-case tracking-normal">
+          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Duration</dt>
+          <dd className="font-sans text-sm text-ink-soft">{exam.durationMinutes} min</dd>
+        </div>
+      </dl>
       <ExamTabs examId={examId} />
-    </header>
+    </PageHeader>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
+import { BrailleSpinner, ScrambleLabel } from "@/components/loaders/text-loaders";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { describeError } from "@/lib/errors";
@@ -220,7 +221,7 @@ export function RecordList({
             loading={state.loadingMore}
             onClick={() => void state.loadMore()}
           >
-            {state.loadingMore ? "Loading…" : "Load more"}
+            {state.loadingMore ? <ScrambleLabel text="Loading" /> : "Load more"}
           </Button>
         )}
         {sharing && (
@@ -257,7 +258,7 @@ function FocusedRecord({ entity, viewer, onEdit, onDelete, onVisibility, onShare
     return () => { active = false; };
   }, [entity.name, id, key]);
   if (!id) return null;
-  if (!result || result.key !== key) return <p role="status">Loading record…</p>;
+  if (!result || result.key !== key) return <div className="py-6"><BrailleSpinner label="Loading record" className="text-ink" /></div>;
   if (result.error || !result.record) return <p role="alert" className="border border-rule p-5 text-vermilion-deep">{describeError(result.error, { context: "action" }).message}</p>;
   const record = result.record;
   const social = (entity as Entity & { social?: { comments?: boolean; reactions?: string[]; bookmarks?: boolean } }).social;

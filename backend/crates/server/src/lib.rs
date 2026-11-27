@@ -30,6 +30,7 @@ use tower_http::{
 
 /// The largest upload body accepted on POST /api/v1/files (the Vercel proxy caps requests at 4.5 MB).
 const UPLOAD_BODY_BYTES: usize = 4 * 1024 * 1024 + 64 * 1024;
+const API_ERROR_BODY_BYTES: usize = 64 * 1024;
 
 pub fn build_app(
     state: AppState,
@@ -362,9 +363,11 @@ async fn guarded(state: &AppState, mut request: Request, next: Next) -> Response
             return AppError::bad_request("JSON is nested too deeply.").into_response();
         }
     }
+    let path = parts.uri.path().to_owned();
     let mut response = next
         .run(Request::from_parts(parts, Body::from(bytes)))
         .await;
+    response = normalize_contract_error(&path, response).await;
     if matches!(
         response.status(),
         StatusCode::BAD_REQUEST
@@ -385,6 +388,60 @@ async fn guarded(state: &AppState, mut request: Request, next: Next) -> Response
     }
     response
 }
+
+async fn normalize_contract_error(path: &str, response: Response) -> Response {
+    let status = response.status();
+    if !(path.starts_with("/api/v1/")
+        && matches!(status, StatusCode::BAD_REQUEST | StatusCode::FORBIDDEN))
+    {
+        return response;
+    }
+
+    let (mut parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, API_ERROR_BODY_BYTES).await else {
+        return AppError::internal("Could not read the API error response.").into_response();
+    };
+    let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(_) => return Response::from_parts(parts, Body::from(bytes)),
+    };
+    let error_code = value
+        .pointer("/error/code")
+        .and_then(serde_json::Value::as_str);
+    let Some(contract_status) = contract_error_status(path, status, error_code) else {
+        return Response::from_parts(parts, Body::from(bytes));
+    };
+
+    parts.status = contract_status;
+    Response::from_parts(parts, Body::from(bytes))
+}
+
+fn contract_error_status(
+    path: &str,
+    status: StatusCode,
+    error_code: Option<&str>,
+) -> Option<StatusCode> {
+    if status == StatusCode::BAD_REQUEST && error_code == Some("VALIDATION_FAILED") {
+        return Some(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    if status == StatusCode::FORBIDDEN && is_examiner_only_path(path) {
+        return Some(StatusCode::NOT_FOUND);
+    }
+
+    None
+}
+
+fn is_examiner_only_path(path: &str) -> bool {
+    ["/api/v1/questions", "/api/v1/exams"]
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")))
+        || path.starts_with("/api/v1/attempts/")
+            && (path.ends_with("/grade")
+                || path.ends_with("/integrity")
+                || path.ends_with("/outages"))
+}
+
 fn is_import_path(path: &str) -> bool {
     let mut parts = path.split('/');
     matches!((parts.next(), parts.next(), parts.next(), parts.next(), parts.next(), parts.next(), parts.next()),
@@ -422,7 +479,55 @@ fn too_deep(bytes: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_import_path, too_deep};
+    use super::{contract_error_status, is_import_path, too_deep};
+    use axum::http::StatusCode;
+
+    #[test]
+    fn validation_errors_use_unprocessable_status() {
+        assert_eq!(
+            contract_error_status(
+                "/api/v1/questions",
+                StatusCode::BAD_REQUEST,
+                Some("VALIDATION_FAILED"),
+            ),
+            Some(StatusCode::UNPROCESSABLE_ENTITY)
+        );
+        assert_eq!(
+            contract_error_status(
+                "/api/v1/questions",
+                StatusCode::BAD_REQUEST,
+                Some("BAD_REQUEST"),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn examiner_only_denials_hide_resource_existence() {
+        for path in [
+            "/api/v1/questions",
+            "/api/v1/questions/00000000-0000-0000-0000-000000000001",
+            "/api/v1/exams/00000000-0000-0000-0000-000000000001/grading",
+            "/api/v1/attempts/00000000-0000-0000-0000-000000000001/answers/00000000-0000-0000-0000-000000000002/grade",
+            "/api/v1/attempts/00000000-0000-0000-0000-000000000001/integrity",
+            "/api/v1/attempts/00000000-0000-0000-0000-000000000001/outages",
+        ] {
+            assert_eq!(
+                contract_error_status(path, StatusCode::FORBIDDEN, Some("FORBIDDEN")),
+                Some(StatusCode::NOT_FOUND),
+                "path {path}"
+            );
+        }
+        assert_eq!(
+            contract_error_status(
+                "/api/v1/admin/users",
+                StatusCode::FORBIDDEN,
+                Some("FORBIDDEN"),
+            ),
+            None
+        );
+    }
+
     #[test]
     fn import_path_is_exact() {
         assert!(is_import_path("/api/v1/entities/books/import"));

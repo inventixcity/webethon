@@ -15,8 +15,8 @@ use std::sync::OnceLock;
 use axum::{extract::FromRequestParts, http::request::Parts};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-pub use kernel::{AppError, AppResult, AppState, ErrorCode, Viewer};
 use kernel::crypto;
+pub use kernel::{AppError, AppResult, AppState, ErrorCode, Viewer};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -38,10 +38,13 @@ pub type ApiJson = AppResult<axum::Json<Value>>;
 
 // ------------------------------------------------------------------ errors
 
-/// A 422 with one field error, in the kit's error envelope (`details: [{path, message}]`).
+/// A 422 with one field error, in the API error envelope (`details: [{path, message}]`).
 pub fn invalid(path: &str, message: &str) -> AppError {
-    AppError::new(ErrorCode::ValidationFailed, "Please check the highlighted fields.")
-        .with_details(json!([{ "path": path, "message": message }]))
+    AppError::new(
+        ErrorCode::ValidationFailed,
+        "Please check the highlighted fields.",
+    )
+    .with_details(json!([{ "path": path, "message": message }]))
 }
 
 /// A 422 with many field errors.
@@ -50,8 +53,11 @@ pub fn invalid_many(errors: Vec<(String, String)>) -> AppError {
         .into_iter()
         .map(|(path, message)| json!({ "path": path, "message": message }))
         .collect();
-    AppError::new(ErrorCode::ValidationFailed, "Please check the highlighted fields.")
-        .with_details(Value::Array(details))
+    AppError::new(
+        ErrorCode::ValidationFailed,
+        "Please check the highlighted fields.",
+    )
+    .with_details(Value::Array(details))
 }
 
 /// 409 with a machine-readable reason, e.g. `conflict("device", "...")`, `conflict("state", "...")`.
@@ -71,7 +77,10 @@ macro_rules! role_extractor {
         pub struct $name(pub Viewer);
         impl FromRequestParts<AppState> for $name {
             type Rejection = AppError;
-            async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+            async fn from_request_parts(
+                parts: &mut Parts,
+                state: &AppState,
+            ) -> Result<Self, Self::Rejection> {
                 let viewer = Viewer::from_request_parts(parts, state).await?;
                 viewer.$check()?;
                 Ok(Self(viewer))
@@ -113,9 +122,16 @@ pub fn exam_columns(alias: &str) -> String {
 }
 
 /// Loads an exam the viewer may manage: its owner, or any admin. Anything else is a 404 (no existence leak).
-pub async fn load_exam_for_examiner(db: &PgPool, viewer: &Viewer, exam_id: Uuid) -> AppResult<ExamRow> {
+pub async fn load_exam_for_examiner(
+    db: &PgPool,
+    viewer: &Viewer,
+    exam_id: Uuid,
+) -> AppResult<ExamRow> {
     let sql = format!("select {EXAM_COLUMNS} from exams where id = $1 and deleted_at is null");
-    let exam: Option<ExamRow> = sqlx::query_as(&sql).bind(exam_id).fetch_optional(db).await?;
+    let exam: Option<ExamRow> = sqlx::query_as(&sql)
+        .bind(exam_id)
+        .fetch_optional(db)
+        .await?;
     match exam {
         Some(exam) if exam.owner_id == viewer.id || viewer.is_admin() => Ok(exam),
         _ => Err(AppError::not_found()),
@@ -123,7 +139,11 @@ pub async fn load_exam_for_examiner(db: &PgPool, viewer: &Viewer, exam_id: Uuid)
 }
 
 /// Loads an exam a candidate is actively enrolled in and which is published (or later). Otherwise 404.
-pub async fn load_exam_for_candidate(db: &PgPool, viewer: &Viewer, exam_id: Uuid) -> AppResult<(ExamRow, i32)> {
+pub async fn load_exam_for_candidate(
+    db: &PgPool,
+    viewer: &Viewer,
+    exam_id: Uuid,
+) -> AppResult<(ExamRow, i32)> {
     let sql = format!(
         "select {}, e.extra_minutes from exams x join enrollments e on e.exam_id = x.id          where x.id = $1 and e.candidate_id = $2 and e.status = 'enrolled' and x.deleted_at is null          and x.status in ('published', 'completed')",
         exam_columns("x")
@@ -146,7 +166,12 @@ struct ExamWithExtra {
 
 /// Derived lifecycle phase. Spec states: draft, published (scheduled), ongoing, completed.
 /// `closed` = window ended but the examiner has not marked the exam completed yet.
-pub fn phase(status: &str, starts_at: OffsetDateTime, ends_at: OffsetDateTime, now: OffsetDateTime) -> &'static str {
+pub fn phase(
+    status: &str,
+    starts_at: OffsetDateTime,
+    ends_at: OffsetDateTime,
+    now: OffsetDateTime,
+) -> &'static str {
     match status {
         "draft" => "draft",
         "archived" => "archived",
@@ -159,7 +184,8 @@ pub fn phase(status: &str, starts_at: OffsetDateTime, ends_at: OffsetDateTime, n
 
 /// RFC 3339 string for a timestamp. Use inside `json!()`: `OffsetDateTime`'s default serde form is an array.
 pub fn iso(t: OffsetDateTime) -> String {
-    t.format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
+    t.format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default()
 }
 
 /// [`iso`] for optional timestamps (`null` stays `null`).
@@ -236,17 +262,29 @@ pub fn score_objective(scheme: &MarkingScheme, selected: &[String]) -> Option<f6
     let key = scheme.correct.len().max(1);
     let score = match (scheme.kind.as_str(), scheme.multi_rule.as_str()) {
         ("single", _) => {
-            if chosen.len() == 1 && right == 1 { scheme.marks } else { -scheme.negative_marks }
+            if chosen.len() == 1 && right == 1 {
+                scheme.marks
+            } else {
+                -scheme.negative_marks
+            }
         }
         (_, "partial") => {
-            if wrong > 0 { 0.0 } else { scheme.marks * right as f64 / key as f64 }
+            if wrong > 0 {
+                0.0
+            } else {
+                scheme.marks * right as f64 / key as f64
+            }
         }
         (_, "partial_penalty") => {
             let per = scheme.marks / key as f64;
             (per * right as f64 - per * wrong as f64).max(0.0)
         }
         _ => {
-            if wrong == 0 && right == key { scheme.marks } else { -scheme.negative_marks }
+            if wrong == 0 && right == key {
+                scheme.marks
+            } else {
+                -scheme.negative_marks
+            }
         }
     };
     Some(round2(score))
@@ -257,7 +295,11 @@ pub fn selected_of(response: &Value) -> Vec<String> {
     response
         .get("selected")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -337,8 +379,14 @@ pub mod signer {
         (k.signing.sign(message).to_bytes(), k.key_id.clone())
     }
     pub fn verify(message: &[u8], signature: &[u8]) -> bool {
-        let Ok(sig) = ed25519_dalek::Signature::from_slice(signature) else { return false };
-        keys().signing.verifying_key().verify_strict(message, &sig).is_ok()
+        let Ok(sig) = ed25519_dalek::Signature::from_slice(signature) else {
+            return false;
+        };
+        keys()
+            .signing
+            .verifying_key()
+            .verify_strict(message, &sig)
+            .is_ok()
     }
     pub fn public_key() -> VerifyingKey {
         keys().signing.verifying_key()
@@ -367,7 +415,12 @@ pub struct Lease {
 fn lease_mac(attempt_id: Uuid, issued_at: i64, deadline_at: i64) -> String {
     let mac = crypto::hmac_sha256(
         &keys().lease,
-        &[b"lease.v1", attempt_id.as_bytes(), &issued_at.to_be_bytes(), &deadline_at.to_be_bytes()],
+        &[
+            b"lease.v1",
+            attempt_id.as_bytes(),
+            &issued_at.to_be_bytes(),
+            &deadline_at.to_be_bytes(),
+        ],
     );
     URL_SAFE_NO_PAD.encode(mac)
 }
@@ -375,7 +428,12 @@ fn lease_mac(attempt_id: Uuid, issued_at: i64, deadline_at: i64) -> String {
 pub fn issue_lease(attempt_id: Uuid, deadline_at: OffsetDateTime) -> Lease {
     let issued_at = unix_ms(now());
     let deadline_at = unix_ms(deadline_at);
-    Lease { attempt_id, issued_at, deadline_at, mac: lease_mac(attempt_id, issued_at, deadline_at) }
+    Lease {
+        attempt_id,
+        issued_at,
+        deadline_at,
+        mac: lease_mac(attempt_id, issued_at, deadline_at),
+    }
 }
 
 pub fn verify_lease(lease: &Lease, attempt_id: Uuid) -> bool {
@@ -400,7 +458,13 @@ pub fn from_unix_ms(ms: i64) -> Option<OffsetDateTime> {
 /// h_0 = attempts.journal_genesis (random, sent to the client with the attempt). The browser computes the same
 /// chain with WebCrypto, so a reordered, dropped or edited offline entry breaks the chain and is rejected.
 /// `canonical(response)` is serde_json's compact serialisation of the response object with keys sorted.
-pub fn chain_next(prev: &[u8], seq: i64, item_id: Uuid, response: &Value, written_at_ms: i64) -> [u8; 32] {
+pub fn chain_next(
+    prev: &[u8],
+    seq: i64,
+    item_id: Uuid,
+    response: &Value,
+    written_at_ms: i64,
+) -> [u8; 32] {
     let canonical = canonical_json(response);
     let mut buf = Vec::with_capacity(96 + canonical.len());
     buf.extend_from_slice(b"journal.v1");
@@ -502,6 +566,9 @@ mod tests {
 
     #[test]
     fn canonical_sorts_keys() {
-        assert_eq!(canonical_json(&json!({"b":1,"a":{"d":2,"c":3}})), r#"{"a":{"c":3,"d":2},"b":1}"#);
+        assert_eq!(
+            canonical_json(&json!({"b":1,"a":{"d":2,"c":3}})),
+            r#"{"a":{"c":3,"d":2},"b":1}"#
+        );
     }
 }

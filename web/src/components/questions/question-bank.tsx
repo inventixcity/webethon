@@ -8,6 +8,8 @@ import { describeError } from "@/lib/errors";
 import type { Page, Question, QuestionKind } from "@/lib/exam/types";
 import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
+import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
+import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { cn } from "@/lib/utils";
 import { KIND_LABEL, KINDS, formatObserved, formatUpdated } from "./model";
 import { boxInputClass, DifficultySquares, KindChip, MonoLabel, selectClass } from "./parts";
@@ -198,11 +200,13 @@ export function QuestionBank() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p role="status" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-          {status === "loading"
-            ? "Loading questions"
-            : status === "error"
-              ? "Questions did not load"
-              : `${items.length} shown${nextCursor ? ", more available" : ""}`}
+          {status === "loading" ? (
+            <BrailleSpinner label="Loading questions" className="text-ink-soft" />
+          ) : status === "error" ? (
+            "Questions did not load"
+          ) : (
+            `${items.length} shown${nextCursor ? ", more available" : ""}`
+          )}
         </p>
         {hasFilters && (
           <Button variant="link" size="sm" onClick={clearFilters}>
@@ -330,32 +334,33 @@ function QuestionRow({ question, onDelete }: { question: Question; onDelete: () 
 function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
   if (hasFilters) {
     return (
-      <div className="grid gap-4 border border-rule bg-paper-raised p-8">
-        <MonoLabel>No matches / 00</MonoLabel>
-        <p className="text-2xl font-medium tracking-[-0.02em]">No questions match these filters.</p>
-        <div>
+      <SharedEmptyState
+        eyebrow="No matches / 00"
+        title="No questions match these filters."
+        actions={
           <Button variant="secondary" onClick={onClear}>
             Clear filters
           </Button>
-        </div>
-      </div>
+        }
+      />
     );
   }
   return (
-    <div className="grid gap-6 border border-rule bg-paper-raised p-8 md:p-12">
-      <MonoLabel>Empty bank / 00</MonoLabel>
-      <p className="max-w-2xl text-3xl leading-[1.05] font-medium tracking-[-0.03em]">
-        Your bank is empty. Create a question or import a batch.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        <Button asChild>
-          <Link href="/app/examiner/questions/new">New question</Link>
-        </Button>
-        <Button asChild variant="secondary">
-          <Link href="/app/examiner/questions/import">Import</Link>
-        </Button>
-      </div>
-    </div>
+    <SharedEmptyState
+      eyebrow="Empty bank / 00"
+      title="Your bank is empty."
+      description="Create a question or import a batch."
+      actions={
+        <>
+          <Button asChild>
+            <Link href="/app/examiner/questions/new">New question</Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href="/app/examiner/questions/import">Import</Link>
+          </Button>
+        </>
+      }
+    />
   );
 }
 

@@ -11,6 +11,7 @@ import { useToast } from "@/components/feedback/toaster";
 import { FieldError } from "@/components/feedback/field-error";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { PageLoader } from "@/components/loaders/page-loader";
 import {
@@ -215,7 +216,7 @@ export function QuestionEditor({ questionId }: { questionId?: string }) {
     }
   }
 
-  if (loading) return <PageLoader label={editing ? "Loading question" : "Loading"} />;
+  if (loading) return <PageLoader label={editing ? "Loading question" : "Preparing the editor"} />;
 
   if (loadError) {
     return (
@@ -241,16 +242,12 @@ export function QuestionEditor({ questionId }: { questionId?: string }) {
 
   return (
     <main className="mx-auto grid w-full max-w-6xl gap-10 px-5 py-10 md:px-8 md:py-16">
-      <header className="grid gap-5">
-        <BackLink />
-        <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          <span aria-hidden className="size-1.5 bg-vermilion" />
-          02 / {editing ? "Edit question" : "New question"}
-        </p>
-        <h1 className="text-[clamp(2.25rem,5vw,4rem)] leading-[1.02] font-medium tracking-[-0.035em]">
-          {editing ? "Edit question." : "New question."}
-        </h1>
-      </header>
+      <PageHeader
+        index="02"
+        eyebrow={editing ? "Edit question" : "New question"}
+        title={editing ? "Edit question." : "New question."}
+        breadcrumb={[{ label: "Question bank", href: "/app/examiner/questions" }, { label: editing ? "Edit" : "New" }]}
+      />
 
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-16">
         <form noValidate onSubmit={save} aria-labelledby="editor-heading" className="grid min-w-0 gap-10">

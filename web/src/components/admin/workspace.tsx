@@ -4,6 +4,9 @@ import { ErrorPage } from "@/components/errors/error-page";
 import { FieldError } from "@/components/feedback/field-error";
 import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
+import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { actionToast, namedFieldError } from "@/features/admin/errors";
 import { adminApi, adminList, isStepUpRequired, queryString, type Row } from "@/features/admin/client";
 import { describeError } from "@/lib/errors";
@@ -14,8 +17,8 @@ export const isDestructive = (title: string) => /^(delete|suspend|revoke|reset|h
 const STEP_UP_FIELDS = ["password", "code"] as const;
 const text = (v: unknown): string => v == null ? "?" : typeof v === "object" ? "See details" : String(v);
 const label = (key: string) => key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
-export function PageHeading({ title, description }: { title: string; description: string }) { return <header className="mb-8 border-b border-ink pb-6"><p className="mb-3 text-sm text-ink-muted">Administration</p><h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{title}</h1><p className="mt-2 text-sm text-ink-soft">{description}</p></header>; }
-export function Status({ loading, error, empty, onRetry }: { loading?: boolean; error?: unknown; empty?: boolean; onRetry?: () => void }) { if (loading) return <p role="status" className="py-8">Loading…</p>; if (error) return <LoadError error={error} onRetry={onRetry}/>; if (empty) return <p className="border border-rule p-6 text-ink-muted">No results found. Try changing the filters.</p>; return null; }
+export function PageHeading({ title, description }: { title: string; description: string }) { return <PageHeader eyebrow="Administration" title={title} description={description} banner="bg-admin" className="mb-8" />; }
+export function Status({ loading, error, empty, onRetry }: { loading?: boolean; error?: unknown; empty?: boolean; onRetry?: () => void }) { if (loading) return <div className="py-8"><BrailleSpinner label="Loading results" className="text-ink" /></div>; if (error) return <LoadError error={error} onRetry={onRetry}/>; if (empty) return <EmptyState eyebrow="No results / 00" title="No results found." description="Try changing the filters." />; return null; }
 /** A load failure replaces its section with the error page for its code, inside the admin layout. */
 function LoadError({ error, onRetry }: { error: unknown; onRetry?: () => void }) { const view = describeError(error, { context: "page" }); return <ErrorPage code={view.page} requestId={view.requestId} retryAfterSeconds={view.retryAfterSeconds} onRetry={onRetry} as="div"/>; }
 export function DataTable({ rows, onSelect }: { rows: Row[]; onSelect?: (row: Row) => void }) { const keys = Array.from(new Set(rows.flatMap(row => Object.keys(row)))).filter(k => !["data", "before", "after"].includes(k)).slice(0, 7); return <div className="overflow-x-auto border border-rule"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-paper-sunk"><tr>{keys.map(k => <th scope="col" key={k} className="px-4 py-3 font-semibold">{label(k)}</th>)}{onSelect && <th scope="col" className="px-4 py-3">Details</th>}</tr></thead><tbody>{rows.map((row, i) => <tr key={String(row.id ?? i)} className="border-t border-rule">{keys.map(k => <td key={k} className="max-w-64 break-words px-4 py-3 align-top">{text(row[k])}</td>)}{onSelect && <td className="px-4 py-3"><Button variant="link" onClick={() => onSelect(row)}>View<span className="sr-only"> {text(row.displayName ?? row.email ?? row.id)}</span></Button></td>}</tr>)}</tbody></table></div>; }

@@ -1,9 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { WaveText } from "@/components/effects/wave-text";
+import { Art, hasArt } from "@/components/ui/art";
 import { cn } from "@/lib/utils";
 
 export type Crumb = { label: string; href?: string };
+
+/** Wide, quiet banner images in public/images. Each one is shown only when its file exists. */
+export type PageBanner = "bg-candidate" | "bg-examiner" | "bg-admin" | "bg-results";
 
 type PageHeaderProps = {
   /** Two-digit section number, for example "02". Shown before the eyebrow. */
@@ -21,6 +25,8 @@ type PageHeaderProps = {
   children?: ReactNode;
   /** h1 for a page, h2 for a section inside a page that already has its own h1 (the exam tabs). */
   level?: 1 | 2;
+  /** A low-opacity banner image behind the title, on the right. Nothing renders when the file is absent. */
+  banner?: PageBanner;
   id?: string;
   className?: string;
 };
@@ -108,14 +114,26 @@ export function PageHeader({
   breadcrumb,
   children,
   level = 1,
+  banner,
   id,
   className,
 }: PageHeaderProps) {
   const crumbs = breadcrumb && breadcrumb.length > 0 ? <Breadcrumb items={breadcrumb} /> : null;
+  const showBanner = banner !== undefined && hasArt(banner);
+  const bannerLayer = showBanner ? (
+    <Art
+      name={banner}
+      alt=""
+      position="object-right"
+      sizes="100vw"
+      className="pointer-events-none absolute inset-0 -z-10 opacity-30 dark:opacity-20"
+    />
+  ) : null;
 
   if (level === 1 && typeof title === "string" && (description === undefined || typeof description === "string")) {
     return (
-      <header className={cn("grid gap-6", className)}>
+      <header className={cn("grid gap-6", showBanner && "relative isolate overflow-hidden", className)}>
+        {bannerLayer}
         {crumbs}
         <WaveText
           headingAs="h1"
@@ -142,10 +160,12 @@ export function PageHeader({
     <header
       className={cn(
         "grid gap-6",
+        showBanner && "relative isolate overflow-hidden",
         level === 1 ? "border-b border-ink pt-10 pb-8 md:pt-14 md:pb-10" : "border-b border-rule pt-10 pb-6",
         className,
       )}
     >
+      {bannerLayer}
       {crumbs}
       <div className="grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
         <div className={cn("grid min-w-0 gap-4", actions ? "md:col-span-8" : "md:col-span-12")}>

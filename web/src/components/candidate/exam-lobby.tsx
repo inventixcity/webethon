@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/ui/page-header";
 import { api } from "@/lib/api/client";
 import { attemptHeaders } from "@/lib/exam/device";
 import type { ExamLobby as Lobby } from "@/lib/exam/types";
@@ -59,8 +60,7 @@ export function ExamLobby({ examId }: { examId: string }) {
   const [startError, setStartError] = useState<string>();
   const checkId = useId();
 
-  if (state.status === "loading") return <PanelLoading label="Loading the lobby" />;
-  if (state.status === "error") {
+  if (state.status === "loading") return <PanelLoading label="Loading the lobby" />;  if (state.status === "error") {
     return (
       <div className="grid gap-6">
         <PanelError title="We couldn't open this exam." message={describeError(state.error)} onRetry={reload} />
@@ -96,24 +96,16 @@ export function ExamLobby({ examId }: { examId: string }) {
 
   return (
     <div className="grid gap-12">
-      <header className="grid gap-5">
-        <Link
-          href="/app/candidate"
-          className="w-fit font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase underline-offset-4 hover:text-ink hover:underline"
-        >
-          Back to my exams
-        </Link>
-        <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          <span aria-hidden="true" className="size-1.5 bg-vermilion" />
-          Exam lobby
-        </p>
-        <h1 className="text-[clamp(2.5rem,7vw,4.75rem)] leading-[0.95] font-medium tracking-[-0.035em] break-words">
-          {lobby.title}
-        </h1>
+      <PageHeader
+        index="02"
+        eyebrow="Exam lobby"
+        title={lobby.title}
+        breadcrumb={[{ label: "My exams", href: "/app/candidate" }, { label: lobby.title }]}
+      >
         <div>
           <AccessChip access={lobby.access} />
         </div>
-      </header>
+      </PageHeader>
 
       <dl className="grid gap-px border-y border-rule font-mono text-[11px] tracking-[0.12em] uppercase sm:grid-cols-2 lg:grid-cols-4">
         <div className="grid gap-2 py-5 sm:pr-6">

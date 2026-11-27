@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import type { AnswerResponse, CandidateResult, QuestionOption } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { describeError, formatDateTime } from "./format";
@@ -83,21 +84,12 @@ export function ResultView({ attemptId }: { attemptId: string }) {
 
   return (
     <div className="grid gap-14">
-      <header className="grid gap-5">
-        <Link
-          href="/app/candidate"
-          className="w-fit font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase underline-offset-4 hover:text-ink hover:underline"
-        >
-          Back to my exams
-        </Link>
-        <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          <span aria-hidden="true" className="size-1.5 bg-vermilion" />
-          Your result
-        </p>
-        <h1 className="text-[clamp(2.25rem,6vw,4.25rem)] leading-[0.96] font-medium tracking-[-0.035em] break-words">
-          {result.examTitle}
-        </h1>
-      </header>
+      <PageHeader
+        index="03"
+        eyebrow="Your result"
+        title={result.examTitle}
+        breadcrumb={[{ label: "My exams", href: "/app/candidate" }, { label: "Result" }]}
+      />
 
       <section aria-labelledby="score" className="grid gap-8 border-y border-ink py-10 md:grid-cols-[auto_minmax(0,1fr)] md:gap-16">
         <h2 id="score" className="sr-only">
@@ -111,7 +103,7 @@ export function ResultView({ attemptId }: { attemptId: string }) {
           <span
             className={cn(
               "inline-flex w-fit items-center border px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] uppercase",
-              result.passed ? "border-ink bg-ink text-paper" : "border-ink text-ink",
+              result.passed ? "border-ink bg-ink text-paper" : "border-ink-muted text-ink-soft",
             )}
           >
             {result.passed ? "Passed" : "Not passed"}
