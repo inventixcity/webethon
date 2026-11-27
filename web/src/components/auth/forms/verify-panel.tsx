@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { CodeLockField } from "@/components/auth/code-lock";
+import { CodeGrid } from "@/components/auth/code-lock";
 import { Button } from "@/components/ui/button";
 import { CODE_LENGTH, CODE_ERROR_ID, type useVerify } from "@/features/auth/use-verify";
 import { CodeError } from "./code-error";
@@ -29,25 +29,24 @@ type VerifyPanelProps = {
 };
 
 /**
- * The six digit code entry, in the same lock style as the certificate check: a padlock that turns while the code is
- * checked, opens when it is right and the row shakes when it is wrong.
+ * The six digit code entry: a full width row of cells, the same as the reset design. The row pulses while the code is
+ * checked, cascades when it is right, and shakes when it is wrong.
  */
 export function VerifyPanel({ verify, next, className }: VerifyPanelProps) {
   const { verified, routes } = verify;
-  const lockState = verify.checking ? "pending" : verified ? "ok" : verify.codeError ? "wrong" : "idle";
 
   return (
     <div className={className}>
-      <CodeLockField
+      <CodeGrid
         id="verify-code"
         label="Verification code"
         numeric
         length={CODE_LENGTH}
-        groupSize={3}
         value={verify.code}
         onChange={verify.change}
         onComplete={verify.complete}
-        state={lockState}
+        checking={verify.checking}
+        verified={verified}
         shakeKey={verify.attempt}
         autoFocus
         disabled={verify.checking || verified || verify.locked > 0}

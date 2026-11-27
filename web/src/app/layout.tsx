@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import { Toaster, ToastProvider } from "@/components/feedback/toaster";
 import { ThemeScript } from "@/components/theme/theme-script";
@@ -24,12 +25,15 @@ export const metadata: Metadata = {
   description: siteConfig.description,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The proxy sends a fresh nonce with each request. Reading headers() makes every page render dynamically,
+  // which the nonce needs, and lets the theme script carry it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     // The theme script sets data-theme before React loads, which React would otherwise flag.
     <html lang="en" className={`${display.variable} ${code.variable}`} suppressHydrationWarning>
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
       </head>
       <body>
         <ToastProvider>

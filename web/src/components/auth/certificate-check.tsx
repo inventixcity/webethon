@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api/client";
 import type { VerificationResult } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
-import { CodeLockField, normaliseCode } from "./code-lock";
-import type { PasswordLockState } from "./password-lock";
+import { CodeGrid, normaliseCode } from "./code-lock";
 
 /** The radar has six contacts. Each one follows every second character of the 12 character code. */
 const CONTACTS = 6;
@@ -68,11 +67,11 @@ const bandStyle = {
 } as const;
 
 /**
- * The public certificate check, laid out for one laptop screen. The code and its result sit on the left, and the
- * radar is the hero on the right. The code is entered on a combination-style lock: the padlock turns while typing or
- * checking, opens on a valid certificate, and the row shakes on an invalid one. The radar scans while the code is
- * typed or checked, locks on a valid certificate, and shows a no-match burst otherwise. On phones the radar is a band
- * above the form.
+ * The public certificate check, laid out for one laptop screen. The code and its result sit in the left column, and
+ * the radar sits in a hairline frame on the right. The code is entered in the reset-code cell grid, in three groups
+ * of four. The row pulses while checking, cascades on a valid certificate, and shakes on an invalid one. The radar
+ * scans while the code is typed or checked, locks on a valid certificate, and shows a no-match burst otherwise. On
+ * phones the radar is a band above the form.
  */
 export function CertificateCheck({ code, background }: { code?: string; background?: ReactNode }) {
   const router = useRouter();
@@ -82,6 +81,8 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(code));
   const [typing, setTyping] = useState(false);
+  // Counts wrong outcomes, so the grid shakes on each one and not only the first.
+  const [attempt, setAttempt] = useState(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -89,10 +90,14 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
     let active = true;
     api<VerificationResult>(`/verify/${encodeURIComponent(code)}`)
       .then((data) => {
-        if (active) setResult(data);
+        if (!active) return;
+        setResult(data);
+        if (!data.valid) setAttempt((count) => count + 1);
       })
       .catch((cause: unknown) => {
-        if (active) setError(cause instanceof ApiError ? cause.message : "Verification could not be completed.");
+        if (!active) return;
+        setError(cause instanceof ApiError ? cause.message : "Verification could not be completed.");
+        setAttempt((count) => count + 1);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -119,11 +124,6 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
     radar.setStatus(radarState);
   }, [radar, radarState]);
 
-  // The padlock turns while typing or checking, opens on a valid certificate, and stays closed otherwise.
-  const lockState: PasswordLockState = loading || typing ? "pending" : result?.valid ? "ok" : "idle";
-  // One shake per wrong outcome: a failed check, or a result that is not valid.
-  const shakeKey = error || (result && !result.valid) ? 1 : 0;
-
   function onChange(value: string) {
     setClean(normaliseCode(value).slice(0, CODE_CHARS));
     setTyping(true);
@@ -149,14 +149,21 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
             ? { style: bandStyle.invalid, text: "Invalid certificate" }
             : null;
 
+  // Status text takes the outcome colour: vermilion for an error or invalid code, amber for a revoked one.
+  const statusTone = result?.revoked
+    ? "text-amber-deep"
+    : error || (result && !result.valid)
+      ? "text-vermilion-deep"
+      : "text-ink-muted";
+
   const signal = radarState === "checking" ? "Scanning" : radarState === "locked" ? "Locked" : radarState === "wrong" ? "No match" : "Listening";
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-6 pb-12 sm:px-10 lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden lg:px-12 lg:py-6">
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-10 lg:grid lg:h-full lg:grid-cols-12 lg:gap-12">
-        <section aria-labelledby="verify-title" className="flex flex-col justify-center lg:col-span-5 lg:min-h-0">
+        <section aria-labelledby="verify-title" className="flex min-w-0 flex-col justify-center lg:col-span-5 lg:min-h-0">
           <p className={label}>Verify / Certificate</p>
-          <h1 id="verify-title" className="mt-3 text-5xl leading-[0.95] font-semibold tracking-[-0.03em] lg:text-[3.5rem]">
+          <h1 id="verify-title" className="mt-3 text-5xl leading-[0.95] font-semibold tracking-[-0.03em] lg:text-[3rem]">
             Check a result.
           </h1>
           <p className="mt-3 max-w-md text-base text-ink-soft">
@@ -165,46 +172,42 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
               : "Enter the 12 character certificate code printed on the result statement."}
           </p>
 
-          <form onSubmit={submit} className="mt-7 flex max-w-xl flex-col gap-5">
+          <form onSubmit={submit} className="mt-6 flex max-w-xl flex-col gap-4 lg:mt-5">
             <div className="grid gap-3">
               <label htmlFor="certificate-code" className={cn(label, "text-ink")}>
                 Certificate code
               </label>
-              <CodeLockField
+              <CodeGrid
                 id="certificate-code"
                 label="Certificate code"
                 length={CODE_CHARS}
                 groupSize={4}
+                size="compact"
                 value={clean}
                 onChange={onChange}
-                state={lockState}
-                shakeKey={shakeKey}
+                checking={loading}
+                verified={Boolean(result?.valid)}
+                shakeKey={attempt}
                 invalid={Boolean(error)}
                 autoFocus={!code}
                 disabled={loading}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex min-h-10 flex-wrap items-center gap-x-6 gap-y-3">
               <Button type="submit" disabled={clean.length !== CODE_CHARS}>
                 {code ? "Check code" : "Verify code"}
               </Button>
-            </div>
-          </form>
-
-          <div className="mt-3 flex min-h-10 max-w-md flex-wrap items-center justify-between gap-x-6 gap-y-2">
-            {loading || error || result ? null : (
-              <p aria-live="polite" role="status" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-                {statusLine(clean, loading, result, error)}
-              </p>
-            )}
-            {code ? (
-              <div className="flex items-center gap-2">
+              {code ? (
                 <Button type="button" variant="secondary" size="sm" onClick={() => router.push("/verify")}>
                   Check another code
                 </Button>
-              </div>
-            ) : null}
-          </div>
+              ) : loading || error || result ? null : (
+                <p aria-live="polite" role="status" className={cn("font-mono text-[11px] tracking-[0.12em] uppercase", statusTone)}>
+                  {statusLine(clean, loading, result, error)}
+                </p>
+              )}
+            </div>
+          </form>
 
           {(loading || error || result) && (
             <article aria-label="Result" className="mt-4 max-w-xl border border-rule bg-paper-raised">
@@ -219,7 +222,7 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
                 </div>
               ) : null}
 
-              <div className="space-y-3.5 p-4 sm:p-5">
+              <div className="space-y-3 p-4 sm:p-5 lg:p-4">
                 {error && (
                   <div role="alert">
                     <h2 className="text-xl font-semibold">Could not verify</h2>
@@ -228,7 +231,7 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
                 )}
 
                 {result && !loading && result.statement && (
-                  <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                  <dl className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
                     <div>
                       <dt className={label}>Candidate</dt>
                       <dd className="mt-1 text-base">{result.statement.candidate}</dd>
@@ -284,7 +287,7 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
           )}
         </section>
 
-        <figure className="order-first flex h-[min(88vw,380px)] flex-col border border-rule bg-paper sm:h-[min(70vw,420px)] lg:order-none lg:h-full lg:min-h-0 lg:col-span-7">
+        <figure className="order-first flex h-[min(88vw,380px)] min-w-0 flex-col border border-rule bg-paper sm:h-[min(70vw,420px)] lg:order-none lg:h-full lg:min-h-0 lg:col-span-7">
           <figcaption className="flex items-center justify-between gap-4 border-b border-rule px-4 py-2.5 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
             <span>Signal / Ed25519</span>
             <span className={radarState === "locked" ? "text-cobalt-deep" : radarState === "wrong" ? "text-vermilion-deep" : undefined}>

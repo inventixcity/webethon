@@ -6,6 +6,23 @@ import { z } from "zod";
 import { ApiError } from "./client";
 import { signedVisitorHeaders } from "./forward";
 
+/** True when the API could not be reached: a network failure, or a 502, 503 or 504 from the gateway. */
+export function isServiceUnavailable(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "UNAVAILABLE";
+}
+
+/** Maps a non-ok API response. Gateway failures become UNAVAILABLE, so layouts can show the 503 page. */
+function upstreamError(status: number, what: string): Error {
+  if (status === 502 || status === 503 || status === 504) {
+    return new ApiError({
+      code: "UNAVAILABLE",
+      status: 503,
+      message: "We can't reach the service right now. Check your connection and try again.",
+    });
+  }
+  return new Error(`The ${what} failed with status ${status}.`);
+}
+
 const sessionResponse = z.object({
   data: z.object({
     user: z
@@ -47,7 +64,7 @@ export const getOnboardingCompleted = cache(async (): Promise<boolean> => {
   } catch {
     throw new ApiError({ code: "UNAVAILABLE", status: 0, message: "We can't reach the service right now. Check your connection and try again." });
   }
-  if (!response.ok) throw new Error(`The onboarding check failed with status ${response.status}.`);
+  if (!response.ok) throw upstreamError(response.status, "onboarding check");
   const parsed = onboardingResponse.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new Error("The API returned an onboarding response in an unexpected shape.");
   return parsed.data.data.completedAt !== null;
@@ -84,7 +101,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     });
   }
 
-  if (!response.ok) throw new Error(`The session check failed with status ${response.status}.`);
+  if (!response.ok) throw upstreamError(response.status, "session check");
 
   const parsed = sessionResponse.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new Error("The API returned a session response in an unexpected shape.");

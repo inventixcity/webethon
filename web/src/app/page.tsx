@@ -8,7 +8,7 @@ import { Eyebrow, Figure, SectionTitle } from "@/components/landing/primitives";
 import { ResilienceCompare } from "@/components/landing/resilience-compare";
 import { SecurityCards } from "@/components/landing/security-cards";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { artSrc } from "@/components/ui/art";
+import { Art, artSrc } from "@/components/ui/art";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 
@@ -134,54 +134,74 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/* The opening statement: the animated water and the headline. The actions sit below it, as real buttons. */}
-        <WaveText
-          eyebrow="Inventix Invigil"
-          edition="Secure online examinations"
-          headline={"Exams that\nhold up."}
-          description="Authoring, live invigilation, grading and publication in one system. It keeps working when the connection doesn't, and it never asks for your camera."
-          actionLabel=""
-          caption="Move the pointer through the water to make a ripple."
-          waveHeight={0.46}
-          speed={0.9}
-          amplitude={120}
-          direction="left"
-        />
+        {/* The opening statement: the animated water and the headline, with the hero figure and the actions
+            composed into the same first screen. */}
+        <div className="relative">
+          <WaveText
+            eyebrow="Inventix Invigil"
+            edition="Secure online examinations"
+            headline={"Exams that\nhold up."}
+            description="Authoring, live invigilation, grading and publication in one system. It keeps working when the connection doesn't, and it never asks for your camera."
+            actionLabel=""
+            caption="Move the pointer through the water to make a ripple."
+            waveHeight={0.46}
+            speed={0.9}
+            amplitude={120}
+            direction="left"
+          />
+          {/* Hero figure: framed in the ink area beside the headline, sized explicitly so it can never collapse. */}
+          <figure className="pointer-events-none absolute top-[15%] right-[4vw] z-10 hidden w-[min(30vw,480px)] lg:block">
+            <figcaption
+              data-theme="dark"
+              className="mb-3 flex justify-between gap-6 bg-transparent font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase"
+            >
+              <span className="text-ink tabular-nums">FIG. 00</span>
+              <span>Answer paper, ink and light</span>
+            </figcaption>
+            <Art
+              name="hero"
+              darkName="hero-dark"
+              alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
+              sizes="(min-width: 1024px) 30vw, 90vw"
+              priority
+              position="object-right"
+              className="grain h-[min(46vh,520px)] w-full border border-paper/40 shadow-none"
+            />
+          </figure>
+          {/* Actions sit on the paper-coloured water, so they use the light palette in both themes. */}
+          <div data-theme="light" className="absolute bottom-[17%] left-5 z-10 flex flex-wrap items-center gap-4 bg-transparent md:left-8">
+            <Button asChild size="lg">
+              <Link href="/login">Sign in</Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg">
+              <Link href="/verify">Verify a result</Link>
+            </Button>
+          </div>
+        </div>
 
         <section
           id="start"
-          aria-label="Start"
-          className="grid gap-12 border-b border-ink px-5 py-14 md:grid-cols-12 md:items-center md:gap-8 md:px-8 md:py-20"
+          aria-label="At a glance"
+          className="grid gap-8 border-b border-rule px-5 py-12 md:grid-cols-12 md:items-end md:px-8 md:py-16"
         >
-          <div className="grid content-start gap-8 md:col-span-6">
-            <p className="max-w-[40ch] text-2xl leading-snug font-medium tracking-[-0.015em]">
-              Run an exam, watch the room and publish results that anyone can check.
-            </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <Button asChild size="lg">
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg">
-                <Link href="/verify">Verify a result</Link>
-              </Button>
-            </div>
-            <ul className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-              <li>Server time only</li>
-              <li>Answers kept offline</li>
-              <li>No webcam</li>
-            </ul>
-          </div>
+          <p className="max-w-[34ch] text-[clamp(1.6rem,3vw,2.4rem)] leading-[1.1] font-medium tracking-[-0.025em] md:col-span-7">
+            Run an exam, watch the room and publish results that anyone can check.
+          </p>
+          <ul className="grid gap-px border border-rule bg-rule font-mono text-[11px] tracking-[0.12em] uppercase md:col-span-5 md:grid-cols-3">
+            <li className="grid gap-2 bg-paper p-4"><span className="text-cobalt-deep">01</span>Server time only</li>
+            <li className="grid gap-2 bg-paper p-4"><span className="text-cobalt-deep">02</span>Answers kept offline</li>
+            <li className="grid gap-2 bg-paper p-4"><span className="text-amber-deep">03</span>No webcam</li>
+          </ul>
+        </section>
+
+        <section className="grid gap-10 px-5 py-14 md:hidden">
           <Figure
             name="hero"
             darkName="hero-dark"
             alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
             num="00"
             caption="Answer paper, ink and light"
-            ratio="aspect-[4/5] max-h-[60vh] w-full max-w-md"
-            sizes="(min-width: 768px) 40vw, 90vw"
-            priority
-            position="object-right"
-            className="md:col-span-5 md:col-start-8"
+            sizes="90vw"
           />
         </section>
 

@@ -1,11 +1,9 @@
 "use client";
 
 import { LottieLoop } from "@/components/motion/lottie-loop";
-import { Ticker } from "@/components/motion/ticker";
 import { AuthHeader } from "../auth-header";
 import { ForgotForm } from "../forms/forgot-form";
 
-const tickerItems = ["Happens to everyone", "No harm done", "Back in a minute", "Your work is safe"];
 
 export default function Forgot() {
   return (
@@ -24,8 +22,6 @@ export default function Forgot() {
           <ForgotForm />
         </section>
       </div>
-
-      <Ticker items={tickerItems} reverse className="h-8 shrink-0 items-center border-t border-ink" />
     </main>
   );
 }

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { LottieLoop } from "@/components/motion/lottie-loop";
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
-import { CodeLockField } from "../code-lock";
 import { maskEmail } from "@/features/auth/schemas";
 import { CODE_ERROR_ID, CODE_LENGTH, useVerify } from "@/features/auth/use-verify";
 import { AuthHeader } from "../auth-header";
+import { CodeGrid } from "../code-lock";
 import { CodeError } from "../forms/code-error";
 
 export default function Verify({ email, next }: { email?: string; next?: string }) {
@@ -44,16 +44,16 @@ export default function Verify({ email, next }: { email?: string; next?: string 
           </div>
         </div>
 
-        <CodeLockField
+        <CodeGrid
           id="verify-code"
           label="Verification code"
           numeric
           length={CODE_LENGTH}
-          groupSize={3}
           value={verify.code}
           onChange={verify.change}
           onComplete={verify.complete}
-          state={verify.checking ? "pending" : verified ? "ok" : verify.codeError ? "wrong" : "idle"}
+          checking={verify.checking}
+          verified={verified}
           shakeKey={verify.attempt}
           autoFocus
           disabled={verify.checking || verified || verify.locked > 0}

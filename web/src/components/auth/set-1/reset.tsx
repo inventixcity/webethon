@@ -2,12 +2,10 @@
 
 import { LottieLoop } from "@/components/motion/lottie-loop";
 import { Reveal } from "@/components/motion/reveal";
-import { Ticker } from "@/components/motion/ticker";
 import { siteConfig } from "@/config/site";
 import { AuthHeader } from "../auth-header";
 import { ResetForm } from "../forms/reset-form";
 
-const tickerItems = ["New key", "Same door", siteConfig.tagline, "Keep it somewhere safe"];
 
 export default function Reset() {
   return (
@@ -25,7 +23,6 @@ export default function Reset() {
             <LottieLoop src="/lottie/vault-lock.json" mode="bounce" stillAt={1} className="scale-[1.2]" />
           </div>
         </div>
-        <Ticker items={tickerItems} className="h-8 shrink-0 items-center border-t border-rule" />
       </section>
 
       <ResetForm />

@@ -27,7 +27,7 @@ and the 5.3 and 5.1 mechanisms are in [INNOVATION.md](INNOVATION.md).
 │ proxy.ts            route gating (/app, /exam need a session)   │
 └───────────────┬─────────────────────────────────────────────────┘
                 │ server to server (API_ORIGIN)
-┌───────────────▼──────────── Rust API (Azure Container Apps) ────┐
+┌───────────────▼──────────── Rust API (Render) ──────────────────┐
 │ server     router assembly, middleware, housekeeping loops      │
 │ kernel     config, errors, sessions, CSRF, rate limits, audit   │
 │ auth/admin sign-in, Argon2id, MFA, user and role management     │
@@ -49,7 +49,7 @@ Each API request goes through these layers in order. They're assembled in `backe
    log line. Per-route counters and latency histograms are recorded.
 2. **Timeout.** The default is 15 s, so a slow request returns a 503 with `Retry-After` instead of hanging.
 3. **CSRF.** A state-changing method that carries a session cookie must pass the `Sec-Fetch-Site` / `Origin` check.
-4. **Rate limit.** A Postgres-backed fixed window per trusted client IP: 600 reads or 120 writes per minute. The IP
+4. **Rate limit.** A Postgres-backed fixed window per subject (the trusted client IP): 600 reads or 120 writes per minute. The IP
    is trusted only when the proxy has signed it with `PROXY_SECRET`. The feature crates add per-user and per-attempt
    budgets on top, for example 20 heartbeats per minute per attempt, 5 takeovers per hour, 30 verifies per minute
    per IP and 20 imports per hour.
@@ -90,7 +90,7 @@ invariant first. Constraints and indexes are the last line of defence.
 | `attempts` | One sitting: status, **`deadline_at`**, seed, `item_order`, `option_order`, `active_device`, the journal head and genesis, scores, `grading_status`, `review_priority` | `deadline_at` is computed **once, by the server**, at start: `least(now + duration + extra, ends_at)`. Only a `time_credits` row moves it. The seed and the stored orders make the shuffle reproducible on any device. **`attempts_one_real_idx`** is a partial unique index on `(exam_id, candidate_id) where not sandbox`, so two concurrent "start" requests produce one attempt (`on conflict do nothing`, then select), while sandbox runs don't collide. `attempts_deadline_idx` (partial, `in_progress`) keeps the sweep cheap |
 | `answers` | One row per attempt × item: response JSON, flag, `client_seq`, `source` (online or journal), `saved_at`, `written_at`, typing counts, auto and manual marks, feedback | **`client_seq` makes saves idempotent and ordered**: the upsert only applies when the incoming seq is higher. Journal entries use `seq + 1 000 000 000`, so a replayed offline answer always beats an older online save. `typing` holds counts only (≤ 2 KB) |
 | `attempt_scratch` | Rough work (4.8): text and a PNG sketch | One document per attempt, capped at 512 KB |
-| `time_credits` | Extra seconds for a verified outage: seconds (1–3600), reason, the outage window, `granted_by` | Never automatic. Each row is an audited decision by a person, and the API caps it at the verified outage length |
+| `time_credits` | Extra seconds for a verified outage: seconds (1–3600), reason, the outage window, `granted_by` | Never automatic. Each row is an audited decision by a person, and non-admin credits are capped at the uncredited verified outage time (admins bypass the outage check) |
 | `attempt_heartbeats` | Server-receipt timestamps of heartbeats, online flag, pending count | Outages are computed from **gaps between heartbeats the server actually received**, so a client can't claim one |
 | `attempt_events` | The integrity and lifecycle timeline: kind (an enumerated list), severity, flat detail, duration, client time | The kinds are a closed list. `client_at` is informational, while `recorded_at` is the server's. Detail is capped at 2 KB and never holds content |
 | `announcements` | Examiner broadcasts to an exam | Delivered on the next heartbeat (≤ 15 s) and shown as a toast |
@@ -101,7 +101,7 @@ invariant first. Constraints and indexes are the last line of defence.
 
 | Crate | Responsibility |
 | --- | --- |
-| `server` | Binary `api` with the subcommands `serve`, `migrate`, `seed-demo` and `healthcheck`. Mounts only the auth, admin and exam routers (plus optional AI). Middleware stack, housekeeping loops, and production startup checks (`EXAM_LEASE_KEY`, `RESULT_SIGNING_KEY`) |
+| `server` | Binary `api` with the subcommands `serve`, `migrate`, `seed-demo` and `healthcheck`. Mounts the auth and admin routers, the eight exam routers and health endpoints. Upload, AI and other product routers are not mounted. Middleware stack, housekeeping loops, and production startup checks (`EXAM_LEASE_KEY`, `RESULT_SIGNING_KEY`) |
 | `kernel` | Config, the error envelope, sessions (a random 256-bit token stored as its SHA-256), the CSRF origin check, Postgres rate limits, audit writer, crypto helpers, email senders |
 | `auth`, `admin` | Sign-in, Argon2id, MFA, session lifecycle. Admin user management, with role values `user / examiner / admin` and invites for provisioned accounts |
 | `examcore` | Shared building blocks: role extractors, `load_exam_for_examiner` and `load_exam_for_candidate` (404 on a miss), `phase`, **`score_objective`** (the one marking function), deterministic `shuffle` (SplitMix64 plus Fisher–Yates), time **leases** (HMAC-SHA-256), **`chain_next`** (the journal hash), `canonical_json`, and the Ed25519 `signer` |
@@ -133,7 +133,7 @@ invariant first. Constraints and indexes are the last line of defence.
 | **404 for anything you can't see** | Debugging is slightly harder, but no endpoint confirms that an exam, attempt or question exists |
 | **One active device per attempt**, with an explicit takeover | A broken laptop can be swapped for another in seconds, and a hidden second device becomes a recorded incident. The old device stops at once |
 | **Hash-chained offline journal** plus signed leases, instead of trusting client timestamps | More code on both sides, and an unkeyed chain protects ordering and integrity rather than authenticity (see INNOVATION). It never extends time |
-| **A Rust API behind a same-origin proxy** | One extra hop (Vercel → Azure Container Apps) on every API call. In return there's no CORS and a first-party cookie, and security never depends on the Next layer, because every decision is made in Rust |
+| **A Rust API behind a same-origin proxy** | One extra hop (Vercel → Render) on every API call. In return there's no CORS and a first-party cookie, and security never depends on the Next layer, because every decision is made in Rust |
 | **Postgres for rate limits** instead of Redis | One less service and correct across replicas. It costs a write per request, which is acceptable at exam scale |
 | **The paper cache is in-process** | Each replica warms its own copy, and a miss is a single indexed query |
 | **Indicators, never verdicts** | We give up "automatic cheating detection" in exchange for fairness and fewer false accusations. The examiner always decides |

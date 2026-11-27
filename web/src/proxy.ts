@@ -12,12 +12,54 @@ const APP = "/app";
 const EXAM = "/exam";
 const SIGN_IN_PAGES = ["/login", "/signup"];
 
+const isDev = process.env.NODE_ENV === "development";
+
+/** A fresh, unguessable nonce for every request. Base64 of 16 random bytes. */
+function createNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/*
+ * Scripts need the nonce, so no 'unsafe-inline' here. React's dev tools need 'unsafe-eval', so that is
+ * development only. lottie-web contains eval for After Effects expressions, but none of the shipped animations
+ * use one, so production doesn't need 'unsafe-eval' either.
+ */
+function contentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "worker-src 'self' blob:",
+  ].join("; ");
+}
+
 export function proxy(request: NextRequest) {
-  // Always replace the incoming value; layouts must never trust a client-supplied pathname.
+  const nonce = createNonce();
+  const policy = contentSecurityPolicy(nonce);
+
+  // Always replace the incoming values; layouts must never trust client-supplied ones.
+  // Next.js reads the nonce from the request's CSP header and applies it to its own inline scripts.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-app-pathname");
   requestHeaders.set("x-app-pathname", request.nextUrl.pathname);
-  const next = () => NextResponse.next({ request: { headers: requestHeaders } });
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", policy);
+
+  const next = () => {
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
+    response.headers.set("Content-Security-Policy", policy);
+    return response;
+  };
   const { pathname, search, searchParams } = request.nextUrl;
   const signedIn = SESSION_COOKIES.some((name) => request.cookies.has(name));
 

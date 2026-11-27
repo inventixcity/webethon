@@ -24,12 +24,13 @@ const subscribeNever = () => () => {};
  * layout. So the script is rendered only while the server HTML hydrates (the server snapshot is true there, and
  * false afterwards). A browser-only render then applies the theme in a layout effect, which runs before paint.
  */
-export function ThemeScript() {
+export function ThemeScript({ nonce }: { nonce?: string }) {
   const inServerHtml = useSyncExternalStore(
     subscribeNever,
     () => false,
     () => true,
   );
   useLayoutEffect(applySavedTheme, []);
-  return inServerHtml ? <script dangerouslySetInnerHTML={{ __html: script }} /> : null;
+  // The nonce lets this inline script run under the CSP, which has no 'unsafe-inline' for scripts.
+  return inServerHtml ? <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} /> : null;
 }
