@@ -141,7 +141,7 @@ export function CodeGrid({
       value={value}
       onChange={(next) => onChange(normaliseCode(next, numeric))}
       onComplete={onComplete}
-      pattern={numeric ? REGEXP_ONLY_DIGITS : "[0-9A-Za-z]"}
+      pattern={numeric ? REGEXP_ONLY_DIGITS : "^[0-9A-Za-z]+$"}
       // Pasted text is cleaned first, so "ABCD-EFGH-JKMN" fills all twelve cells.
       pasteTransformer={(text) => normaliseCode(text, numeric)}
       inputMode={numeric ? "numeric" : "text"}

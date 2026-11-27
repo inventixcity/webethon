@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import { AccountSettings } from "@/features/account/components/account-settings";
-import { SettingsCard } from "@/features/account/components/settings-card";
 import { getProfile } from "@/features/account/server";
 import { requireUser } from "@/features/auth/require-user";
-import { ManageLinks } from "@/components/shares/manage-links";
-import { WebhooksPanel } from "@/components/webhooks/webhooks-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { describeError } from "@/lib/errors/describe";
 import { SettingsLoadError } from "./settings-load-error";
@@ -22,7 +19,7 @@ export default async function SettingsPage() {
     const view = describeError(cause, { context: "action" });
     return (
       <main className="mx-auto grid min-h-dvh w-full max-w-6xl content-start gap-8 px-5 py-8 md:px-8">
-        <PageHeader index="01" eyebrow="Account" title="Settings" description="Your profile, sign-in and security, plus the integrations and share links you manage." />
+        <PageHeader index="01" eyebrow="Account" title="Settings" description="Your profile, sign-in and security." />
         <SettingsLoadError code={String(view.code ?? view.page)} requestId={view.requestId} message={view.message} />
       </main>
     );
@@ -36,30 +33,10 @@ export default async function SettingsPage() {
           eyebrow="Account"
           title="Settings"
           breadcrumb={[{ label: "Home", href: "/app" }, { label: "Settings" }]}
-          description="Your profile, sign-in and security, plus the integrations and share links you manage."
+          description="Your profile, sign-in and security."
         />
 
         <AccountSettings profile={profile} />
-
-        <SettingsCard
-          id="webhooks"
-          number="06"
-          eyebrow="Integrations"
-          title="Webhooks"
-          description="Send signed events to your own server as they happen. Each webhook gets its own secret, shown once."
-        >
-          <WebhooksPanel />
-        </SettingsCard>
-
-        <SettingsCard
-          id="share-links"
-          number="07"
-          eyebrow="Sharing"
-          title="Share links"
-          description="Public, read-only links to records you've shared. Revoke a link to stop it working straight away."
-        >
-          <ManageLinks />
-        </SettingsCard>
       </div>
     </main>
   );
