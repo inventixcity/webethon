@@ -207,7 +207,7 @@
 .shark-404-secondary:focus-visible,
 .shark-404-copy:focus-visible,
 .shark-404-home:focus-visible {
-  outline: 2px solid var(--vermilion);
+  outline: 2px solid var(--cobalt);
   outline-offset: 2px;
 }
 

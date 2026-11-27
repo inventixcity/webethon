@@ -429,10 +429,10 @@ export default function LandingPage() {
           <span>Inventix Invigil · {siteConfig.tagline}</span>
         </span>
         <nav aria-label="Footer" className="flex items-center gap-6">
-          <Link href="/verify" className="opacity-70 hover:opacity-100">
+          <Link href="/verify" className="inline-flex min-h-6 items-center py-1 text-ink-soft hover:text-ink">
             Verify
           </Link>
-          <Link href="/login" className="opacity-70 hover:opacity-100">
+          <Link href="/login" className="inline-flex min-h-6 items-center py-1 text-ink-soft hover:text-ink">
             Sign in
           </Link>
         </nav>
