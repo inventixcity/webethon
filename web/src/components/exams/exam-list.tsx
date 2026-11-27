@@ -77,7 +77,7 @@ export function ExamList() {
         <h2 id="exam-list-heading" className="sr-only">
           Exams
         </h2>
-        <div role="group" aria-label="Filter exams by status" className="scroll-fade relative -mx-5 flex max-w-[calc(100%+2.5rem)] overflow-x-auto border-y border-ink bg-paper-raised px-5 sm:mx-0 sm:max-w-full sm:border">
+        <div role="group" aria-label="Filter exams by status" className="relative -mx-5 flex max-w-[calc(100%+2.5rem)] flex-wrap border-y border-ink bg-paper-raised px-5 sm:mx-0 sm:max-w-full sm:border">
           {FILTERS.map((filter) => {
             const active = status === filter.value;
             return (
@@ -149,7 +149,7 @@ export function ExamListItem({ exam }: { exam: ExamSummary }) {
       <div className="grid min-w-0 gap-2 md:col-span-5">
         <Link
           href={`/app/examiner/exams/${encodeURIComponent(exam.id)}`}
-          className="text-xl leading-snug font-medium tracking-[-0.01em] break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+          className="inline-flex min-h-11 items-center text-xl leading-snug font-medium tracking-[-0.01em] break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
         >
           {exam.title}
         </Link>

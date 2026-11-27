@@ -485,6 +485,33 @@ async fn forgot(
     pad(start).await;
     Ok(accepted())
 }
+
+/// Send the same silent, rate-limited reset message used by the public self-service route.
+/// Callers must not expose whether the address exists.
+pub async fn request_password_reset(
+    state: &AppState,
+    meta: &RequestMeta,
+    email_input: &str,
+) -> AppResult<()> {
+    let start = tokio::time::Instant::now();
+    let email = validate::email(email_input)?;
+    rate(
+        state,
+        "email",
+        meta,
+        &email,
+        limits::EMAIL_PER_IP,
+        Some(limits::EMAIL_PER_ACCOUNT),
+    )
+    .await?;
+    if let Some(user) = find(state, &email).await?
+        && user.status == "active"
+    {
+        mail_code(state, &email, "reset_password", true).await?;
+    }
+    pad(start).await;
+    Ok(())
+}
 async fn verify_reset(
     State(state): State<AppState>,
     meta: RequestMeta,

@@ -28,7 +28,13 @@ impl EmailSender for ResendSender {
         Box::pin(async move {
             self.client.post("https://api.resend.com/emails")
                 .bearer_auth(self.key.expose_secret())
-                .json(&serde_json::json!({"from": self.from, "to": [email.to], "subject": email.subject, "html": email.html, "text": email.text}))
+                .json(&{
+                    let mut body = serde_json::json!({"from": self.from, "to": [email.to], "subject": email.subject, "html": email.html, "text": email.text});
+                    if let Some(reply_to) = &email.reply_to {
+                        body["reply_to"] = serde_json::json!([reply_to]);
+                    }
+                    body
+                })
                 .send().await?.error_for_status()?;
             Ok(())
         })
@@ -43,15 +49,17 @@ struct SmtpSender {
 impl EmailSender for SmtpSender {
     fn send<'a>(&'a self, email: &'a Email) -> SendFuture<'a> {
         Box::pin(async move {
-            let message = Message::builder()
+            let mut builder = Message::builder()
                 .from(self.from.clone())
-                .to(email.to.parse()?)
-                .subject(&email.subject)
-                .multipart(
-                    MultiPart::alternative()
-                        .singlepart(SinglePart::plain(email.text.clone()))
-                        .singlepart(SinglePart::html(email.html.clone())),
-                )?;
+                .to(email.to.parse()?);
+            if let Some(reply_to) = &email.reply_to {
+                builder = builder.reply_to(reply_to.parse()?);
+            }
+            let message = builder.subject(&email.subject).multipart(
+                MultiPart::alternative()
+                    .singlepart(SinglePart::plain(email.text.clone()))
+                    .singlepart(SinglePart::html(email.html.clone())),
+            )?;
             self.transport.send(message).await?;
             Ok(())
         })
@@ -76,7 +84,7 @@ pub fn email_sender(config: &Config) -> anyhow::Result<Arc<dyn EmailSender>> {
         let tls = TlsParameters::new(host.to_owned())?;
         let mut builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
             .port(url.port().unwrap_or(25))
-            .tls(Tls::Opportunistic(tls));
+            .tls(Tls::Required(tls));
         if !url.username().is_empty() {
             builder = builder.credentials(Credentials::new(
                 url.username().to_owned(),
@@ -103,6 +111,69 @@ pub fn router() -> Router<AppState> {
 pub fn router_with_self_service() -> Router<AppState> {
     routes::router_with(true)
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod smtp_tests {
+    use super::*;
+    use kernel::email::Email;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::TcpListener,
+        time::{Duration, timeout},
+    };
+
+    #[tokio::test]
+    async fn smtp_without_starttls_never_receives_message_content() {
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind local SMTP test server");
+        let address = listener.local_addr().expect("read SMTP address");
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept SMTP connection");
+            let (read, mut write) = stream.into_split();
+            let mut read = BufReader::new(read);
+            write
+                .write_all(b"220 local.test ESMTP\r\n")
+                .await
+                .expect("send SMTP greeting");
+            let mut line = String::new();
+            timeout(Duration::from_secs(3), read.read_line(&mut line))
+                .await
+                .expect("wait for EHLO")
+                .expect("read EHLO");
+            assert!(line.starts_with("EHLO "));
+            write
+                .write_all(b"250-local.test\r\n250 SIZE 100000\r\n")
+                .await
+                .expect("advertise SMTP without STARTTLS");
+            line.clear();
+            let read_result = timeout(Duration::from_secs(3), read.read_line(&mut line)).await;
+            (read_result, line)
+        });
+
+        let mut config = Config::from_env().expect("test config");
+        config.resend_api_key = None;
+        config.smtp_url = Some(format!("smtp://{address}"));
+        config.email_from = "Inventix Invigil <sender@example.test>".into();
+        let sender = email_sender(&config).expect("required-TLS SMTP sender");
+        let result = sender
+            .send(&Email {
+                to: "candidate@example.test".into(),
+                subject: "Sensitive reset code".into(),
+                html: "Sensitive reset code".into(),
+                text: "Sensitive reset code".into(),
+                reply_to: None,
+            })
+            .await;
+        assert!(result.is_err(), "SMTP without STARTTLS must fail closed");
+        let (_, line) = server.await.expect("SMTP server task");
+        assert!(
+            !line.to_ascii_uppercase().starts_with("MAIL FROM"),
+            "message content must not be sent before TLS"
+        );
+    }
+}
 mod codes;
 mod emails;
 mod mfa;
@@ -114,3 +185,10 @@ pub mod totp;
 mod validate;
 
 pub use mfa::admin_reauthenticate;
+pub async fn request_password_reset(
+    state: &AppState,
+    meta: &kernel::request::RequestMeta,
+    email: &str,
+) -> kernel::AppResult<()> {
+    routes::request_password_reset(state, meta, email).await
+}

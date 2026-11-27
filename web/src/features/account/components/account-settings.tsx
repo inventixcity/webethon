@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api/client";
 import type { Profile } from "../types";
 import { DeleteAccountForm } from "./delete-account-form";
 import { DevicesList } from "./devices-list";
@@ -13,6 +14,8 @@ import { MfaSettings } from "./mfa-settings";
 export function AccountSettings({ profile }: { profile: Profile }) {
   // Changing the password signs out every other device, so the devices list reloads when that happens.
   const [devicesVersion, setDevicesVersion] = useState(0);
+  const [candidateSelfDeleteAllowed, setCandidateSelfDeleteAllowed] = useState(false);
+  useEffect(() => { if (profile.role === "candidate") void api<{candidateSelfDeleteAllowed:boolean}>("/me/preferences").then((x)=>setCandidateSelfDeleteAllowed(x.candidateSelfDeleteAllowed)).catch(()=>setCandidateSelfDeleteAllowed(false)); }, [profile.role]);
 
   return (
     <div className="grid gap-6">
@@ -50,7 +53,7 @@ export function AccountSettings({ profile }: { profile: Profile }) {
         <DevicesList reloadKey={devicesVersion} />
       </SettingsCard>
 
-      <SettingsCard
+      {profile.role === "candidate" && candidateSelfDeleteAllowed && <SettingsCard
         id="danger"
         number="05"
         eyebrow="Danger zone"
@@ -59,7 +62,7 @@ export function AccountSettings({ profile }: { profile: Profile }) {
         tone="danger"
       >
         <DeleteAccountForm email={profile.email} />
-      </SettingsCard>
+      </SettingsCard>}
     </div>
   );
 }

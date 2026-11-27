@@ -5,13 +5,16 @@ use axum::{
     routing::{get, patch, post},
 };
 use examcore::{AppState, Viewer};
+use hmac::{Hmac, Mac};
 use kernel::{
     email::Email,
     request::RequestMeta,
     security::{AuditEntry, Limit, audit, enforce_rate_limit},
 };
+use secrecy::ExposeSecret;
 use serde::Deserialize;
 use serde_json::json;
+use sha2::Sha256;
 use sqlx::Row;
 use std::time::Duration;
 use uuid::Uuid;
@@ -59,15 +62,13 @@ fn valid(i: &ContactInput) -> bool {
             .is_none_or(|v| (1..=1_000_000).contains(&v))
         && (10..=2000).contains(&i.message.trim().chars().count())
 }
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
 fn is_honeypot(i: &ContactInput) -> bool {
     i.website.as_deref().is_some_and(|v| !v.trim().is_empty())
+}
+fn keyed_ip_hash(secret: &[u8], ip: &str) -> Result<String, examcore::AppError> {
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret).map_err(examcore::AppError::internal)?;
+    mac.update(ip.as_bytes());
+    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 async fn submit(
     State(s): State<AppState>,
@@ -102,26 +103,31 @@ async fn submit(
         },
     )
     .await?;
-    let ip_hash = hex::encode(kernel::crypto::sha256(meta.ip.as_bytes()));
+    let ip_hash = keyed_ip_hash(s.config.code_pepper.expose_secret().as_bytes(), &meta.ip)?;
     let id:Uuid=sqlx::query_scalar("insert into institute_requests(institute,contact_name,email,phone,role,expected_candidates,message,ip_hash) values($1,$2,$3,$4,$5,$6,$7,$8) returning id")
  .bind(i.institute.trim()).bind(i.contact_name.trim()).bind(&email).bind(i.phone.as_deref()).bind(i.role.as_deref()).bind(i.expected_candidates).bind(i.message.trim()).bind(ip_hash).fetch_one(&s.db).await?;
-    let fields = format!(
-        "Institute: {}<br>Contact: {}<br>Email: {}<br>Phone: {}<br>Role: {}<br>Expected candidates: {}<br><br>{}",
-        esc(i.institute.trim()),
-        esc(i.contact_name.trim()),
-        esc(&email),
-        esc(i.phone.as_deref().unwrap_or("-")),
-        esc(i.role.as_deref().unwrap_or("-")),
-        i.expected_candidates.map_or("-".into(), |v| v.to_string()),
-        esc(i.message.trim()).replace('\n', "<br>")
-    );
+    let fields = kernel::email_layout::details(&[
+        ("Request ID", &id.to_string()),
+        ("Institute", i.institute.trim()),
+        ("Contact", i.contact_name.trim()),
+        ("Email", &email),
+        ("Phone", i.phone.as_deref().unwrap_or("-")),
+        ("Role", i.role.as_deref().unwrap_or("-")),
+        (
+            "Expected candidates",
+            &i.expected_candidates.map_or("-".into(), |v| v.to_string()),
+        ),
+        ("Message", i.message.trim()),
+    ]);
+    let inbox = std::env::var("CONTACT_INBOX").unwrap_or_else(|_| "info@inventixhq.com".into());
     let _ = s
         .email
         .send(&Email {
-            to: "info@inventixhq.com".into(),
+            to: inbox,
             subject: "New institute request".into(),
-            html: fields.clone(),
-            text: format!("{}\nRequest {id}", fields.replace("<br>", "\n")),
+            html: kernel::email_layout::layout("CONTACT / NEW REQUEST", "Institute enquiry", "A new institute request has arrived", &fields, "A visitor submitted the contact form on Inventix Invigil."),
+            text: format!("New institute request {id}\n\nInstitute: {}\nContact: {}\nEmail: {}\nPhone: {}\nRole: {}\nExpected candidates: {}\n\nMessage:\n{}", i.institute.trim(), i.contact_name.trim(), email, i.phone.as_deref().unwrap_or("-"), i.role.as_deref().unwrap_or("-"), i.expected_candidates.map_or("-".into(), |v| v.to_string()), i.message.trim()),
+            reply_to: Some(email.clone()),
         })
         .await;
     let _ = s
@@ -129,9 +135,9 @@ async fn submit(
         .send(&Email {
             to: email,
             subject: "We received your institute request".into(),
-            html: "<p>Thank you for contacting Inventix Invigil. Our team will be in touch.</p>"
-                .into(),
-            text: "Thank you for contacting Inventix Invigil. Our team will be in touch.".into(),
+            html: kernel::email_layout::layout("CONTACT / RECEIVED", "Thank you for reaching out", "Your institute request has been received", "<p style=\"font:15px/1.6 Helvetica,Arial,sans-serif;color:#12110E\">Thank you for contacting Inventix Invigil. Our team will be in touch.</p>", "You received this acknowledgement because you submitted an institute request."),
+            text: "Thank you for contacting Inventix Invigil. Our team will be in touch.\n\nInventix Invigil · Exams that hold up.\ninfo@inventixhq.com · COMSATS University Lahore, Pakistan\nWe never ask for your password by email.".into(),
+            reply_to: None,
         })
         .await;
     Ok((StatusCode::ACCEPTED, examcore::ok(json!({"received":true}))))
@@ -169,6 +175,18 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
+    fn contact_ip_pseudonym_is_keyed() {
+        let ip = "203.0.113.7";
+        let first = keyed_ip_hash(b"server secret one", ip).expect("first HMAC");
+        let same = keyed_ip_hash(b"server secret one", ip).expect("repeat HMAC");
+        let rotated = keyed_ip_hash(b"server secret two", ip).expect("rotated HMAC");
+        assert_eq!(first, same);
+        assert_ne!(first, rotated);
+        assert_ne!(first, hex::encode(kernel::crypto::sha256(ip.as_bytes())));
+    }
+
+    #[test]
     fn honeypot_requests_are_recognized_without_storage() {
         let mut input = sample();
         assert!(!is_honeypot(&input));
@@ -179,7 +197,10 @@ mod tests {
     #[test]
     fn rejects_unknown_fields_and_escapes_html() {
         assert!(serde_json::from_str::<ContactInput>(r#"{"unexpected":true}"#).is_err());
-        assert_eq!(esc("<a&'\""), "&lt;a&amp;&#39;&quot;");
+        assert_eq!(
+            kernel::email_layout::escape("<a&'\""),
+            "&lt;a&amp;&#39;&quot;"
+        );
     }
 
     #[sqlx::test(migrations = "../../migrations")]

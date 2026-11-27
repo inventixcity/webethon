@@ -102,7 +102,7 @@ struct ImportResult {
     errors: Vec<RowError>,
 }
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ListQuery {
     topic: Option<String>,
     difficulty: Option<i16>,
@@ -577,6 +577,12 @@ mod tests {
     use kernel::{config::Config, email::LogSender};
     use std::sync::Arc;
     use tower::ServiceExt;
+
+    #[test]
+    fn list_query_rejects_unknown_parameters() {
+        let parsed = serde_json::from_value::<ListQuery>(json!({"limit":10,"unexpected":true}));
+        assert!(parsed.is_err());
+    }
 
     fn valid_input() -> QuestionInput {
         QuestionInput {

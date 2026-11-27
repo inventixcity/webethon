@@ -1,0 +1,6 @@
+node_modules
+out
+.remotion
+public/shots
+public/sfx/*.wav
+public/vo/*.mp3

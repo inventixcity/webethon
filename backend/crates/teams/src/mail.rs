@@ -94,6 +94,7 @@ pub fn invite(app: &str, invite: &Invite<'_>) -> Email {
             expiry = expiry,
             ignore = ignore,
         ),
+        reply_to: None,
     }
 }
 

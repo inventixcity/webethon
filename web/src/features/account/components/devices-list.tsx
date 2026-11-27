@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { listSessions, revokeSession, signOutEverywhere } from "../client";
@@ -31,6 +31,7 @@ export function DevicesList({ reloadKey }: DevicesListProps) {
   const [busyId, setBusyId] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
   const [notice, setNotice] = useState<string>();
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -82,7 +83,24 @@ export function DevicesList({ reloadKey }: DevicesListProps) {
     window.location.assign("/login");
   }
 
+  async function signOutOthers() {
+    if (!sessions || busy) return;
+    setSigningOut(true);
+    try {
+      await Promise.all(sessions.filter((session) => !session.current).map((session) => revokeSession(session.id)));
+      setSessions((items) => items?.filter((session) => session.current));
+      toast.success("Other devices have been signed out.");
+    } catch (cause) {
+      toast.error(toastFor(cause));
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   const busy = busyId !== undefined || signingOut;
+  const olderSessions = sessions?.filter((item) => now - Date.parse(item.lastSeenAt) > 7 * 24 * 60 * 60 * 1000) ?? [];
+  const recentSessions = sessions?.filter((item) => now - Date.parse(item.lastSeenAt) <= 7 * 24 * 60 * 60 * 1000) ?? [];
+  const displayedSessions = showAll ? [...recentSessions, ...olderSessions] : recentSessions.slice(0, 5);
 
   return (
     <div className="grid max-w-xl gap-6">
@@ -96,14 +114,14 @@ export function DevicesList({ reloadKey }: DevicesListProps) {
       ) : sessions === undefined ? (
         <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Loading devices</p>
       ) : (
+        <>
         <ul aria-label="Devices signed in to your account" className="border-b border-rule">
-          {sessions.map((session) => {
+          {displayedSessions.map((session, index) => {
             const label = describeDevice(session.userAgent);
             return (
-              <li
-                key={session.id}
-                className="grid gap-3 border-t border-rule py-5 sm:grid-cols-[1fr_auto] sm:items-center"
-              >
+              <Fragment key={session.id}>
+              {showAll && olderSessions.length > 0 && index === recentSessions.length && <li className="border-t border-rule py-3 font-mono text-[11px] tracking-[.12em] text-ink-muted uppercase">Older · last active over 7 days ago</li>}
+              <li className="grid gap-3 border-t border-rule py-5 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div className="grid min-w-0 gap-1.5">
                   <p className="text-lg font-medium break-words">{label}</p>
                   <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
@@ -130,13 +148,21 @@ export function DevicesList({ reloadKey }: DevicesListProps) {
                   </Button>
                 )}
               </li>
+              </Fragment>
             );
           })}
         </ul>
+        {sessions.length>5&&<Button type="button" variant="link" size="sm" aria-expanded={showAll} onClick={()=>setShowAll(value=>!value)}>{showAll?"Show fewer":`Show all (${sessions.length})`}</Button>}
+        </>
       )}
 
       <Feedback message={notice} />
 
+      <div>
+        <Button type="button" variant="secondary" size="lg" loading={signingOut} disabled={busy || !sessions?.some((session) => !session.current)} onClick={() => void signOutOthers()}>
+          Sign out of other devices
+        </Button>
+      </div>
       <div>
         <Button
           type="button"

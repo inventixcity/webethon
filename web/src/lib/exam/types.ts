@@ -557,6 +557,12 @@ export type GradingSuggestion = {
   model: string;
 };
 
+// ------------------------------------------------------------------ live room
+/** Server-sent event payload on GET /exams/{id}/monitor/stream (event: "snapshot"). */
+export type MonitorSnapshotEvent = ExamMonitor;
+/** POST /exams/{id}/outage-credit result. */
+export type BulkCreditResult = { credited: number; skipped: number; secondsTotal: number };
+
 // ------------------------------------------------------------------ STATS
 /** GET /exams/{id}/stats/timeseries: buckets are UTC RFC 3339 timestamps. */
 export type ExamTimeseriesBucket = {
@@ -587,8 +593,16 @@ export type AdminStatsOverview = {
   examsByPhase: Array<{ phase: ExamPhase; count: number }>;
 };
 
-// ------------------------------------------------------------------ live room
-/** Server-sent event payload on GET /exams/{id}/monitor/stream (event: "snapshot"). */
-export type MonitorSnapshotEvent = ExamMonitor;
-/** POST /exams/{id}/outage-credit result. */
-export type BulkCreditResult = { credited: number; skipped: number; secondsTotal: number };
+// ------------------------------------------------------------------ SETTINGS
+export type SettingsRole = "candidate" | "examiner" | "admin";
+export type UserPreferences = {
+  theme: "system" | "light" | "dark";
+  reducedMotion: boolean;
+  textSize: "sm" | "md" | "lg";
+  timeZone: string;
+  emailNotifications: { securityAlerts: true; productUpdates: boolean };
+  candidate?: { accessibility: { highContrast: boolean; dyslexiaFont: boolean; largerTargets: boolean; confirmBeforeSubmit: boolean }; examReminders: { emailBeforeStartMinutes: 0 | 15 | 60 | 1440 } };
+  examiner?: { examDefaults: { durationMinutes: number; passPercent: number; shuffleQuestions: boolean; shuffleOptions: boolean; lateJoinMinutes: number; integrity: { fullscreen: boolean; pasteBlock: boolean; focusTracking: boolean; typingTelemetry: boolean } }; notifications: { onSubmissionsComplete: boolean; onDisputeFiled: boolean; onOutageReported: boolean } };
+  admin?: { notifications: { onInstituteRequest: boolean; onSecurityEvent: boolean } };
+};
+export type InstitutionSettings = { name: string; shortName: string; contactEmail: string; supportHours: string; defaultTimeZone: string; aiSuggestionsEnabled: boolean; allowCandidateSelfDelete: boolean; staffMfaRequired: boolean; resultsVerificationPublic: boolean };

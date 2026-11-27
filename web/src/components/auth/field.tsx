@@ -93,7 +93,7 @@ export function PasswordField({ inputClassName, onVisibleChange, ...props }: Pas
           }}
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="font-mono text-[11px] tracking-[0.12em] no-underline min-h-6 overflow-visible transition-colors duration-(--duration-fast) ease-(--ease-enter) motion-reduce:transition-none hover:text-current hover:no-underline"
+          className="min-h-11 min-w-11 px-2 font-mono text-[11px] tracking-[0.12em] no-underline overflow-visible transition-colors duration-(--duration-fast) ease-(--ease-enter) motion-reduce:transition-none hover:text-current hover:no-underline"
         >
           {visible ? "Hide" : "Show"}
         </Button>

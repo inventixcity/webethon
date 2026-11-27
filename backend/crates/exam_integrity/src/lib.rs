@@ -509,7 +509,7 @@ async fn monitor_stream(
         let started = started;
         let mut check = tokio::time::interval(Duration::from_secs(3));
         check.tick().await;
-        let mut recheck = tokio::time::interval(Duration::from_secs(60));
+        let mut recheck = tokio::time::interval(monitor_recheck_interval());
         recheck.tick().await;
         loop {
             if started.elapsed() >= Duration::from_secs(1800) { break; }
@@ -528,8 +528,7 @@ async fn monitor_stream(
                 },
                 _ = recheck.tick() => {
                     // Re-authenticate the session and verify ownership at least once a minute.
-                    let valid: bool = sqlx::query_scalar("select exists(select 1 from sessions s join users u on u.id=s.user_id join exams e on e.id=$3 where s.id=$1 and s.user_id=$2 and s.revoked_at is null and s.expires_at>now() and u.suspended_at is null and u.role in ('examiner','admin') and e.owner_id=$2)")
-                        .bind(stream_viewer.session_id).bind(owner_id).bind(exam_id).fetch_one(&state.db).await.unwrap_or(false);
+                    let valid = monitor_authorized(&state.db, stream_viewer.session_id, owner_id, exam_id).await;
                     if !valid { break; }
                 }
             }
@@ -547,6 +546,19 @@ async fn monitor_stream(
         axum::http::HeaderValue::from_static("no"),
     );
     Ok(response)
+}
+
+async fn monitor_authorized(db: &PgPool, session_id: Uuid, owner_id: Uuid, exam_id: Uuid) -> bool {
+    sqlx::query_scalar("select exists(select 1 from sessions s join users u on u.id=s.user_id join exams e on e.id=$3 where s.id=$1 and s.user_id=$2 and s.revoked_at is null and s.expires_at>now() and u.status='active' and u.deleted_at is null and u.role in ('examiner','admin') and e.deleted_at is null and e.owner_id=$2)")
+        .bind(session_id).bind(owner_id).bind(exam_id).fetch_one(db).await.unwrap_or(false)
+}
+
+fn monitor_recheck_interval() -> Duration {
+    if cfg!(test) {
+        Duration::from_millis(20)
+    } else {
+        Duration::from_secs(60)
+    }
 }
 
 /// Whether count-only typing telemetry is unusual for a written response.
@@ -677,6 +689,109 @@ pub fn watermark_ids(text: &str) -> Vec<[u8; 8]> {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn monitor_recheck_closes_on_session_revocation_or_owner_change(db: PgPool) {
+        let owner: Uuid = sqlx::query_scalar("insert into users(email,role) values('stream-owner@test.invalid','examiner') returning id")
+            .fetch_one(&db).await.unwrap();
+        let other: Uuid = sqlx::query_scalar("insert into users(email,role) values('stream-other@test.invalid','examiner') returning id")
+            .fetch_one(&db).await.unwrap();
+        let (token, hash) = kernel::crypto::new_token();
+        let _ = token;
+        let session: Uuid = sqlx::query_scalar("insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour') returning id")
+            .bind(owner).bind(hash.as_slice()).fetch_one(&db).await.unwrap();
+        let exam: Uuid = sqlx::query_scalar("insert into exams(owner_id,title,status,starts_at,ends_at,duration_minutes,total_marks) values($1,'Stream authorization','published',now()-interval '1 hour',now()+interval '1 hour',60,10) returning id")
+            .bind(owner).fetch_one(&db).await.unwrap();
+        assert!(monitor_authorized(&db, session, owner, exam).await);
+        let response = open_monitor_stream(db.clone(), owner, session, exam).await;
+        let mut revoked_stream = response.into_body().into_data_stream();
+        let _initial = tokio::time::timeout(
+            Duration::from_secs(2),
+            futures_util::StreamExt::next(&mut revoked_stream),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+        sqlx::query("update sessions set revoked_at=now() where id=$1")
+            .bind(session)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert!(!monitor_authorized(&db, session, owner, exam).await);
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                futures_util::StreamExt::next(&mut revoked_stream)
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+        sqlx::query("update sessions set revoked_at=null where id=$1")
+            .bind(session)
+            .execute(&db)
+            .await
+            .unwrap();
+        let response = open_monitor_stream(db.clone(), owner, session, exam).await;
+        let mut reassigned_stream = response.into_body().into_data_stream();
+        let _initial = tokio::time::timeout(
+            Duration::from_secs(2),
+            futures_util::StreamExt::next(&mut reassigned_stream),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+        sqlx::query("update exams set owner_id=$2 where id=$1")
+            .bind(exam)
+            .bind(other)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert!(!monitor_authorized(&db, session, owner, exam).await);
+        assert!(
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                futures_util::StreamExt::next(&mut reassigned_stream)
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+    }
+
+    async fn open_monitor_stream(
+        db: PgPool,
+        owner: Uuid,
+        session_id: Uuid,
+        exam: Uuid,
+    ) -> axum::response::Response {
+        use axum::body::Body;
+        use axum::http::Request;
+        use kernel::{email::LogSender, viewer::Role};
+        use std::sync::Arc;
+        use tower::ServiceExt;
+        let state = AppState {
+            db,
+            config: Arc::new(kernel::config::Config::from_env().unwrap()),
+            http: reqwest::Client::new(),
+            email: Arc::new(LogSender),
+            hashing: Arc::new(tokio::sync::Semaphore::new(1)),
+        };
+        let mut request = Request::get(format!("/exams/{exam}/monitor/stream"))
+            .body(Body::empty())
+            .unwrap();
+        request.extensions_mut().insert(Viewer {
+            id: owner,
+            session_id,
+            email: "stream-owner@test.invalid".into(),
+            display_name: "Stream owner".into(),
+            role: Role::Examiner,
+            via_cookie: false,
+        });
+        router().with_state(state).oneshot(request).await.unwrap()
+    }
     #[test]
     fn validates_indicator_helpers_and_thresholds() {
         assert!(canary_hit("Use APRICITY now", "apricity"));

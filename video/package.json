@@ -1,0 +1,16 @@
+{
+  "name": "invigil-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Walkthrough out/invigil-walkthrough.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.547",
+    "@remotion/google-fonts": "^4.0.547",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.547"
+  }
+}

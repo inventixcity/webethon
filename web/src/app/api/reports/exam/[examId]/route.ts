@@ -5,6 +5,7 @@ import { Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { signedVisitorHeaders } from "@/lib/api/forward";
 import { brandPage, pdfDocument, pdfStyles as s } from "@/lib/pdf/report";
 import { dateSlug, pdfDisposition, safeSlug } from "@/lib/pdf/names";
+import { boundedRows } from "../../bounds";
 
 export const runtime = "nodejs";
 export async function GET(_request: Request, context: { params: Promise<{ examId: string }> }) {
@@ -18,10 +19,21 @@ export async function GET(_request: Request, context: { params: Promise<{ examId
   const d = payload.data; const title = d.examTitle || "Examination"; const max = Math.max(1, ...d.distribution.map(b => b.count)); const stamp = dateSlug();
   const kpis: Array<[string, string | number]> = [["ENROLLED", d.enrolled ?? d.rows.length], ["SUBMITTED", d.summary.count], ["MEAN", d.summary.mean], ["MEDIAN", d.summary.median], ["PASS RATE", `${d.summary.passRate}%`]];
   const buckets = d.distribution.map(b => createElement(View, { key: String(b.from), style: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 } }, createElement(Text, { style: { width: 38, fontSize: 7 } }, `${b.from}–${b.to}%`), createElement(View, { style: { ...s.barTrack, flex: 1 } }, createElement(View, { style: { ...s.bar, width: `${Math.max(2, b.count / max * 100)}%`, backgroundColor: b.from >= 50 ? "#244FC4" : "#C88C18" } })), createElement(Text, { style: { width: 25, textAlign: "right", fontSize: 7 } }, String(b.count))));
-  const candidateRows = d.rows.map((row, i) => createElement(View, { key: `${i}-${row.displayName}`, style: { ...s.row, backgroundColor: i % 2 ? "#EAE6DB" : "#F5F1E7" }, wrap: false }, createElement(Text, { style: { ...s.cell, flex: 1.7 } }, row.displayName), createElement(Text, { style: s.cell }, row.totalScore == null ? "—" : String(row.totalScore)), createElement(Text, { style: s.cell }, row.percent == null ? "—" : `${row.percent}%`), createElement(Text, { style: s.cell }, row.passed == null ? "PENDING" : row.passed ? "PASS" : "NOT PASSED")));
+  const bounded = boundedRows(d.rows);
+  const truncated = bounded.truncated;
+  const candidateRows = bounded.rows.map((row, i) => createElement(View, { key: `${i}-${row.displayName}`, style: { ...s.row, backgroundColor: i % 2 ? "#EAE6DB" : "#F5F1E7" }, wrap: false }, createElement(Text, { style: { ...s.cell, flex: 1.7 } }, row.displayName), createElement(Text, { style: s.cell }, row.totalScore == null ? "—" : String(row.totalScore)), createElement(Text, { style: s.cell }, row.percent == null ? "—" : `${row.percent}%`), createElement(Text, { style: s.cell }, row.passed == null ? "PENDING" : row.passed ? "PASS" : "NOT PASSED")));
   const items = d.itemSummary.map((item, i) => createElement(View, { key: String(item.position), style: { ...s.row, backgroundColor: i % 2 ? "#EAE6DB" : "#F5F1E7" }, wrap: false }, createElement(Text, { style: { width: 30 } }, String(item.position).padStart(2, "0")), createElement(Text, { style: { ...s.cell, flex: 3 } }, item.stem), createElement(Text, { style: s.cell }, `${(item.facility * 100).toFixed(0)}% facility · ${item.responses} responses`)));
-  const cover = brandPage(createElement(View, null, createElement(Text, { style: s.eyebrow }, `COHORT REPORT  /  ${stamp}`), createElement(Text, { style: s.title }, title), createElement(Text, { style: s.muted }, "Results, distribution and item analysis"), createElement(View, { style: s.kpis }, ...kpis.map(([label, value], i) => createElement(View, { key: label, style: { ...s.kpi, borderTopColor: i === 4 ? "#C88C18" : "#244FC4" } }, createElement(Text, { style: s.label }, label), createElement(Text, { style: s.kpiValue }, String(value))))), createElement(Text, { style: s.section }, "SCORE DISTRIBUTION"), ...buckets, createElement(Text, { style: s.section }, "CANDIDATE RESULTS"), createElement(View, { style: s.tableHead }, createElement(Text, { style: { ...s.cell, flex: 1.7 } }, "CANDIDATE"), createElement(Text, { style: s.cell }, "SCORE"), createElement(Text, { style: s.cell }, "PERCENT"), createElement(Text, { style: s.cell }, "OUTCOME")), ...candidateRows));
+  const cover = brandPage(createElement(View, null, createElement(Text, { style: s.eyebrow }, `COHORT REPORT  /  ${stamp}`), createElement(Text, { style: s.title }, title), createElement(Text, { style: s.muted }, "Results, distribution and item analysis"), createElement(View, { style: s.kpis }, ...kpis.map(([label, value], i) => createElement(View, { key: label, style: { ...s.kpi, borderTopColor: i === 4 ? "#C88C18" : "#244FC4" } }, createElement(Text, { style: s.label }, label), createElement(Text, { style: s.kpiValue }, String(value))))), createElement(Text, { style: s.section }, "SCORE DISTRIBUTION"), ...buckets, createElement(Text, { style: s.section }, "CANDIDATE RESULTS"), createElement(View, { style: s.tableHead }, createElement(Text, { style: { ...s.cell, flex: 1.7 } }, "CANDIDATE"), createElement(Text, { style: s.cell }, "SCORE"), createElement(Text, { style: s.cell }, "PERCENT"), createElement(Text, { style: s.cell }, "OUTCOME")), ...candidateRows, ...(truncated ? [createElement(Text, { key: "truncated-note", style: s.muted }, "Truncated: first 2,000 candidates shown.")] : [])));
   const itemPage = brandPage(createElement(View, null, createElement(Text, { style: s.eyebrow }, "ITEM ANALYSIS"), createElement(Text, { style: s.title }, title), createElement(Text, { style: s.section }, "QUESTION FACILITY"), createElement(View, { style: s.tableHead }, createElement(Text, { style: { width: 30 } }, "NO."), createElement(Text, { style: { ...s.cell, flex: 3 } }, "QUESTION"), createElement(Text, { style: s.cell }, "FACILITY / RESPONSES")), ...items));
-  const pdf = await renderToBuffer(pdfDocument(cover, itemPage)); const filename = `${safeSlug(title)}_report_${stamp}.pdf`;
+  let pdf: Buffer;
+  try {
+    pdf = await new Promise<Buffer>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("PDF render timed out")), 20000);
+      renderToBuffer(pdfDocument(cover, itemPage)).then(resolve, reject).finally(() => clearTimeout(timer));
+    });
+  } catch {
+    return NextResponse.json({ error: { code: "UNAVAILABLE", message: "The report could not be rendered in time." } }, { status: 503, headers: { "cache-control": "no-store" } });
+  }
+  const filename = `${safeSlug(title)}_report_${stamp}.pdf`;
   return new NextResponse(new Uint8Array(pdf), { headers: { "content-type": "application/pdf", "content-disposition": pdfDisposition(filename), "cache-control": "no-store" } });
 }

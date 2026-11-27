@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{FromRequest, Request, State},
     http::{StatusCode, header},
     routing::get,
 };
@@ -31,6 +31,11 @@ struct Input {
     display_name: Option<String>,
     #[serde(default, deserialize_with = "present")]
     avatar_url: Option<Option<String>>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DeleteInput {
+    current_password: String,
 }
 fn present<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
@@ -106,12 +111,55 @@ async fn delete(
     State(state): State<AppState>,
     viewer: Viewer,
     meta: RequestMeta,
+    request: Request,
 ) -> AppResult<(
     StatusCode,
     [(header::HeaderName, axum::http::HeaderValue); 1],
 )> {
+    if viewer.is_admin() || viewer.is_examiner() {
+        return Err(AppError::new(
+            ErrorCode::Forbidden,
+            "Administrators and examiners cannot delete their accounts here. Contact an administrator.",
+        ));
+    }
     guard_demo(&state, &viewer)?;
+    let JsonBody(input) = JsonBody::<DeleteInput>::from_request(request, &state).await?;
+    if !(1..=128).contains(&input.current_password.chars().count()) {
+        return Err(invalid("currentPassword", "Enter your current password."));
+    }
     let mut tx = state.db.begin().await?;
+    let stored: Option<Option<String>> = sqlx::query_scalar(
+        "select password_hash from users where id=$1 and deleted_at is null for update",
+    )
+    .bind(viewer.id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let stored = stored.flatten().ok_or_else(AppError::not_found)?;
+    let (valid, _) = auth::password::verify(&state, input.current_password, Some(stored)).await?;
+    if !valid {
+        return Err(AppError::new(
+            ErrorCode::InvalidCredentials,
+            "That password doesn't match this account.",
+        ));
+    }
+    let active_attempt: bool = sqlx::query_scalar(
+        "select exists(select 1 from attempts where candidate_id=$1 and not sandbox and status='in_progress')",
+    )
+    .bind(viewer.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let open_dispute: bool = sqlx::query_scalar(
+        "select exists(select 1 from disputes where candidate_id=$1 and status='open')",
+    )
+    .bind(viewer.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if active_attempt || open_dispute {
+        return Err(AppError::new(
+            ErrorCode::Conflict,
+            "Close your active exam attempt and resolve open disputes before deleting your account.",
+        ));
+    }
     let result =
         sqlx::query("update users set deleted_at=now() where id=$1 and deleted_at is null")
             .bind(viewer.id)
@@ -124,9 +172,8 @@ async fn delete(
         .bind(viewer.id)
         .execute(&mut *tx)
         .await?;
-    tx.commit().await?;
-    audit(
-        &state.db,
+    kernel::security::audit_tx(
+        &mut tx,
         &meta,
         AuditEntry {
             action: "account.delete",
@@ -136,7 +183,8 @@ async fn delete(
             meta: json!({}),
         },
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok((
         StatusCode::NO_CONTENT,
         [(header::SET_COOKIE, session::clear_cookie(&state.config))],
@@ -172,5 +220,200 @@ mod extractor_rejection_tests {
                 assert_eq!(error.details.unwrap()[0]["path"], path);
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod deletion_tests {
+    use super::*;
+    use kernel::{config::Config, email::LogSender, viewer::Role};
+    use std::sync::Arc;
+
+    fn state(db: sqlx::PgPool) -> AppState {
+        AppState {
+            db,
+            config: Arc::new(Config::from_env().expect("test config")),
+            http: reqwest::Client::new(),
+            email: Arc::new(LogSender),
+            hashing: Arc::new(tokio::sync::Semaphore::new(2)),
+        }
+    }
+
+    fn viewer(id: uuid::Uuid, role: Role) -> Viewer {
+        Viewer {
+            id,
+            session_id: uuid::Uuid::new_v4(),
+            email: "delete@example.test".into(),
+            display_name: "Delete account".into(),
+            role,
+            via_cookie: false,
+        }
+    }
+
+    fn meta() -> RequestMeta {
+        RequestMeta {
+            ip: "127.0.0.1".into(),
+            user_agent: "account-delete-test".into(),
+            request_id: "account-delete-test".into(),
+        }
+    }
+
+    fn deletion_request(password: &str) -> Request {
+        Request::builder()
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                json!({"currentPassword":password}).to_string(),
+            ))
+            .expect("build deletion request")
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn delete_requires_password_and_commits_soft_delete_revocation_and_audit(
+        db: sqlx::PgPool,
+    ) {
+        let state = state(db.clone());
+        let hash = auth::password::hash(&state, "Candidate-password-938!".into())
+            .await
+            .expect("hash password");
+        let user: uuid::Uuid = sqlx::query_scalar(
+            "insert into users(email,display_name,password_hash) values('delete@example.test','Delete account',$1) returning id",
+        )
+        .bind(hash)
+        .fetch_one(&db)
+        .await
+        .expect("insert candidate");
+        let session_id: uuid::Uuid = sqlx::query_scalar(
+            "insert into sessions(user_id,token_hash,expires_at) values($1,digest('delete-session','sha256'),now()+interval '1 hour') returning id",
+        )
+        .bind(user)
+        .fetch_one(&db)
+        .await
+        .expect("insert session");
+
+        let denied = delete(
+            State(state.clone()),
+            viewer(user, Role::User),
+            meta(),
+            deletion_request("wrong-password"),
+        )
+        .await
+        .expect_err("wrong password must be rejected");
+        assert_eq!(denied.code, ErrorCode::InvalidCredentials);
+        let deleted: Option<time::OffsetDateTime> =
+            sqlx::query_scalar("select deleted_at from users where id=$1")
+                .bind(user)
+                .fetch_one(&db)
+                .await
+                .expect("read unchanged user");
+        assert!(deleted.is_none());
+
+        let denied = delete(
+            State(state.clone()),
+            viewer(user, Role::Admin),
+            meta(),
+            deletion_request("Candidate-password-938!"),
+        )
+        .await
+        .expect_err("admins must use the privileged account flow");
+        assert_eq!(denied.code, ErrorCode::Forbidden);
+
+        let owner: uuid::Uuid = sqlx::query_scalar(
+            "insert into users(email,role) values('delete-owner@example.test','examiner') returning id",
+        )
+        .fetch_one(&db)
+        .await
+        .expect("insert exam owner");
+        let exam: uuid::Uuid = sqlx::query_scalar(
+            "insert into exams(owner_id,title,starts_at,ends_at,duration_minutes,total_marks,pass_marks) values($1,'Deletion guard',now()-interval '1 hour',now()+interval '1 hour',30,1,0) returning id",
+        )
+        .bind(owner)
+        .fetch_one(&db)
+        .await
+        .expect("insert exam");
+        let item: uuid::Uuid = sqlx::query_scalar(
+            "insert into exam_items(exam_id,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric) values($1,0,'guard',1,'single','Guard?','[]','[]',1,0,'all_or_nothing','') returning id",
+        )
+        .bind(exam)
+        .fetch_one(&db)
+        .await
+        .expect("insert exam item");
+        let attempt: uuid::Uuid = sqlx::query_scalar(
+            "insert into attempts(exam_id,candidate_id,status,deadline_at,seed,item_order,journal_genesis) values($1,$2,'in_progress',now()+interval '1 hour',1,$3,$4) returning id",
+        )
+        .bind(exam)
+        .bind(user)
+        .bind(vec![item])
+        .bind(vec![0_u8; 32])
+        .fetch_one(&db)
+        .await
+        .expect("insert in-progress attempt");
+        let denied = delete(
+            State(state.clone()),
+            viewer(user, Role::User),
+            meta(),
+            deletion_request("Candidate-password-938!"),
+        )
+        .await
+        .expect_err("active attempt must block deletion");
+        assert_eq!(denied.code, ErrorCode::Conflict);
+        sqlx::query("update attempts set status='submitted' where id=$1")
+            .bind(attempt)
+            .execute(&db)
+            .await
+            .expect("submit fixture attempt");
+        sqlx::query("insert into disputes(attempt_id,item_id,candidate_id,reason) values($1,$2,$3,'Please review this answer.')")
+            .bind(attempt)
+            .bind(item)
+            .bind(user)
+            .execute(&db)
+            .await
+            .expect("insert open dispute");
+        let denied = delete(
+            State(state.clone()),
+            viewer(user, Role::User),
+            meta(),
+            deletion_request("Candidate-password-938!"),
+        )
+        .await
+        .expect_err("open dispute must block deletion");
+        assert_eq!(denied.code, ErrorCode::Conflict);
+        sqlx::query("delete from disputes where attempt_id=$1")
+            .bind(attempt)
+            .execute(&db)
+            .await
+            .expect("close dispute fixture");
+
+        let response = delete(
+            State(state),
+            viewer(user, Role::User),
+            meta(),
+            deletion_request("Candidate-password-938!"),
+        )
+        .await
+        .expect("valid step-up deletion");
+        assert_eq!(response.0, StatusCode::NO_CONTENT);
+        let deleted: Option<time::OffsetDateTime> =
+            sqlx::query_scalar("select deleted_at from users where id=$1")
+                .bind(user)
+                .fetch_one(&db)
+                .await
+                .expect("read deleted user");
+        assert!(deleted.is_some());
+        let revoked: bool =
+            sqlx::query_scalar("select revoked_at is not null from sessions where id=$1")
+                .bind(session_id)
+                .fetch_one(&db)
+                .await
+                .expect("read revoked session");
+        assert!(revoked);
+        let audited: bool = sqlx::query_scalar(
+            "select exists(select 1 from audit_log where action='account.delete' and target_id=$1)",
+        )
+        .bind(user.to_string())
+        .fetch_one(&db)
+        .await
+        .expect("read atomic audit");
+        assert!(audited);
     }
 }

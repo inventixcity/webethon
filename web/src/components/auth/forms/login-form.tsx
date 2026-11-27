@@ -13,7 +13,7 @@ import { Field, PasswordField } from "../field";
 import { SubmitButton } from "../submit-button";
 
 const quietLink =
-  "inline-flex min-h-6 items-center font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase underline-offset-4 hover:text-vermilion-deep hover:underline";
+  "inline-flex min-h-11 items-center font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase underline-offset-4 hover:text-vermilion-deep hover:underline";
 
 /** Roughly how many characters fill the email field, for turning the caret into a position. */
 const FIELD_CHARS = 30;

@@ -61,6 +61,8 @@ export function AuthScreen({ set, screen, ...props }: { set: AuthSetId; screen: 
         name="login-side"
         alt=""
         sizes="(min-width: 768px) 30vw, 0px"
+        // Aim at the pencil and eraser on the front desk, so they stay in frame at any panel height.
+        position="object-[92%_78%]"
         className="absolute inset-0"
         fallback={<DriftField className="size-full" />}
       />

@@ -3,6 +3,7 @@
 pub mod config;
 pub mod crypto;
 pub mod email;
+pub mod email_layout;
 pub mod error;
 pub mod extract;
 pub mod request;

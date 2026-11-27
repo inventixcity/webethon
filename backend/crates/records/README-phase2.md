@@ -1,6 +1,6 @@
 # Records phase 2 facade
 
-`records::registry` exposes `EntityRegistry::from_json(&str)`, `definition(&str)`, the definition and access types, and `SocialConfig`. Missing social configuration is `None` and means all social features are disabled. Present settings default to disabled. Reaction names are unique, 1–32 ASCII lowercase letters, digits, underscores or hyphens, with at most 16 kinds.
+`records::registry` exposes `EntityRegistry::from_json(&str)`, `definition(&str)`, the definition and access types, and `SocialConfig`. Missing social configuration is `None` and means all social features are disabled. Present settings default to disabled. Reaction names are unique, 1â€“32 ASCII lowercase letters, digits, underscores or hyphens, with at most 16 kinds.
 
 `EntityRegistry::definitions()` iterates over borrowed entity names and definitions in ascending name order, for trusted consumers that need registry metadata.
 

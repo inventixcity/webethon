@@ -27,7 +27,6 @@ struct Attempt {
 #[derive(FromRow)]
 struct Item {
     id: Uuid,
-    question_id: Option<Uuid>,
     topic: String,
     kind: String,
     marks: f64,
@@ -60,7 +59,7 @@ async fn exam_analytics(
     if !owned {
         return Err(AppError::not_found());
     }
-    let items: Vec<Item> = sqlx::query_as("select id,question_id,topic,kind,marks::float8 marks,correct,options,position,difficulty,stem from exam_items where exam_id=$1 and not sandbox order by position").bind(id).fetch_all(&s.db).await?;
+    let items: Vec<Item> = sqlx::query_as("select id,topic,kind,marks::float8 marks,correct,options,position,difficulty,stem from exam_items where exam_id=$1 and not sandbox order by position").bind(id).fetch_all(&s.db).await?;
     let attempts: Vec<Attempt> = sqlx::query_as("select a.id,u.display_name candidate,a.total_score::float8 score,a.status from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status in ('submitted','expired')  and a.total_score is not null order by a.started_at desc,a.id").bind(id).fetch_all(&s.db).await?;
     let capped = attempts.len() > 500;
     let ids: Vec<Uuid> = attempts.iter().map(|a| a.id).collect();
@@ -210,7 +209,6 @@ async fn exam_analytics(
         .collect::<Vec<_>>();
     let pairs = collusion(&pair_attempts, &items, &pair_answers);
     let reliability = reliability(&attempts, &items, &answers);
-    update_bank(&s, &items).await?;
     let histogram: Vec<Value> = histogram
         .into_iter()
         .enumerate()
@@ -381,15 +379,6 @@ fn collusion(at: &[Attempt], items: &[Item], ans: &[Answer]) -> Vec<Value> {
     out.truncate(20);
     out
 }
-async fn update_bank(s: &AppState, items: &[Item]) -> AppResult<()> {
-    let questions: Vec<Uuid> = items.iter().filter_map(|i| i.question_id).collect();
-    if questions.is_empty() {
-        return Ok(());
-    }
-    sqlx::query("update questions q set observed_facility=x.facility,observed_count=x.n from (select ei.question_id,count(a.id)::int n,avg(greatest(0,least(1,coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8))) facility from exam_items ei join attempts a on a.exam_id=ei.exam_id and not a.sandbox and a.status in ('submitted','expired')  left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=any($1) and not ei.sandbox group by ei.question_id) x where q.id=x.question_id").bind(questions).execute(&s.db).await?;
-    Ok(())
-}
-
 async fn question_stats(
     State(s): State<AppState>,
     v: ExaminerViewer,
@@ -468,7 +457,6 @@ mod tests {
         let items: Vec<Item> = (0..3)
             .map(|n| Item {
                 id: Uuid::from_u128(n + 1),
-                question_id: None,
                 topic: "logic".into(),
                 kind: "single".into(),
                 marks: 1.,
@@ -504,13 +492,19 @@ mod tests {
         let exam:Uuid=sqlx::query_scalar("insert into exams(owner_id,title,starts_at,ends_at,duration_minutes,total_marks,pass_marks) values($1,'Fixture',now()-interval '1 hour',now()+interval '1 hour',30,1,0) returning id").bind(owner).fetch_one(&db).await.unwrap();
         let question:Uuid=sqlx::query_scalar("insert into questions(owner_id,topic,difficulty,kind,stem,options,correct,marks) values($1,'Fixture',1,'single','Fixture?', '[{\"id\":\"a\",\"text\":\"A\"},{\"id\":\"b\",\"text\":\"B\"}]','[\"a\"]',1) returning id").bind(owner).fetch_one(&db).await.unwrap();
         let item:Uuid=sqlx::query_scalar("insert into exam_items(exam_id,question_id,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric) values($1,$2,0,'Fixture',1,'single','Fixture?','[{\"id\":\"a\",\"text\":\"A\"},{\"id\":\"b\",\"text\":\"B\"}]','[\"a\"]',1,0,'all_or_nothing','') returning id").bind(exam).bind(question).fetch_one(&db).await.unwrap();
-        let real:Uuid=sqlx::query_scalar("insert into attempts(exam_id,candidate_id,status,finalized_by,deadline_at,seed,item_order,journal_genesis,total_score,grading_status) values($1,$2,'submitted','candidate',now(),1,$3,$4,1,'complete') returning id").bind(exam).bind(candidate).bind(vec![item]).bind(vec![0_u8;32]).fetch_one(&db).await.unwrap();
+        let real:Uuid=sqlx::query_scalar("insert into attempts(exam_id,candidate_id,status,finalized_by,deadline_at,submitted_at,seed,item_order,journal_genesis,total_score,grading_status) values($1,$2,'submitted','candidate',now(),now(),1,$3,$4,1,'complete') returning id").bind(exam).bind(candidate).bind(vec![item]).bind(vec![0_u8;32]).fetch_one(&db).await.unwrap();
         sqlx::query("insert into answers(attempt_id,item_id,response,client_seq,auto_marks) values($1,$2,'{\"selected\":[\"a\"]}',1,1)").bind(real).bind(item).execute(&db).await.unwrap();
         sqlx::query("insert into attempts(exam_id,candidate_id,sandbox,status,finalized_by,deadline_at,seed,item_order,journal_genesis,total_score,grading_status) values($1,$2,true,'submitted','candidate',now(),2,$3,$4,1,'complete')").bind(exam).bind(candidate).bind(vec![item]).bind(vec![1_u8;32]).execute(&db).await.unwrap();
+        let foreign_exam:Uuid=sqlx::query_scalar("insert into exams(owner_id,title,starts_at,ends_at,duration_minutes,total_marks,pass_marks) values($1,'Foreign fixture',now()-interval '1 hour',now()+interval '1 hour',30,1,0) returning id").bind(other).fetch_one(&db).await.unwrap();
+        let foreign_candidate:Uuid=sqlx::query_scalar("insert into users(email,display_name) values('analytics-foreign-candidate@example.test','Foreign Candidate') returning id").fetch_one(&db).await.unwrap();
+        sqlx::query("insert into attempts(exam_id,candidate_id,status,finalized_by,deadline_at,submitted_at,seed,item_order,journal_genesis,total_score,grading_status) values($1,$2,'submitted','candidate',now(),now(),3,$3,$4,1,'complete')").bind(foreign_exam).bind(foreign_candidate).bind(Vec::<Uuid>::new()).bind(vec![2_u8;32]).execute(&db).await.unwrap();
         let (session, hash) = kernel::crypto::new_token();
         sqlx::query("insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour')").bind(owner).bind(hash.as_slice()).execute(&db).await.unwrap();
         let (other_session, other_hash) = kernel::crypto::new_token();
         sqlx::query("insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour')").bind(other).bind(other_hash.as_slice()).execute(&db).await.unwrap();
+        let admin:Uuid=sqlx::query_scalar("insert into users(email,role) values('analytics-admin@example.test','admin') returning id").fetch_one(&db).await.unwrap();
+        let (admin_session, admin_hash) = kernel::crypto::new_token();
+        sqlx::query("insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour')").bind(admin).bind(admin_hash.as_slice()).execute(&db).await.unwrap();
         let state = AppState {
             db: db.clone(),
             config: Arc::new(Config::from_env().unwrap()),
@@ -519,6 +513,165 @@ mod tests {
             hashing: Arc::new(tokio::sync::Semaphore::new(2)),
         };
         let app = router().with_state(state);
+        let overview = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/examiner/stats")
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(overview.status(), axum::http::StatusCode::OK);
+        let overview_body = axum::body::to_bytes(overview.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let overview_value: Value = serde_json::from_slice(&overview_body).unwrap();
+        let daily_total: i64 = overview_value["data"]["submissionsPerDay"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|day| day["count"].as_i64().unwrap_or_default())
+            .sum();
+        assert_eq!(
+            daily_total, 1,
+            "foreign examiner activity must not affect this series"
+        );
+        let timeseries = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/exams/{exam}/stats/timeseries?bucket=60"))
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let timeseries_status = timeseries.status();
+        let timeseries_body = axum::body::to_bytes(timeseries.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let timeseries_value: Value = serde_json::from_slice(&timeseries_body).unwrap();
+        assert_eq!(
+            timeseries_status,
+            axum::http::StatusCode::OK,
+            "{timeseries_value}"
+        );
+        assert!(
+            timeseries_value["data"]["buckets"]
+                .as_array()
+                .is_some_and(|buckets| buckets.len() <= 500 && !buckets.is_empty())
+        );
+        assert_eq!(timeseries_value["data"]["bucketSeconds"], 60);
+        let bad_bucket = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/exams/{exam}/stats/timeseries?bucket=9"))
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bad_bucket.status(), axum::http::StatusCode::BAD_REQUEST);
+        let oversized_bucket = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/exams/{exam}/stats/timeseries?bucket=3601"))
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            oversized_bucket.status(),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+        let hidden_timeseries = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/exams/{exam}/stats/timeseries"))
+                    .header("authorization", format!("Bearer {other_session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            hidden_timeseries.status(),
+            axum::http::StatusCode::NOT_FOUND
+        );
+        let examiner_stats = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/examiner/stats")
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(examiner_stats.status(), axum::http::StatusCode::OK);
+        let examiner_stats_body = axum::body::to_bytes(examiner_stats.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let examiner_stats_value: Value = serde_json::from_slice(&examiner_stats_body).unwrap();
+        assert_eq!(
+            examiner_stats_value["data"]["submissionsPerDay"]
+                .as_array()
+                .map(Vec::len),
+            Some(14)
+        );
+        let admin_stats = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/admin-stats/overview")
+                    .header("authorization", format!("Bearer {admin_session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let admin_stats_status = admin_stats.status();
+        let admin_stats_body = axum::body::to_bytes(admin_stats.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let admin_stats_value: Value = serde_json::from_slice(&admin_stats_body).unwrap();
+        assert_eq!(
+            admin_stats_status,
+            axum::http::StatusCode::OK,
+            "{admin_stats_value}"
+        );
+        assert_eq!(
+            admin_stats_value["data"]["signInsPerHour"]
+                .as_array()
+                .map(Vec::len),
+            Some(24)
+        );
+        let hidden_admin_stats = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/admin-stats/overview")
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            hidden_admin_stats.status(),
+            axum::http::StatusCode::NOT_FOUND
+        );
         let response = app
             .clone()
             .oneshot(
@@ -549,15 +702,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(repeat.status(), axum::http::StatusCode::OK);
-        let observed: (i32, f64) = sqlx::query_as(
+        let observed: (Option<i32>, Option<f64>) = sqlx::query_as(
             "select observed_count,observed_facility::float8 from questions where id=$1",
         )
         .bind(question)
         .fetch_one(&db)
         .await
         .unwrap();
-        assert_eq!(observed.0, 1);
-        assert_eq!(observed.1, 1.0);
+        assert_eq!(
+            observed,
+            (Some(0), None),
+            "analytics GET must not update the question bank"
+        );
         let history = app
             .clone()
             .oneshot(

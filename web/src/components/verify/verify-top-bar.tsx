@@ -12,20 +12,20 @@ export function VerifyTopBar() {
   const back = useSmartBack("/");
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-ink bg-paper px-5 md:px-8">
-      <Link href="/" className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] uppercase">
-        <span className="grid size-7 place-items-center bg-ink text-xs font-bold text-paper">{siteConfig.mark}</span>
-        {siteConfig.name}
+    <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 border-b border-ink bg-paper px-3 sm:gap-4 sm:px-5 md:px-8">
+      <Link href="/" className="flex min-h-11 min-w-0 items-center gap-2 font-mono text-[11px] tracking-[0.14em] uppercase sm:gap-3">
+        <span className="grid size-10 shrink-0 place-items-center bg-ink text-xs font-bold text-paper">{siteConfig.mark}</span>
+        <span className="truncate">{siteConfig.name}</span>
       </Link>
-      <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] uppercase sm:gap-5">
-        <Button type="button" variant="ghost" size="sm" onClick={back}>
+      <div className="flex shrink-0 items-center gap-1 font-mono text-[11px] tracking-[0.12em] uppercase sm:gap-3">
+        <Button type="button" variant="ghost" size="icon" aria-label="Go back" onClick={back} className="size-11 sm:w-auto sm:px-3">
           <ArrowLeft aria-hidden="true" />
-          Back
+          <span className="hidden sm:inline">Back</span>
         </Button>
-        <Link href="/login" className="inline-flex min-h-6 items-center py-1 underline underline-offset-4 hover:text-cobalt-deep">
+        <Link href="/login" className="inline-flex min-h-11 items-center px-2 py-1 underline underline-offset-4 hover:text-cobalt-deep">
           Sign in
         </Link>
-        <ThemeToggle className="min-h-6 min-w-6 py-1 uppercase" />
+        <ThemeToggle className="min-h-11 min-w-11 uppercase" />
       </div>
     </header>
   );

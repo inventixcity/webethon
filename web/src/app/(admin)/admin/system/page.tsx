@@ -3,29 +3,27 @@
 import { useEffect, useState } from "react";
 import { BarChart, StatTile } from "@/components/charts";
 import { ErrorPage } from "@/components/errors/error-page";
-import { PageHeading } from "@/components/admin/workspace";
+import { PageHeader } from "@/components/ui/page-header";
 import { adminApi } from "@/features/admin/client";
 import type { AdminStatsOverview } from "@/lib/exam/types";
 
 type SystemData = { database: string; appliedMigrations: number; config: Record<string, boolean>; rateLimits: { activeKeys: number; totalHits: number } };
-type Overview = { activeSessions: number; httpErrorRate: number; http429Rate: number; stats: AdminStatsOverview };
-
 export default function Page() {
   const [data, setData] = useState<SystemData | null>(null);
-  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overview, setOverview] = useState<AdminStatsOverview | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let live = true;
-    const load = () => Promise.all([adminApi<SystemData>("/admin/system"), adminApi<Omit<Overview, "stats">>("/admin/overview"), adminApi<AdminStatsOverview>("/admin-stats/overview")]).then(([system, stats, charts]) => {
-      if (live) { setData(system); setOverview({ ...stats, stats: charts }); setError(null); }
+    const load = () => Promise.all([adminApi<SystemData>("/admin/system"), adminApi<AdminStatsOverview>("/admin-stats/overview")]).then(([system, stats]) => {
+      if (live) { setData(system); setOverview(stats); setError(null); }
     }).catch((cause: unknown) => { if (live) setError(cause); });
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 30_000);
     return () => { live = false; window.clearInterval(timer); };
   }, [retry]);
   return <>
-    <PageHeading title="System" description="Service health and configuration." />
+    <PageHeader eyebrow="Administration" title="System" description="Service health and configuration." className="mb-8" />
     {error && !data ? <ErrorPage code={503} as="div" onRetry={() => setRetry((value) => value + 1)} /> : null}
     {!data && !error ? <p role="status" className="py-8 font-mono text-xs text-ink-muted">LOADING SYSTEM HEALTH</p> : null}
     {data ? <div className="grid gap-8">
@@ -36,13 +34,13 @@ export default function Page() {
         <StatTile label="Rate limit keys · 1h" value={data.rateLimits.activeKeys} />
       </dl>
       <section className="grid gap-6 border border-rule bg-paper-raised p-5 md:grid-cols-2">
-        <BarChart label="Sign-ins per hour · last 24 hours" data={(overview?.stats.signInsPerHour ?? []).map((row) => ({ key: new Date(row.at).toLocaleTimeString([], { hour: "2-digit" }), value: row.count, tone: "info" }))} />
+        <BarChart label="Sign-ins per hour · last 24 hours" data={(overview?.signInsPerHour ?? []).map((row) => ({ key: new Date(row.at).toLocaleTimeString([], { hour: "2-digit" }), value: row.count, tone: "info" }))} />
         <BarChart label="Rate limit activity · last hour" data={[
           { key: "Active keys", value: data.rateLimits.activeKeys, tone: "info" },
           { key: "Hits", value: data.rateLimits.totalHits, tone: "caution" },
         ]} />
-        <BarChart label="Accounts by role" data={(overview?.stats.accountsByRole ?? []).map((row) => ({ key: row.role, value: row.count }))} />
-        <BarChart label="Exams by phase" data={(overview?.stats.examsByPhase ?? []).map((row) => ({ key: row.phase, value: row.count }))} />
+        <BarChart label="Accounts by role" data={(overview?.accountsByRole ?? []).map((row) => ({ key: row.role, value: row.count }))} />
+        <BarChart label="Exams by phase" data={(overview?.examsByPhase ?? []).map((row) => ({ key: row.phase, value: row.count }))} />
       </section>
       <section className="grid gap-3 border-t border-rule pt-5">
         <h2 className="font-mono text-[11px] tracking-[0.12em] uppercase">Service configuration</h2>

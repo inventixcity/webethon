@@ -219,7 +219,52 @@ export function ResultView({ attemptId }: { attemptId: string }) {
         ) : result.breakdown.length === 0 ? (
           <p className="border-t border-rule py-8 text-base text-ink-soft">This exam has no questions to show.</p>
         ) : (
-          <div className="-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0">
+          <>
+          <div className="grid gap-px border-y border-rule md:hidden">
+            {result.breakdown.map((item: BreakdownItem) => {
+              const dispute = disputeByPosition.get(item.position);
+              const voided = dispute?.status === "accepted" && dispute.resolution === "void_item";
+              return (
+                <article key={item.position} className="grid min-w-0 gap-4 border-b border-rule bg-paper-raised p-4 last:border-b-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule pb-3">
+                    <h3 className="font-mono text-[11px] tracking-[0.12em] uppercase">Question {item.position}</h3>
+                    <span className="font-mono text-[11px] tracking-[0.08em] text-ink-muted uppercase">{item.kind} · {item.marks} marks</span>
+                  </div>
+                  <p className="break-words whitespace-pre-wrap">{item.stem}</p>
+                  <dl className="grid min-w-0 gap-3 text-sm">
+                    <div className="grid min-w-0 gap-1">
+                      <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-muted uppercase">Your answer</dt>
+                      <dd className="break-words whitespace-pre-wrap">{answerText(item.response, item.options)}</dd>
+                    </div>
+                    <div className="grid min-w-0 gap-1">
+                      <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-muted uppercase">Correct answer</dt>
+                      <dd className="break-words whitespace-pre-wrap">{correctText(item.correct, item.options)}</dd>
+                    </div>
+                    <div className="grid gap-1">
+                      <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-muted uppercase">Awarded</dt>
+                      <dd>{voided ? "Voided after review" : `${item.awarded} / ${item.marks}`}</dd>
+                    </div>
+                  </dl>
+                  {item.feedback || item.explanation ? (
+                    <div className="grid gap-2 border-t border-rule pt-3 text-sm text-ink-soft">
+                      {item.feedback ? <p className="break-words whitespace-pre-wrap">Feedback: {item.feedback}</p> : null}
+                      {item.explanation ? <p className="break-words whitespace-pre-wrap">Explanation: {item.explanation}</p> : null}
+                    </div>
+                  ) : null}
+                  <QuestionDispute
+                    asCard
+                    dispute={dispute}
+                    itemId={item.itemId}
+                    windowEnd={windowEnd}
+                    now={now}
+                    verifyCode={result.verifyCode}
+                    onRaise={() => item.itemId && setRaising({ itemId: item.itemId, position: item.position })}
+                  />
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
               <caption className="sr-only">Your answers, the correct answers and the marks awarded for each question</caption>
               <thead>
@@ -250,6 +295,7 @@ export function ResultView({ attemptId }: { attemptId: string }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 

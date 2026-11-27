@@ -1,0 +1,15 @@
+:global(html[data-high-contrast="true"]) {
+  --rule: color-mix(in srgb, var(--ink) 42%, transparent);
+}
+
+:global(html[data-larger-targets="true"]) button,
+:global(html[data-larger-targets="true"]) [role="switch"],
+:global(html[data-larger-targets="true"]) input,
+:global(html[data-larger-targets="true"]) select {
+  min-height: 48px;
+}
+
+:global(html[data-dyslexia-font="true"]) body {
+  letter-spacing: 0.025em;
+  line-height: 1.65;
+}

@@ -364,7 +364,7 @@ export function ExamForm({
     : null;
 
   return (
-    <form onSubmit={onSubmit} noValidate className={cn("grid gap-14", className)} aria-labelledby={`${idPrefix}-form`}>
+    <form onSubmit={onSubmit} noValidate className={cn("grid gap-6 pb-32", className)} aria-labelledby={`${idPrefix}-form`}>
       <h2 id={`${idPrefix}-form`} className="sr-only">
         {mode === "create" ? "New exam" : "Exam details"}
       </h2>
@@ -378,7 +378,7 @@ export function ExamForm({
 
       <Section index="01" title="Basics">
         <FieldRow id={`${idPrefix}-title`} label="Title" error={errors.title} errorId={errorId("title")} hint="Shown to candidates in the lobby and on their results.">
-          <Input
+          <Input variant="box"
             id={`${idPrefix}-title`}
             value={values.title}
             maxLength={200}
@@ -408,7 +408,7 @@ export function ExamForm({
       <Section index="02" title="Schedule" note={`Times are in your local time zone (${zoneLabel}). The server stores them as UTC.`}>
         <div className="grid gap-8 md:grid-cols-2">
           <FieldRow id={`${idPrefix}-starts`} label="Starts" error={errors.startsAt} errorId={errorId("startsAt")}>
-            <Input
+            <Input variant="box"
               id={`${idPrefix}-starts`}
               type="datetime-local"
               value={values.startsAt}
@@ -419,7 +419,7 @@ export function ExamForm({
             />
           </FieldRow>
           <FieldRow id={`${idPrefix}-ends`} label="Ends" error={errors.endsAt} errorId={errorId("endsAt")} hint={endsHint}>
-            <Input
+            <Input variant="box"
               id={`${idPrefix}-ends`}
               type="datetime-local"
               value={values.endsAt}
@@ -431,7 +431,7 @@ export function ExamForm({
           </FieldRow>
         </div>
         <FieldRow id={`${idPrefix}-duration`} label="Duration (minutes)" error={errors.durationMinutes} errorId={errorId("durationMinutes")} hint="How long one candidate has once they start. Must fit inside the window.">
-          <Input
+          <Input variant="box"
             id={`${idPrefix}-duration`}
             inputMode="numeric"
             value={values.durationMinutes}
@@ -447,7 +447,7 @@ export function ExamForm({
       <Section index="03" title="Marks">
         <div className="grid gap-8 md:grid-cols-2">
           <FieldRow id={`${idPrefix}-total`} label="Total marks" error={errors.totalMarks} errorId={errorId("totalMarks")} hint="The assigned questions must add up to exactly this.">
-            <Input
+            <Input variant="box"
               id={`${idPrefix}-total`}
               inputMode="decimal"
               value={values.totalMarks}
@@ -458,7 +458,7 @@ export function ExamForm({
             />
           </FieldRow>
           <FieldRow id={`${idPrefix}-pass`} label="Pass marks" error={errors.passMarks} errorId={errorId("passMarks")}>
-            <Input
+            <Input variant="box"
               id={`${idPrefix}-pass`}
               inputMode="decimal"
               value={values.passMarks}
@@ -478,7 +478,7 @@ export function ExamForm({
         <Toggle id={`${idPrefix}-late`} label="Limit late joining" description="When on, candidates can start only for a set number of minutes after the start time. When off, they can start any time in the window." checked={values.lateJoin} disabled={!canEdit("lateJoin")} onChange={(v) => set("lateJoin", v)}>
           {lateEnabled ? (
             <FieldRow id={`${idPrefix}-late-minutes`} label="Minutes after start" error={errors.lateJoinMinutes} errorId={errorId("lateJoinMinutes")}>
-              <Input id={`${idPrefix}-late-minutes`} inputMode="numeric" value={values.lateJoinMinutes} disabled={!canEdit("lateJoinMinutes")} onChange={(event) => set("lateJoinMinutes", event.target.value)} aria-invalid={errors.lateJoinMinutes ? true : undefined} aria-describedby={describedBy(errors.lateJoinMinutes && errorId("lateJoinMinutes"))} className="max-w-xs" />
+              <Input variant="box" id={`${idPrefix}-late-minutes`} inputMode="numeric" value={values.lateJoinMinutes} disabled={!canEdit("lateJoinMinutes")} onChange={(event) => set("lateJoinMinutes", event.target.value)} aria-invalid={errors.lateJoinMinutes ? true : undefined} aria-describedby={describedBy(errors.lateJoinMinutes && errorId("lateJoinMinutes"))} className="max-w-xs" />
             </FieldRow>
           ) : null}
         </Toggle>
@@ -491,7 +491,7 @@ export function ExamForm({
         <Toggle id={`${idPrefix}-fullscreen`} label="Ask for fullscreen and record exits" description="The workspace asks candidates to go fullscreen and records when they leave it." checked={values.fullscreen} disabled={!canEdit("fullscreen")} onChange={(v) => set("fullscreen", v)} />
       </Section>
 
-      <div className="mobile-safe-action sticky bottom-0 z-10 -mx-5 grid gap-4 border-t border-ink bg-paper px-5 py-5 md:-mx-8 md:px-8">
+        <div className="mobile-safe-action sticky bottom-0 z-10 -mx-5 grid gap-4 border border-ink bg-paper-raised px-5 py-4 [padding-bottom:calc(1rem+env(safe-area-inset-bottom))] md:-mx-8 md:px-8">
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" loading={pending} disabled={!dirty && mode === "edit"}>
             {mode === "create" ? "Create draft" : "Save changes"}
@@ -511,7 +511,7 @@ export function ExamForm({
 }
 
 const textareaClass =
-  "min-h-32 w-full resize-y border-0 border-b border-current/30 bg-transparent py-3 font-sans text-base text-current caret-vermilion outline-none transition-colors duration-300 placeholder:text-current/35 hover:border-current/60 focus-visible:border-current disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-vermilion";
+  "min-h-32 w-full resize-y border border-rule bg-paper-raised p-3 font-sans text-base text-ink caret-vermilion outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-vermilion";
 
 function useTimeZone(): string {
   const [zone, setZone] = useState("your local time");
@@ -523,14 +523,13 @@ function useTimeZone(): string {
 
 function Section({ index, title, note, children }: { index: string; title: string; note?: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="grid gap-8 md:grid-cols-12">
-      <header className="grid content-start gap-3 md:col-span-3">
-        <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-          {index} / {title}
-        </p>
-        {note ? <p className="text-sm text-ink-soft">{note}</p> : null}
+    <section aria-label={title} className="grid gap-5 border border-rule bg-paper-raised p-4 sm:p-6">
+      <header className="grid gap-3 border-b border-rule pb-4">
+        <p className="flex items-center gap-2 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase"><span aria-hidden="true" className="size-1.5 bg-vermilion" />{index} / Section</p>
+        <h3 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h3>
+        {note ? <p className="max-w-prose text-sm text-ink-soft">{note}</p> : null}
       </header>
-      <div className="grid gap-8 md:col-span-8 md:col-start-5">{children}</div>
+      <div className="grid gap-6">{children}</div>
     </section>
   );
 }

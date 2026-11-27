@@ -196,8 +196,8 @@ await step("the certificate still verifies after resolution", async () => {
 // ------------------------------------------------------------------ AI grading assistant
 await step("AI suggestion works, or reports NOT_CONFIGURED without a key", async () => {
   const { data: exams } = await request("/exams", { cookie: examiner });
-  const finalExam = exams.items.find((item) => item.title === "Databases Final");
-  check(finalExam, "Databases Final not found (run the demo seed)");
+  const finalExam = exams.items.find((item) => item.title === "Databases Final" || item.title.startsWith("CS-218 Data Structures") || item.title.startsWith("CS-341 Database"));
+  check(finalExam, "no completed demo exam with written answers (run demo-reset)");
   const { data: queue } = await request(`/exams/${finalExam.id}/grading`, { cookie: examiner });
   check(queue.length > 0, "no written answers to suggest for");
   const { status, json } = await request(`/attempts/${queue[0].attemptId}/answers/${queue[0].itemId}/suggest`, { method: "POST", cookie: examiner, expect: [200, 404, 503] });

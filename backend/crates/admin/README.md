@@ -8,7 +8,7 @@ Future mutations must call `security::require_step_up` inside their transaction,
 
 ## User administration
 
-`GET /users` accepts `q`, `role` (`user` or `admin`), `status` (`active`, `suspended`, or `deleted`), `verified`, `mfa`, `sort` (`newest` or `oldest`), `limit` (1�100), and a UUID `cursor`; it returns `{data:[...],meta:{nextCursor}}`. Search is literal and case-insensitive. `GET /users/{id}` returns `{data:{user,sessions,audit,teams,files,entitlements}}`; each child collection is limited to 50, and sessions contain metadata only.
+`GET /users` accepts `q`, `role` (`user` or `admin`), `status` (`active`, `suspended`, or `deleted`), `verified`, `mfa`, `sort` (`newest` or `oldest`), `limit` (1–100), and a UUID `cursor`; it returns `{data:[...],meta:{nextCursor}}`. Search is literal and case-insensitive. `GET /users/{id}` returns `{data:{user,sessions,audit,teams,files,entitlements}}`; each child collection is limited to 50, and sessions contain metadata only.
 
 `POST /users/{id}/suspend`, `/unsuspend`, `/role` (`{role}`), `/sessions/revoke`, `/mfa/reset`, `/delete`, and `/restore` require step-up and return 204. Self actions are rejected. Admin role cannot be granted to an unverified account; configured administrators cannot be demoted through this API. Suspension, deletion, session revocation and MFA reset revoke sessions; restoration does not reinstate them.
 
@@ -30,18 +30,18 @@ Every route requires an administrator: a non-admin gets 403 and an anonymous cal
 
 `GET /api/v1/admin/content` lists rows of one entity across personal and team records, hidden and deleted included. Query parameters:
 
-- `entity` (required, up to 64 characters). Missing or empty → 400. A name that is not in the registry → 404.
-- `q` (optional, up to 200 characters, no control characters). A case-insensitive substring match over the entity's `searchable` fields, the same match as the records list. The search is literal: `%`, `_` and `` match themselves. An entity with no searchable fields → 400.
-- `visibility`: `public` (public rows), `private` (personal private rows, team rows excluded), or `team` (rows with a `teamId`). Any other value → 400. Team rows are always private in the database, so they only match `team`.
+- `entity` (required, up to 64 characters). Missing or empty â†’ 400. A name that is not in the registry â†’ 404.
+- `q` (optional, up to 200 characters, no control characters). A case-insensitive substring match over the entity's `searchable` fields, the same match as the records list. The search is literal: `%`, `_` and `` match themselves. An entity with no searchable fields â†’ 400.
+- `visibility`: `public` (public rows), `private` (personal private rows, team rows excluded), or `team` (rows with a `teamId`). Any other value â†’ 400. Team rows are always private in the database, so they only match `team`.
 - `deleted` (boolean, default `false`): live rows only. `true` returns deleted rows only.
 - `hidden` (boolean, optional): omitted means both. `true` returns hidden rows only, `false` returns visible rows only.
-- `limit` (1-100, default 50) and `cursor` (opaque; take it from `meta.nextCursor`). A bad limit or cursor → 400.
+- `limit` (1-100, default 50) and `cursor` (opaque; take it from `meta.nextCursor`). A bad limit or cursor â†’ 400.
 
 Rows are newest first, sorted by `createdAt desc, id desc`. The response is `{data:[row,...], meta:{nextCursor}}`, and `nextCursor` is null on the last page. A row holds no record data:
 
 `{id, entity, ownerId, teamId, visibility, moderationHidden, deleted, version, createdAt, updatedAt}`
 
-`GET /api/v1/admin/content/{entity}/{id}` returns `{data:{...row, data, history}}`. `data` is the record's JSON as stored. It is the content under review, so it is not key-redacted. `history` is the newest 50 audit rows whose target is this record, sorted by `at desc, id desc`. Each entry is `{id, at, actorId, action, meta}`, and secret-looking keys are removed from `meta`. Unknown entity or record → 404.
+`GET /api/v1/admin/content/{entity}/{id}` returns `{data:{...row, data, history}}`. `data` is the record's JSON as stored. It is the content under review, so it is not key-redacted. `history` is the newest 50 audit rows whose target is this record, sorted by `at desc, id desc`. Each entry is `{id, at, actorId, action, meta}`, and secret-looking keys are removed from `meta`. Unknown entity or record â†’ 404.
 
 `POST /api/v1/admin/content/{entity}/{id}/hide`, `/unhide`, `/delete` and `/restore` take no body and return 204. Each one:
 

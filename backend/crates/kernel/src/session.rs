@@ -22,6 +22,7 @@ pub struct SessionUser {
     pub role: String,
     pub status: String,
     pub expires_at: OffsetDateTime,
+    pub created_at: OffsetDateTime,
     #[sqlx(default)]
     pub renewed: bool,
 }
@@ -52,6 +53,22 @@ impl CookieRefresh {
     }
 }
 
+fn max_lifetime(role: &str) -> time::Duration {
+    if role == "admin" {
+        time::Duration::hours(8)
+    } else {
+        time::Duration::hours(12)
+    }
+}
+
+fn absolute_lifetime(config: &Config, role: &str, email: &str) -> time::Duration {
+    if role == "admin" || config.admin_emails.contains(&email.to_ascii_lowercase()) {
+        time::Duration::hours(8)
+    } else {
+        max_lifetime(role)
+    }
+}
+
 fn ttl(config: &Config) -> time::Duration {
     time::Duration::try_from(config.session_ttl).unwrap_or(time::Duration::days(30))
 }
@@ -64,7 +81,12 @@ pub async fn create(
     request: &RequestMeta,
 ) -> AppResult<(String, Uuid)> {
     let (token, hash) = crypto::new_token();
-    let expires_at = OffsetDateTime::now_utc() + ttl(config);
+    let (role, email): (String, String) =
+        sqlx::query_as("select role,email::text from users where id=$1 and deleted_at is null")
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
+    let expires_at = OffsetDateTime::now_utc() + absolute_lifetime(config, &role, &email);
     let id: Uuid = sqlx::query_scalar(
         "insert into sessions (user_id, token_hash, expires_at, ip, user_agent) values ($1, $2, $3, $4, $5) returning id",
     )
@@ -85,7 +107,7 @@ pub async fn lookup(db: &PgPool, config: &Config, token: &str) -> AppResult<Opti
         return Ok(None);
     };
     let found: Option<SessionUser> = sqlx::query_as(
-        "select s.id as session_id, u.id as user_id, u.email::text as email, u.display_name, u.role, u.status, s.expires_at
+        "select s.id as session_id, u.id as user_id, u.email::text as email, u.display_name, u.role, u.status, s.expires_at, s.created_at
          from sessions s join users u on u.id = s.user_id
          where s.token_hash = $1 and s.revoked_at is null and s.expires_at > now() and u.deleted_at is null",
     )
@@ -96,11 +118,28 @@ pub async fn lookup(db: &PgPool, config: &Config, token: &str) -> AppResult<Opti
     let Some(mut session) = found else {
         return Ok(None);
     };
+    let absolute_expiry =
+        session.created_at + absolute_lifetime(config, &session.role, &session.email);
+    if absolute_expiry <= OffsetDateTime::now_utc() {
+        revoke(db, session.session_id).await?;
+        return Ok(None);
+    }
     let life = ttl(config);
     if session.expires_at - OffsetDateTime::now_utc() < life / 2 {
+        let now = OffsetDateTime::now_utc();
+        let sliding_expiry = now + life;
+        let clamped_expiry = if sliding_expiry < absolute_expiry {
+            sliding_expiry
+        } else {
+            absolute_expiry
+        };
+        // Do not refresh a cookie when the absolute deadline prevents a useful extension.
+        if clamped_expiry <= session.expires_at + time::Duration::minutes(1) {
+            return Ok(Some(session));
+        }
         let expires_at: Option<OffsetDateTime> = sqlx::query_scalar("update sessions set expires_at = $2, last_seen_at = now() where id = $1 and revoked_at is null and expires_at > now() returning expires_at")
             .bind(session.session_id)
-            .bind(OffsetDateTime::now_utc() + life)
+            .bind(clamped_expiry)
             .fetch_optional(db)
             .await?;
         let Some(expires_at) = expires_at else {
@@ -161,4 +200,53 @@ pub fn read_cookie<'a>(headers: &'a axum::http::HeaderMap, name: &str) -> Option
         .filter_map(|pair| pair.trim().split_once('='))
         .find(|(key, _)| *key == name)
         .map(|(_, value)| value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn absolute_lifetimes_are_role_specific() {
+        assert_eq!(max_lifetime("admin"), time::Duration::hours(8));
+        assert_eq!(max_lifetime("examiner"), time::Duration::hours(12));
+        assert_eq!(max_lifetime("user"), time::Duration::hours(12));
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn configured_admin_accounts_get_the_shorter_absolute_lifetime() {
+        let mut config = Config::from_env().expect("test config");
+        config.admin_emails.insert("root@example.test".into());
+        assert_eq!(
+            absolute_lifetime(&config, "user", "ROOT@example.test"),
+            time::Duration::hours(8)
+        );
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn lookup_revokes_a_session_past_its_absolute_deadline(db: PgPool) -> AppResult<()> {
+        let config = Config::from_env().map_err(crate::AppError::internal)?;
+        let user: Uuid = sqlx::query_scalar(
+            "insert into users(email,display_name,role) values('absolute-expiry@example.test','Candidate','user') returning id",
+        )
+        .fetch_one(&db)
+        .await?;
+        let (token, hash) = crypto::new_token();
+        let session_id: Uuid = sqlx::query_scalar(
+            "insert into sessions(user_id,token_hash,created_at,expires_at) values($1,$2,now()-interval '13 hours',now()+interval '1 day') returning id",
+        )
+        .bind(user)
+        .bind(hash.as_slice())
+        .fetch_one(&db)
+        .await?;
+        assert!(lookup(&db, &config, &token).await?.is_none());
+        let revoked: bool =
+            sqlx::query_scalar("select revoked_at is not null from sessions where id=$1")
+                .bind(session_id)
+                .fetch_one(&db)
+                .await?;
+        assert!(revoked);
+        Ok(())
+    }
 }

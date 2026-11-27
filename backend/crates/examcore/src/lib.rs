@@ -444,6 +444,21 @@ pub fn verify_lease(lease: &Lease, attempt_id: Uuid) -> bool {
         )
 }
 
+/// Verify a journal timestamp against its signed lease window. The hash chain separately commits
+/// `written_at_ms`, so a client cannot change that claim without changing the entry hash.
+pub fn verify_lease_write_time(
+    lease: &Lease,
+    attempt_id: Uuid,
+    written_at_ms: i64,
+    elapsed_ms: i64,
+) -> bool {
+    verify_lease(lease, attempt_id)
+        && elapsed_ms >= 0
+        && lease.issued_at <= written_at_ms
+        && Some(written_at_ms) == lease.issued_at.checked_add(elapsed_ms)
+        && written_at_ms <= lease.deadline_at
+}
+
 pub fn unix_ms(t: OffsetDateTime) -> i64 {
     (t.unix_timestamp_nanos() / 1_000_000) as i64
 }
@@ -559,6 +574,20 @@ mod tests {
         let id = Uuid::new_v4();
         let lease = issue_lease(id, now());
         assert!(verify_lease(&lease, id));
+        assert!(verify_lease_write_time(&lease, id, lease.issued_at, 0));
+        assert!(!verify_lease_write_time(&lease, id, lease.issued_at + 1, 0));
+        assert!(!verify_lease_write_time(
+            &lease,
+            id,
+            lease.issued_at - 1,
+            -1
+        ));
+        assert!(!verify_lease_write_time(
+            &lease,
+            id,
+            lease.deadline_at + 1,
+            lease.deadline_at - lease.issued_at + 1
+        ));
         let mut forged = lease.clone();
         forged.deadline_at += 60_000;
         assert!(!verify_lease(&forged, id));

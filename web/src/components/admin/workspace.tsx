@@ -24,7 +24,59 @@ export function PageHeading({ title, description }: { title: string; description
 export function Status({ loading, error, empty, onRetry }: { loading?: boolean; error?: unknown; empty?: boolean; onRetry?: () => void }) { if (loading) return <div className="py-8"><BrailleSpinner label="Loading results" className="text-ink" /></div>; if (error) return <LoadError error={error} onRetry={onRetry}/>; if (empty) return <EmptyState art="empty-results" eyebrow="No results / 00" title="No results found." description="Try changing the filters." />; return null; }
 /** A load failure replaces its section with the error page for its code, inside the admin layout. */
 function LoadError({ error, onRetry }: { error: unknown; onRetry?: () => void }) { const view = describeError(error, { context: "page" }); return <ErrorPage code={view.page} requestId={view.requestId} retryAfterSeconds={view.retryAfterSeconds} onRetry={onRetry} as="div"/>; }
-export function DataTable({ rows, onSelect }: { rows: Row[]; onSelect?: (row: Row) => void }) { const keys = Array.from(new Set(rows.flatMap(row => Object.keys(row)))).filter(k => !["data", "before", "after"].includes(k)).slice(0, 7); return <div className="overflow-x-auto border border-rule"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-paper-sunk"><tr>{keys.map(k => <th scope="col" key={k} className="px-4 py-3 font-semibold">{label(k)}</th>)}{onSelect && <th scope="col" className="px-4 py-3">Details</th>}</tr></thead><tbody>{rows.map((row, i) => <tr key={String(row.id ?? i)} className="border-t border-rule">{keys.map(k => <td key={k} className="max-w-64 break-words px-4 py-3 align-top">{text(row[k])}</td>)}{onSelect && <td className="px-4 py-3"><Button variant="link" onClick={() => onSelect(row)}>View<span className="sr-only"> {text(row.displayName ?? row.email ?? row.id)}</span></Button></td>}</tr>)}</tbody></table></div>; }
+export function DataTable({ rows, onSelect }: { rows: Row[]; onSelect?: (row: Row) => void }) {
+  const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+    .filter((key) => !["data", "before", "after"].includes(key))
+    .slice(0, 7);
+
+  return (
+    <div className="min-w-0 border border-rule">
+      <ul className="divide-y divide-rule md:hidden">
+        {rows.map((row, index) => (
+          <li key={String(row.id ?? index)} className="grid min-w-0 gap-4 p-4">
+            <dl className="grid min-w-0 gap-3">
+              {keys.map((key) => (
+                <div key={key} className="grid min-w-0 gap-1">
+                  <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-muted uppercase">{label(key)}</dt>
+                  <dd className="min-w-0 break-words text-sm">{text(row[key])}</dd>
+                </div>
+              ))}
+            </dl>
+            {onSelect ? (
+              <Button variant="link" className="min-h-11 w-fit justify-start" onClick={() => onSelect(row)}>
+                View details<span className="sr-only"> for {text(row.displayName ?? row.email ?? row.id)}</span>
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[600px] text-left text-sm">
+          <thead className="bg-paper-sunk">
+            <tr>
+              {keys.map((key) => <th scope="col" key={key} className="px-4 py-3 font-semibold">{label(key)}</th>)}
+              {onSelect ? <th scope="col" className="px-4 py-3">Details</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={String(row.id ?? index)} className="border-t border-rule">
+                {keys.map((key) => <td key={key} className="max-w-64 break-words px-4 py-3 align-top">{text(row[key])}</td>)}
+                {onSelect ? (
+                  <td className="px-4 py-3">
+                    <Button variant="link" className="min-h-11" onClick={() => onSelect(row)}>
+                      View<span className="sr-only"> {text(row.displayName ?? row.email ?? row.id)}</span>
+                    </Button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 export function Pagination({ previous, next, onPrevious, onNext }: { previous: boolean; next: boolean; onPrevious: () => void; onNext: () => void }) { return <div className="mt-4 flex gap-2"><Button variant="secondary" size="sm" disabled={!previous} onClick={onPrevious}>Previous</Button><Button variant="secondary" size="sm" disabled={!next} onClick={onNext}>Next</Button></div>; }
 function useDialogFocus() {
   const ref = useRef<HTMLElement>(null);

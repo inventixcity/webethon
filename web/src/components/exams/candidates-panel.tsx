@@ -25,6 +25,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** The enrolment call returns the import result plus one link per new invite (shown once). */
 type EnrollResult = ImportResult & { inviteLinks?: Array<{ email: string; url: string }> };
+type ResetAccessResult = IssuedAccessLink | { sent: true };
 
 type PendingRow = CandidateImportRow & { origin: "manual" | "csv" };
 
@@ -148,8 +149,12 @@ function EnrollmentTable({
     if (!resetting) return;
     setResetPending(true);
     try {
-      const link = await api<IssuedAccessLink>(`/exams/${encodeURIComponent(examId)}/enrollments/${encodeURIComponent(resetting.candidateId)}/reset-access`, { method: "POST" });
-      onIssued(resetting.email, link);
+      const result = await api<ResetAccessResult>(`/exams/${encodeURIComponent(examId)}/enrollments/${encodeURIComponent(resetting.candidateId)}/reset-access`, { method: "POST" });
+      if ("inviteUrl" in result) {
+        onIssued(resetting.email, result);
+      } else {
+        toast.success(`Password reset instructions were sent to ${resetting.email}.`);
+      }
       setResetting(null);
       onChanged();
     } catch (cause) {
@@ -167,7 +172,7 @@ function EnrollmentTable({
   return (
     <>
       <div className="min-w-0">
-        <table className="w-full border-collapse text-left text-sm md:min-w-[760px]">
+        <table className="w-full border-collapse text-left text-sm md:min-w-[760px] max-md:min-w-0 max-md:[table-layout:fixed]">
           <caption className="sr-only">Enrolled candidates for this exam</caption>
           <thead className="max-md:sr-only">
             <tr className="border-b border-ink font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
@@ -181,7 +186,7 @@ function EnrollmentTable({
               </th>
             </tr>
           </thead>
-          <tbody className="max-md:block">
+          <tbody className="max-md:block max-md:w-full">
             {rows.map((row) => (
               <EnrollmentRow
                 key={row.candidateId}
@@ -219,8 +224,8 @@ function EnrollmentTable({
         onCancel={() => setResetting(null)}
         onConfirm={resetAccess}
       >
-        <p>{resetting ? `${resetting.displayName} (${resetting.email}) will be signed out everywhere and their current password stops working.` : ""}</p>
-        <p>You get a new access link to hand over. No email is sent, and the link is shown once.</p>
+        <p>{resetting ? `${resetting.displayName} (${resetting.email}) will receive a password-reset email if their account is already active.` : ""}</p>
+        <p>For a first-time account provisioned for this exam, a one-time invite link is shown to you.</p>
       </ConfirmDialog>
     </>
   );
@@ -290,12 +295,12 @@ function EnrollmentRow({
     : "No attempt";
 
   return (
-    <tr className="border-b border-rule align-top max-md:my-3 max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-4 max-md:border max-md:bg-paper-raised max-md:p-4">
-      <th scope="row" className="py-4 pr-4 font-normal max-md:col-span-2 max-md:p-0">
+    <tr className="border-b border-rule align-top max-md:my-3 max-md:grid max-md:w-full max-md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] max-md:gap-x-4 max-md:gap-y-4 max-md:border max-md:bg-paper-raised max-md:p-4">
+      <th scope="row" className="py-4 pr-4 font-normal max-md:col-span-2 max-md:block max-md:min-w-0 max-md:p-0">
         <span className="block font-medium">{row.displayName}</span>
         <span className="block text-ink-muted break-all">{row.email}</span>
       </th>
-      <td data-label="Status" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
+      <td data-label="Status" className="py-4 pr-4 max-md:block max-md:min-w-0 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {revoked ? (
           <Badge tone="muted">Revoked</Badge>
         ) : (
@@ -304,12 +309,12 @@ function EnrollmentRow({
           </Badge>
         )}
       </td>
-      <td data-label="Account" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
+      <td data-label="Account" className="py-4 pr-4 max-md:block max-md:min-w-0 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <Badge tone={row.activated ? "info" : row.invited ? "dashed" : "muted"} dot={row.activated ? "live" : undefined}>
           {accountLabel}
         </Badge>
       </td>
-      <td data-label="Extra minutes" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
+      <td data-label="Extra minutes" className="py-4 pr-4 max-md:block max-md:min-w-0 max-md:p-0 max-md:before:block max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <div className="grid gap-2">
           <div className="flex items-center gap-2">
             <Label htmlFor={`${idPrefix}-minutes`} className="sr-only">
@@ -336,8 +341,8 @@ function EnrollmentRow({
           ) : null}
         </div>
       </td>
-      <td data-label="Attempt" className="py-4 pr-4 text-ink-soft max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">{attemptLabel}</td>
-      <td data-label="Actions" className="py-4 max-md:col-span-2 max-md:border-t max-md:border-rule max-md:pt-3">
+      <td data-label="Attempt" className="py-4 pr-4 text-ink-soft max-md:block max-md:min-w-0 max-md:p-0 max-md:before:block max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">{attemptLabel}</td>
+      <td data-label="Actions" className="py-4 max-md:col-span-2 max-md:block max-md:min-w-0 max-md:border-t max-md:border-rule max-md:pt-3">
         <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
           {revoked ? (
             <Button variant="secondary" size="sm" onClick={onReenroll}>
@@ -670,7 +675,12 @@ function Enroller({
 
       <div className="flex flex-wrap items-center gap-6">
         <div className="flex items-center gap-3">
-          <Checkbox id={`${idPrefix}-invite`} checked={invite} onCheckedChange={(value) => setInvite(value === true)} />
+          <Checkbox
+            id={`${idPrefix}-invite`}
+            className="size-10"
+            checked={invite}
+            onCheckedChange={(value) => setInvite(value === true)}
+          />
           <Label htmlFor={`${idPrefix}-invite`} className="font-sans text-sm normal-case tracking-normal">
             Send invite emails
           </Label>

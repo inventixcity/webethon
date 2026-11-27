@@ -553,7 +553,7 @@ async fn telemetry_counts_router_outcomes_and_redacts_labels(db: PgPool) {
     ];
     for (request, expected) in requests
         .into_iter()
-        .zip([200, 400, 403, 404, 500, 200, 200])
+        .zip([200, 422, 403, 404, 500, 200, 200])
     {
         assert_eq!(
             app.clone()
@@ -612,7 +612,7 @@ async fn telemetry_counts_router_outcomes_and_redacts_labels(db: PgPool) {
     // Exactly one row per outcome: a count added by an outer or inner layer would show up here.
     assert_eq!(
         rows.iter().map(|r| (r.2, r.3)).collect::<Vec<_>>(),
-        vec![(200, 1), (400, 1), (403, 1), (404, 1), (429, 1), (500, 1)]
+        vec![(200, 1), (403, 1), (404, 1), (422, 1), (429, 1), (500, 1)]
     );
     assert!(rows.iter().any(|r| r.1 == "/api/v1/items/{id}"));
     assert!(rows.iter().any(|r| r.1 == "/api/v1/boom"));

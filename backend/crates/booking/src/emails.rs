@@ -12,6 +12,7 @@ pub fn confirmed(to: &str, resource: &str, zone: Tz, starts: DateTime<Utc>) -> E
         text: format!(
             "Your booking is confirmed.\n\n{resource}\n{when}\n\nTimes are shown in the resource's time zone ({zone}). To cancel, open My bookings before the start time."
         ),
+        reply_to: None,
         html: format!(
             "<p>Your booking is confirmed.</p><p><strong>{}</strong><br>{}</p><p>Times are shown in the resource's time zone ({}). To cancel, open My bookings before the start time.</p>",
             escape(resource),
@@ -29,6 +30,7 @@ pub fn cancelled(to: &str, resource: &str, zone: Tz, starts: DateTime<Utc>) -> E
         text: format!(
             "Your booking has been cancelled.\n\n{resource}\n{when}\n\nYou can book another time in the app."
         ),
+        reply_to: None,
         html: format!(
             "<p>Your booking has been cancelled.</p><p><strong>{}</strong><br>{}</p><p>You can book another time in the app.</p>",
             escape(resource),

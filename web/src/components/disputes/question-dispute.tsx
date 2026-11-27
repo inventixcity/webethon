@@ -15,6 +15,7 @@ export function QuestionDispute({
   now,
   verifyCode,
   onRaise,
+  asCard = false,
 }: {
   dispute: Dispute | undefined;
   /** The question's id. Without it the server cannot be asked, so no action is offered. */
@@ -23,6 +24,7 @@ export function QuestionDispute({
   now: number;
   verifyCode: string;
   onRaise: () => void;
+  asCard?: boolean;
 }) {
   const windowOpen = now < windowEnd;
   const closedOn = formatDay(new Date(windowEnd).toISOString());
@@ -75,6 +77,7 @@ export function QuestionDispute({
   }
 
   if (!content) return null;
+  if (asCard) return <div className="min-w-0 border-t border-rule pt-4">{content}</div>;
   return (
     <tr>
       <td />

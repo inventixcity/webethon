@@ -229,14 +229,17 @@ async fn account_security(db: PgPool) {
         .0,
         StatusCode::BAD_REQUEST
     );
+    // Self-deletion needs the current password (A1-18): without it the request is refused and the account stays.
     let (_, other) = user(&db, &config).await;
-    assert_eq!(
-        call(&app, "DELETE", "/me", Some(&other), None, &[]).await.0,
-        StatusCode::NO_CONTENT
+    assert!(
+        call(&app, "DELETE", "/me", Some(&other), None, &[])
+            .await
+            .0
+            .is_client_error()
     );
     assert_eq!(
         call(&app, "GET", "/me", Some(&other), None, &[]).await.0,
-        StatusCode::UNAUTHORIZED
+        StatusCode::OK
     );
 }
 

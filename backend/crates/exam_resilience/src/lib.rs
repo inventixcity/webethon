@@ -248,7 +248,29 @@ async fn journal(
         return Err(invalid("entries", "Submit between 1 and 200 entries."));
     }
     let mut tx = s.db.begin().await?;
-    let row=sqlx::query("select a.status,a.deadline_at,a.active_device,a.device_changed_at,a.item_order,a.journal_genesis,a.journal_head,a.journal_seq,e.settings from attempts a join exams e on e.id=a.exam_id where a.id=$1 for update of a").bind(id).fetch_optional(&mut *tx).await?.ok_or_else(AppError::not_found)?;
+    // All lifecycle transitions lock exam then attempt, matching result publication.
+    let exam_id: Uuid = sqlx::query_scalar("select exam_id from attempts where id=$1")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(AppError::not_found)?;
+    let exam =
+        sqlx::query("select results_published_at,settings from exams where id=$1 for update")
+            .bind(exam_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(AppError::not_found)?;
+    let row=sqlx::query("select status,deadline_at,active_device,device_changed_at,item_order,journal_genesis,journal_head,journal_seq,grading_status,finalized_by from attempts where id=$1 for update").bind(id).fetch_optional(&mut *tx).await?.ok_or_else(AppError::not_found)?;
+    if exam
+        .try_get::<Option<OffsetDateTime>, _>("results_published_at")?
+        .is_some()
+        || row.try_get::<String, _>("grading_status")? == "complete"
+    {
+        return Err(examcore::conflict(
+            "results_finalized",
+            "Published or finalized results cannot be changed.",
+        ));
+    }
     let now: OffsetDateTime = sqlx::query_scalar("select clock_timestamp()")
         .fetch_one(&mut *tx)
         .await?;
@@ -261,7 +283,7 @@ async fn journal(
     .bind(deadline)
     .fetch_one(&mut *tx)
     .await?;
-    if !row
+    if !exam
         .try_get::<Value, _>("settings")?
         .get("allowOfflineJournal")
         .and_then(Value::as_bool)
@@ -291,10 +313,9 @@ async fn journal(
     let mut chain_broken = false;
     for entry in input.entries {
         let mut reason: Option<&str> = None;
-        let lease_ok = examcore::verify_lease(&entry.lease, id)
-            && entry.elapsed_ms >= 0
-            && Some(entry.written_at) == entry.lease.issued_at.checked_add(entry.elapsed_ms)
-            && changed.is_none_or(|at| entry.lease.issued_at >= examcore::unix_ms(at));
+        let lease_ok =
+            examcore::verify_lease_write_time(&entry.lease, id, entry.written_at, entry.elapsed_ms)
+                && changed.is_none_or(|at| entry.lease.issued_at >= examcore::unix_ms(at));
         if now > deadline + time::Duration::seconds(JOURNAL_RECEIPT_GRACE_SECS)
             // A candidate's own submit is final (the client syncs its journal before submitting).
             // Only a timer expiry keeps the grace window open for entries written before the deadline.
@@ -575,13 +596,31 @@ async fn time_credit(
         ));
     }
     let mut tx = s.db.begin().await?;
-    let row = sqlx::query("select status,deadline_at from attempts where id=$1 for update")
-        .bind(id)
+    sqlx::query("select id from exams where id=$1 for update")
+        .bind(exam_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or_else(AppError::not_found)?;
+    let published: Option<OffsetDateTime> =
+        sqlx::query_scalar("select results_published_at from exams where id=$1")
+            .bind(exam_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let row = sqlx::query(
+        "select status,deadline_at,grading_status from attempts where id=$1 for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(AppError::not_found)?;
     let status: String = row.try_get("status")?;
     let deadline: OffsetDateTime = row.try_get("deadline_at")?;
+    if published.is_some() || row.try_get::<String, _>("grading_status")? == "complete" {
+        return Err(examcore::conflict(
+            "results_finalized",
+            "Published or finalized results cannot be changed.",
+        ));
+    }
     let now: OffsetDateTime = sqlx::query_scalar("select clock_timestamp()")
         .fetch_one(&mut *tx)
         .await?;
@@ -694,6 +733,17 @@ async fn bulk_credit(
             .bind(exam_id)
             .fetch_one(&mut *tx)
             .await?;
+    let published: Option<OffsetDateTime> =
+        sqlx::query_scalar("select results_published_at from exams where id=$1")
+            .bind(exam_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if published.is_some() {
+        return Err(examcore::conflict(
+            "results_finalized",
+            "Published or finalized results cannot be changed.",
+        ));
+    }
     if from < window.0 || to > window.1 {
         return Err(invalid(
             "from",
@@ -710,8 +760,14 @@ async fn bulk_credit(
     let mut seconds_total = 0_i64;
     let mut audit_ids = Vec::new();
     for id in attempts {
-        let row = sqlx::query("select status,deadline_at,started_at,least(deadline_at,coalesce(submitted_at,deadline_at)) stop from attempts where id=$1")
+        let row = sqlx::query("select status,deadline_at,started_at,grading_status,least(deadline_at,coalesce(submitted_at,deadline_at)) stop from attempts where id=$1")
             .bind(id).fetch_one(&mut *tx).await?;
+        if row.try_get::<String, _>("grading_status")? == "complete" {
+            return Err(examcore::conflict(
+                "results_finalized",
+                "Published or finalized results cannot be changed.",
+            ));
+        }
         let status: String = row.try_get("status")?;
         let deadline: OffsetDateTime = row.try_get("deadline_at")?;
         let started: OffsetDateTime = row.try_get("started_at")?;

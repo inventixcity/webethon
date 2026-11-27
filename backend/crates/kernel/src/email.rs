@@ -8,6 +8,8 @@ pub struct Email {
     pub subject: String,
     pub html: String,
     pub text: String,
+    /// Where replies go, when it isn't the sender (e.g. the person who filled the contact form).
+    pub reply_to: Option<String>,
 }
 
 pub type SendFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;

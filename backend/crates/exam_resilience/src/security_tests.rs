@@ -176,6 +176,19 @@ async fn lease_chain_time_bounds_and_replay(db: PgPool) -> TestResult {
         send(&f, vec![overflow]).await?["rejected"][0]["reason"],
         "lease"
     );
+    let mut rehashed_time = good.clone();
+    rehashed_time.written_at += 1;
+    rehashed_time.hash = examcore::b64(&examcore::chain_next(
+        &[7; 32],
+        rehashed_time.seq,
+        rehashed_time.item_id,
+        &rehashed_time.response,
+        rehashed_time.written_at,
+    ));
+    assert_eq!(
+        send(&f, vec![rehashed_time]).await?["rejected"][0]["reason"],
+        "lease"
+    );
     let mut invalid = good.clone();
     invalid.response = json!({"selected":["a","a"]});
     invalid.hash = examcore::b64(&examcore::chain_next(
@@ -226,6 +239,114 @@ async fn lease_chain_time_bounds_and_replay(db: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn published_or_finalized_results_block_journal_and_recovery(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("update attempts set status='expired',deadline_at=now()-interval '1 minute',finalized_by='timer' where id=$1")
+        .bind(f.id).execute(&f.state.db).await?;
+    sqlx::query("update exams set published_at=now(),results_published_at=now() where id=$1")
+        .bind(f.exam)
+        .execute(&f.state.db)
+        .await?;
+    let lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
+    let entry = entry(&f, 1, &[7; 32], lease.clone(), 0, json!({"selected":["a"]}));
+    let (status, body) = request(
+        &f,
+        &format!("/attempts/{}/journal", f.id),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"entries":[entry.clone()]}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    let (status, body) = request(
+        &f,
+        &format!("/attempts/{}/time-credit", f.id),
+        "POST",
+        &f.owner,
+        OLD,
+        json!({"seconds":60,"reason":"Network recovery"}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    let now = examcore::now();
+    let (status, body) = request(
+        &f,
+        &format!("/exams/{}/outage-credit", f.exam),
+        "POST",
+        &f.owner,
+        OLD,
+        json!({"from":stamp(now - time::Duration::minutes(2)),"to":stamp(now - time::Duration::minutes(1)),"reason":"Network recovery"}),
+    ).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    sqlx::query("update exams set results_published_at=null where id=$1")
+        .bind(f.exam)
+        .execute(&f.state.db)
+        .await?;
+    sqlx::query("update attempts set grading_status='complete' where id=$1")
+        .bind(f.id)
+        .execute(&f.state.db)
+        .await?;
+    let (status, body) = request(
+        &f,
+        &format!("/attempts/{}/time-credit", f.id),
+        "POST",
+        &f.owner,
+        OLD,
+        json!({"seconds":60,"reason":"Network recovery"}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    let (status, body) = request(
+        &f,
+        &format!("/attempts/{}/journal", f.id),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"entries":[entry]}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    let now = examcore::now();
+    let (status, body) = request(
+        &f,
+        &format!("/exams/{}/outage-credit", f.exam),
+        "POST",
+        &f.owner,
+        OLD,
+        json!({"from":stamp(now - time::Duration::minutes(2)),"to":stamp(now - time::Duration::minutes(1)),"reason":"Network recovery"}),
+    ).await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"]["details"]["reason"], "results_finalized");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn journal_save_enforces_written_answer_word_limit(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("update exam_items set kind='written',options='[]',max_words=2 where id=$1")
+        .bind(f.item)
+        .execute(&f.state.db)
+        .await?;
+    let lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
+    let entry = entry(&f, 1, &[7; 32], lease, 0, json!({"text":"a b c d"}));
+    let result = send(&f, vec![entry]).await?;
+    assert_eq!(result["accepted"], json!([]));
+    assert_eq!(result["rejected"][0]["reason"], "stale");
+    let count: i64 = sqlx::query_scalar("select count(*) from answers where attempt_id=$1")
+        .bind(f.id)
+        .fetch_one(&f.state.db)
+        .await?;
+    assert_eq!(count, 0);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn late_entries_grace_and_broken_suffix(db: PgPool) -> TestResult {
     let f = fixture(db).await?;
     let deadline = examcore::now() - time::Duration::seconds(1);
@@ -248,7 +369,7 @@ async fn late_entries_grace_and_broken_suffix(db: PgPool) -> TestResult {
     assert_eq!(result["rejected"][0]["reason"], "late");
     assert_eq!(result["rejected"][1]["reason"], "chain");
     assert_eq!(result["seq"], 0);
-    sqlx::query("update attempts set status='in_progress',deadline_at=now()-interval '121 seconds' where id=$1").bind(f.id).execute(&f.state.db).await?;
+    sqlx::query("update attempts set status='in_progress',grading_status='pending',finalized_by=null,deadline_at=now()-interval '121 seconds' where id=$1").bind(f.id).execute(&f.state.db).await?;
     let closed = entry(
         &f,
         1,
@@ -282,9 +403,19 @@ async fn voluntary_submit_is_final_but_timer_expiry_allows_grace_recovery(
     .await?;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["data"]["status"], "submitted");
+    let (journal_status, journal_body) = request(
+        &f,
+        &format!("/attempts/{}/journal", f.id),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"entries":[good.clone()]}),
+    )
+    .await?;
+    assert_eq!(journal_status, StatusCode::CONFLICT);
     assert_eq!(
-        send(&f, vec![good.clone()]).await?["rejected"][0]["reason"],
-        "closed"
+        journal_body["error"]["details"]["reason"],
+        "results_finalized"
     );
     let count: i64 = sqlx::query_scalar("select count(*) from answers where attempt_id=$1")
         .bind(f.id)
@@ -293,7 +424,7 @@ async fn voluntary_submit_is_final_but_timer_expiry_allows_grace_recovery(
     assert_eq!(count, 0);
     // Simulate an expiry shortly after the signed edit; no client timestamp or sleep is needed.
     let deadline = examcore::from_unix_ms(lease.issued_at + 1).ok_or("timestamp")?;
-    sqlx::query("update attempts set status='expired',deadline_at=$2,submitted_at=clock_timestamp(),finalized_by='timer' where id=$1").bind(f.id).bind(deadline).execute(&f.state.db).await?;
+    sqlx::query("update attempts set status='expired',grading_status='pending',deadline_at=$2,submitted_at=clock_timestamp(),finalized_by='timer' where id=$1").bind(f.id).bind(deadline).execute(&f.state.db).await?;
     let result = send(&f, vec![good]).await?;
     assert_eq!(result["accepted"], json!([1]));
     let score: f64 = sqlx::query_scalar("select total_score::float8 from attempts where id=$1")
@@ -419,7 +550,7 @@ async fn post_deadline_journal_requires_offline_proof_and_is_visible(db: PgPool)
     // A fresh attempt with a heartbeat immediately before its deadline cannot use post-deadline grace.
     let lease2 = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
     let deadline2 = examcore::from_unix_ms(lease2.issued_at).ok_or("timestamp")?;
-    sqlx::query("update attempts set deadline_at=$2,journal_seq=0,journal_head=null,status='in_progress' where id=$1")
+    sqlx::query("update attempts set deadline_at=$2,journal_seq=0,journal_head=null,status='in_progress',grading_status='pending',finalized_by=null where id=$1")
         .bind(f.id).bind(deadline2).execute(&f.state.db).await?;
     sqlx::query(
         "insert into attempt_heartbeats(attempt_id,at) values($1,$2 - interval '10 seconds')",

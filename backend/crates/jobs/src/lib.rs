@@ -251,6 +251,8 @@ struct EmailPayload {
     subject: String,
     html: String,
     text: String,
+    #[serde(default)]
+    reply_to: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -395,6 +397,7 @@ impl EmailSender for QueueEmailSender {
                 subject: email.subject.clone(),
                 html: email.html.clone(),
                 text: email.text.clone(),
+                reply_to: email.reply_to.clone(),
             };
             let id = Uuid::new_v4();
             let encrypted = seal(&self.config, id, &payload)?;
@@ -429,6 +432,7 @@ pub fn register_email(
                         subject: p.subject,
                         html: p.html,
                         text: p.text,
+                        reply_to: p.reply_to,
                     })
                     .await?;
                 Ok(Outcome::Done)
@@ -691,6 +695,7 @@ mod tests {
                 subject: "subject".into(),
                 html: "secret".into(),
                 text: "secret".into(),
+                reply_to: None,
             })
             .await
             .unwrap();

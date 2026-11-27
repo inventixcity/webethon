@@ -1117,6 +1117,33 @@ async fn full_unicode_answers_and_scratch_fit_storage_and_nuls_are_validation_er
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn answer_save_rejects_excess_words_with_a_field_error(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("update exam_items set max_words=2 where id=$1")
+        .bind(f.written)
+        .execute(&f.db)
+        .await?;
+    let id = f.start().await?;
+    let (status, body) = f.save(id, f.written, 1, json!({"text":"a b c d"})).await?;
+    // The shared kernel currently maps ValidationFailed to 400; lead owns its 422 correction.
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"]["code"], "VALIDATION_FAILED");
+    assert!(
+        body["error"]["details"]
+            .to_string()
+            .contains("response.text")
+    );
+    let count: i64 =
+        sqlx::query_scalar("select count(*) from answers where attempt_id=$1 and item_id=$2")
+            .bind(id)
+            .bind(f.written)
+            .fetch_one(&f.db)
+            .await?;
+    assert_eq!(count, 0);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn sweep_drains_multiple_batches(db: PgPool) -> TestResult {
     let f = fixture(db).await?;
     sqlx::query("insert into users(email) select 'batch-' || n || '@attempts.test' from generate_series(1,205) n")
@@ -1240,5 +1267,50 @@ async fn blueprint_overlapping_rows_reassign_a_broad_pick(db: PgPool) -> TestRes
             .await?;
     assert!(difficulties.contains(&1));
     assert!(difficulties.contains(&2));
+    Ok(())
+}
+
+#[test]
+fn written_answer_enforces_word_count_even_when_characters_are_short() {
+    let result =
+        validate_response_fields("written", &json!([]), Some(2), &json!({"text":"a b c d"}));
+    let error = result.expect_err("four short words exceed the two-word limit");
+    assert_eq!(error.code, kernel::error::ErrorCode::ValidationFailed);
+    assert!(
+        error
+            .details
+            .is_some_and(|details| details.to_string().contains("response.text"))
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn blueprint_draw_fails_closed_when_every_paper_exceeds_tolerance(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("update exam_items set topic='Other',predicted_facility=0.5 where id=$1")
+        .bind(f.multi)
+        .execute(&f.db)
+        .await?;
+    sqlx::query("update exam_items set predicted_facility=0.0 where id=$1")
+        .bind(f.single)
+        .execute(&f.db)
+        .await?;
+    sqlx::query("update exam_items set predicted_facility=1.0 where id=$1")
+        .bind(f.written)
+        .execute(&f.db)
+        .await?;
+    sqlx::query("insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,true,$2,0.01)")
+        .bind(f.exam).bind(json!([{"topic":"Security","minDifficulty":1,"maxDifficulty":5,"count":1,"marksEach":10.0}]))
+        .execute(&f.db).await?;
+    let mut tx = f.db.begin().await?;
+    let result = start_attempt_tx(&mut tx, f.exam, f.candidate.id, None).await;
+    assert!(result.is_err());
+    let count: i64 = sqlx::query_scalar(
+        "select count(*) from attempts where exam_id=$1 and candidate_id=$2 and not sandbox",
+    )
+    .bind(f.exam)
+    .bind(f.candidate.id)
+    .fetch_one(&f.db)
+    .await?;
+    assert_eq!(count, 0);
     Ok(())
 }

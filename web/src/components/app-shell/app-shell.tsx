@@ -83,7 +83,7 @@ function SidebarBody({ user, home, groups, onNavigate, collapsed = false, onTogg
       <div className={cn("relative flex h-16 shrink-0 items-center gap-2 overflow-hidden border-b border-ink px-4", collapsed ? "justify-center" : "justify-between")}>
         <SidebarTide />
         <Link href={home} onClick={onNavigate} className="relative flex min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-          <span className="grid size-8 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill">{siteConfig.mark}</span>
+          <span className="grid size-10 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill">{siteConfig.mark}</span>
           {!collapsed && <span className="truncate font-mono text-[12px] tracking-[0.1em] uppercase">{siteConfig.name}</span>}
         </Link>
         {!collapsed && <Badge tone="chip" className="relative h-7 px-2">{ROLE_LABEL[user.role] ?? "Account"}</Badge>}
@@ -354,29 +354,29 @@ function Drawer({ open, onClose, children }: { open: boolean; onClose: () => voi
 
 function TopBar({ crumbs, home, onMenu }: { crumbs: Crumb[]; home: string; onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-rule bg-paper px-5 md:px-8">
-      <Button type="button" variant="secondary" size="icon" aria-label="Open menu" aria-haspopup="dialog" onClick={onMenu} className="size-10 shrink-0 lg:hidden">
+    <header className="sticky top-0 z-20 flex min-h-14 items-center gap-2 border-b border-rule bg-paper px-3 pt-[env(safe-area-inset-top)] sm:gap-4 sm:px-5 md:px-8">
+      <Button type="button" variant="secondary" size="icon" aria-label="Open menu" aria-haspopup="dialog" onClick={onMenu} className="size-11 shrink-0 lg:hidden">
         <Menu aria-hidden="true" className="size-5" />
       </Button>
-      <Link href={home} aria-label={siteConfig.name} className="grid size-8 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill lg:hidden">
+      <Link href={home} aria-label={siteConfig.name} className="grid size-11 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill lg:hidden">
         {siteConfig.mark}
       </Link>
 
-      <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
-        <ol className="flex min-w-0 items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
+      <nav aria-label="Breadcrumb" className="min-w-0 flex-1 overflow-hidden">
+        <ol className="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-[11px] tracking-[0.08em] text-ink-muted uppercase sm:gap-2 sm:tracking-[0.12em]">
           {crumbs.map((crumb, index) => {
             const last = index === crumbs.length - 1;
             // On a phone the trail keeps only its last two steps, so the current page always shows.
             const hidden = index < crumbs.length - 2;
             return (
-              <li key={`${index}-${"label" in crumb ? crumb.label : crumb.examId}`} className={cn("flex min-w-0 items-center gap-2", hidden && "hidden sm:flex")}>
+              <li key={`${index}-${"label" in crumb ? crumb.label : crumb.examId}`} className={cn("flex min-w-0 items-center gap-1 sm:gap-2", hidden && "hidden sm:flex", last && "flex-1")}>
                 {last ? (
-                  <span aria-current="page" className="min-w-0 max-w-[36ch] truncate font-semibold text-ink">
+                  <span aria-current="page" title={"label" in crumb ? crumb.label : undefined} className="block min-w-0 max-w-full truncate whitespace-nowrap font-semibold text-ink">
                     {"label" in crumb ? crumb.label : <ExamTitle examId={crumb.examId} />}
                   </span>
                 ) : (
                   <>
-                    <Link href={crumb.href ?? home} className="inline-flex min-h-6 shrink-0 items-center py-1 underline-offset-4 transition-colors duration-(--duration-fast) hover:text-ink hover:underline">
+                    <Link href={crumb.href ?? home} className="inline-flex min-h-11 min-w-11 max-w-[min(42vw,12rem)] shrink-0 items-center justify-center truncate px-2 py-1 underline-offset-4 transition-colors duration-(--duration-fast) hover:text-ink hover:underline">
                       {"label" in crumb ? crumb.label : <ExamTitle examId={crumb.examId} />}
                     </Link>
                     <span aria-hidden="true" className="shrink-0">/</span>

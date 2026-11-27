@@ -246,7 +246,7 @@ export function ExamLobby({ examId }: { examId: string }) {
             checked={agreed}
             onCheckedChange={(value) => setAgreed(value === true)}
             disabled={starting}
-            className="mt-0.5"
+            className="mt-0.5 size-10 shrink-0"
           />
           <Label htmlFor={checkId} className="cursor-pointer text-base leading-snug tracking-normal normal-case">
             I have read the instructions.

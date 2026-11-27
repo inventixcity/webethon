@@ -43,7 +43,11 @@ export function ActivityCharts({ examId, snapshot }: { examId: string; snapshot:
         <svg viewBox="0 0 400 170" className="h-auto w-full overflow-visible text-ink" role="group" aria-labelledby="exam-activity-svg-title exam-activity-svg-desc">
           <title id="exam-activity-svg-title">Exam activity per minute</title>
           <desc id="exam-activity-svg-desc">Lines show answers saved, active candidates, connection drops and submissions for each minute bucket.</desc>
-          {[0, 1, 2, 3].map((step) => <g key={step}><line x1="20" x2="380" y1={20 + step * 40} y2={20 + step * 40} stroke="currentColor" opacity="0.15"/><text x="0" y={24 + step * 40} className="fill-ink-muted font-mono text-[9px]">{Math.round(max * (1 - step / 3))}</text></g>)}
+          {[0, 1, 2, 3].map((step) => {
+            const tick = max * (1 - step / 3);
+            const label = max < 10 ? Number(tick.toFixed(1)) : Math.round(tick);
+            return <g key={step}><line x1="20" x2="380" y1={20 + step * 40} y2={20 + step * 40} stroke="currentColor" opacity="0.15"/><text x="0" y={24 + step * 40} className="fill-ink-muted font-mono text-[9px]">{label}</text></g>;
+          })}
           {series.map(({ key, label, color }) => <path key={key} d={chartPath(key)} fill="none" stroke={color} strokeWidth="2" className="transition-[d] duration-300 motion-reduce:transition-none"><title>{label}</title></path>)}
           {points.map((point, index) => <circle key={point.at} cx={x(index)} cy={y(point.answersSaved)} r="3" fill="var(--color-ink)" tabIndex={0} role="img" aria-label={`${new Date(point.at).toLocaleTimeString()}: ${point.answersSaved} answers, ${point.activeCandidates} active, ${point.connectionDrops} drops, ${point.submissions} submissions`}><title>{new Date(point.at).toLocaleTimeString()}: {point.answersSaved} saved, {point.activeCandidates} active, {point.connectionDrops} drops, {point.submissions} submitted</title></circle>)}
         </svg>

@@ -14,6 +14,7 @@ workspace = true
 
 [dependencies]
 examcore.workspace = true
+exam_settings.workspace = true
 exam_questions.workspace = true
 exam_authoring.workspace = true
 exam_enroll.workspace = true

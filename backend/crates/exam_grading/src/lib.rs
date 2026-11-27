@@ -10,7 +10,7 @@ use examcore::{
 };
 use kernel::{
     request::RequestMeta,
-    security::{AuditEntry, audit},
+    security::{AuditEntry, audit_tx},
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -76,11 +76,11 @@ async fn grading_list(
            from attempts where exam_id=$1 and not sandbox and status <> 'in_progress'
          )
          select t.id as attempt_id, i.id as item_id, s.script_no::int as script_no,
-                i.position, i.stem, i.rubric, i.marks::float8 as marks,
+                i.position, i.stem, i.rubric, attempt_item_max_marks(t.id,i.id) as marks,
                 coalesce(a.response->>'text','') as answer_text,
                 a.manual_marks::float8 as manual_marks, coalesce(a.feedback, '') as feedback, a.graded_at
          from scripts s join attempts t on t.id=s.id
-         join exam_items i on i.exam_id=t.exam_id and i.id=any(t.item_order) and i.kind='written'
+         join exam_items i on i.exam_id=t.exam_id and i.id=any(t.item_order) and i.kind='written' and not i.voided
          left join answers a on a.attempt_id=t.id and a.item_id=i.id
          where t.exam_id=$1 and ($2::boolean is not true or a.manual_marks is null)
            and ($3::uuid is null or i.id=$3)
@@ -165,10 +165,10 @@ async fn grade_answer(
         return Err(AppError::not_found());
     }
     let marks_max: Option<f64> = sqlx::query_scalar(
-        "select marks::float8 from exam_items where id=$1 and exam_id=$2 and kind='written'",
+        "select attempt_item_max_marks(a.id,i.id) from exam_items i join attempts a on a.exam_id=i.exam_id where i.id=$1 and a.id=$2 and i.kind='written' and i.id=any(a.item_order) and not i.voided",
     )
     .bind(item_id)
-    .bind(exam_id)
+    .bind(attempt_id)
     .fetch_optional(&mut *tx)
     .await?;
     let maximum = marks_max.ok_or_else(AppError::not_found)?;
@@ -189,9 +189,8 @@ async fn grade_answer(
     sqlx::query("insert into answers(attempt_id,item_id,response,client_seq,manual_marks,feedback,graded_by,graded_at) values ($1,$2,'{\"text\":\"\"}'::jsonb,0,$3,$4,$5,now()) on conflict(attempt_id,item_id) do update set manual_marks=excluded.manual_marks,feedback=excluded.feedback,graded_by=excluded.graded_by,graded_at=excluded.graded_at")
         .bind(attempt_id).bind(item_id).bind(input.marks).bind(&input.feedback).bind(viewer.id).execute(&mut *tx).await?;
     autograde_attempt(&mut tx, attempt_id).await?;
-    tx.commit().await?;
-    audit(
-        &state.db,
+    audit_tx(
+        &mut tx,
         &meta,
         AuditEntry {
             action: "grading.grade",
@@ -201,7 +200,8 @@ async fn grade_answer(
             meta: json!({"itemId": item_id, "before": before, "after": input.marks}),
         },
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     let response = sqlx::query("select i.position,i.stem,i.rubric,i.marks::float8 as marks,a.response->>'text' as answer_text,a.manual_marks::float8 as manual_marks,a.feedback,a.graded_at from exam_items i join answers a on a.item_id=i.id where i.id=$1 and a.attempt_id=$2")
         .bind(item_id).bind(attempt_id).fetch_one(&state.db).await?;
     let text: String = response
@@ -241,11 +241,10 @@ async fn results(
 async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
     let exam = sqlx::query("select total_marks::float8 as total_marks,pass_marks::float8 as pass_marks,results_published_at,ends_at,status from exams where id=$1 and deleted_at is null")
         .bind(exam_id).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
-    let total_marks: f64 = sqlx::query_scalar("select coalesce(sum(marks),0)::float8 from exam_items where exam_id=$1 and not sandbox and not voided")
-        .bind(exam_id).fetch_one(&state.db).await?;
+    let total_marks: f64 = exam.try_get("total_marks")?;
     let pass_marks: f64 = exam.try_get("pass_marks")?;
     let published: Option<time::OffsetDateTime> = exam.try_get("results_published_at")?;
-    let rows = sqlx::query("select a.id as attempt_id,a.candidate_id,u.display_name,u.email,a.status,a.auto_score::float8 as auto_score,a.manual_score::float8 as manual_score,a.total_score::float8 as total_score,case when a.total_score is null then null else round((a.total_score::numeric / nullif($2::numeric,0) * 100),2)::float8 end as percent,case when a.total_score is null then null else a.total_score >= $3 end as passed,a.grading_status,a.review_priority,a.submitted_at from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox order by a.created_at,a.id")
+    let rows = sqlx::query("select a.id as attempt_id,a.candidate_id,u.display_name,u.email,a.status,a.auto_score::float8 as auto_score,a.manual_score::float8 as manual_score,a.total_score::float8 as total_score,case when a.total_score is null then null else round((a.total_score::numeric / nullif((select coalesce(sum(attempt_item_max_marks(a.id,i.id)),0)::numeric from exam_items i where i.exam_id=a.exam_id and i.id=any(a.item_order) and not i.voided),0) * 100),2)::float8 end as percent,case when a.total_score is null then null else a.total_score >= $3 end as passed,a.grading_status,a.review_priority,a.submitted_at from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox order by a.created_at,a.id")
         .bind(exam_id).bind(total_marks).bind(pass_marks).fetch_all(&state.db).await?;
     let mut conn = state.db.acquire().await?;
     let blockers = publication_blockers(&mut conn, exam_id).await?;
@@ -318,32 +317,33 @@ async fn publish_results(
     }
     sqlx::query("update exams set results_published_at=coalesce(results_published_at,now()),updated_at=now() where id=$1")
         .bind(exam_id).execute(&mut *tx).await?;
-    let exam = sqlx::query("select title,pass_marks::float8 as pass_marks,total_marks::float8 as total_marks from exams where id=$1")
-        .bind(exam_id).fetch_one(&mut *tx).await?;
+    let exam = sqlx::query("select title,pass_marks::float8 as pass_marks from exams where id=$1")
+        .bind(exam_id)
+        .fetch_one(&mut *tx)
+        .await?;
     let exam_title: String = exam.try_get("title")?;
     let pass_marks: f64 = exam.try_get("pass_marks")?;
-    let total_marks: f64 = exam.try_get("total_marks")?;
-    let candidates = sqlx::query("select a.id,a.total_score::float8 as total_score,a.candidate_id,u.display_name from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status<>'in_progress'")
+    let candidates = sqlx::query("select a.id,a.total_score::float8 as total_score,a.candidate_id,u.display_name,(select coalesce(sum(attempt_item_max_marks(a.id,i.id)),0)::float8 from exam_items i where i.exam_id=a.exam_id and i.id=any(a.item_order) and not i.voided) as effective_total from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status<>'in_progress'")
         .bind(exam_id).fetch_all(&mut *tx).await?;
     let issued_count = candidates.len();
     for candidate in candidates {
         let attempt_id: Uuid = candidate.try_get("id")?;
         let score: f64 = candidate.try_get("total_score")?;
         let display_name: String = candidate.try_get("display_name")?;
+        let effective_total: f64 = candidate.try_get("effective_total")?;
         issue_certificate(
             &mut tx,
             attempt_id,
             &exam_title,
             &display_name,
             score,
-            total_marks,
+            effective_total,
             pass_marks,
         )
         .await?;
     }
-    tx.commit().await?;
-    audit(
-        &state.db,
+    audit_tx(
+        &mut tx,
         &meta,
         AuditEntry {
             action: "results.publish",
@@ -353,7 +353,8 @@ async fn publish_results(
             meta: json!({"attempts":issued_count}),
         },
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok(examcore::ok(results_value(&state, exam_id).await?))
 }
 
@@ -363,7 +364,7 @@ pub async fn issue_certificate(
     exam_title: &str,
     display_name: &str,
     score: f64,
-    total_marks: f64,
+    _total_marks: f64,
     pass_marks: f64,
 ) -> AppResult<String> {
     let existing = sqlx::query(
@@ -383,6 +384,14 @@ pub async fn issue_certificate(
         return Ok(verify_code);
     }
 
+    let effective_total: Option<f64> = sqlx::query_scalar(
+        "select coalesce((select sum(attempt_item_max_marks(a.id,i.id)) from exam_items i where i.exam_id=a.exam_id and i.id=any(a.item_order) and not i.voided),0)::float8 from attempts a where a.id=$1",
+    )
+    .bind(attempt_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let effective_total = effective_total.ok_or_else(AppError::not_found)?;
+
     let name_parts: Vec<&str> = display_name.split_whitespace().collect();
     let first_initial = name_parts
         .first()
@@ -396,7 +405,7 @@ pub async fn issue_certificate(
         "certificateId": verify_code,
         "examTitle": exam_title,
         "candidate": format!("{first_initial}. {last_initial}****{last_character}"),
-        "percent": if total_marks > 0.0 { round2(score / total_marks * 100.0) } else { 0.0 },
+        "percent": if effective_total > 0.0 { round2(score / effective_total * 100.0) } else { 0.0 },
         "passed": score >= pass_marks,
         "issuedAt": examcore::ts(issued_at),
         "issuer": "Inventix Invigil"
@@ -462,9 +471,8 @@ async fn unpublish_results(
         .await?;
     sqlx::query("update result_certificates set revoked_at=coalesce(revoked_at,now()) where attempt_id in (select id from attempts where exam_id=$1)")
         .bind(exam_id).execute(&mut *tx).await?;
-    tx.commit().await?;
-    audit(
-        &state.db,
+    audit_tx(
+        &mut tx,
         &meta,
         AuditEntry {
             action: "results.unpublish",
@@ -474,7 +482,8 @@ async fn unpublish_results(
             meta: json!({}),
         },
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok(examcore::ok(results_value(&state, exam_id).await?))
 }
 
@@ -561,7 +570,7 @@ async fn candidate_result(
     let row = sqlx::query("select a.exam_id,a.candidate_id,a.total_score::float8 as total_score,a.submitted_at,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,e.settings,c.verify_code from attempts a join exams e on e.id=a.exam_id join result_certificates c on c.attempt_id=a.id where a.id=$1 and a.sandbox=false and a.candidate_id=$2 and e.results_published_at is not null and c.revoked_at is null")
         .bind(attempt_id).bind(viewer.id).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
     let total_score: f64 = row.try_get("total_score")?;
-    let total_marks: f64 = sqlx::query_scalar("select coalesce(sum(i.marks),0)::float8 from exam_items i join attempts a on a.exam_id=i.exam_id and i.id=any(a.item_order) where a.id=$1 and not i.voided")
+    let total_marks: f64 = sqlx::query_scalar("select coalesce(sum(attempt_item_max_marks(a.id,i.id)),0)::float8 from exam_items i join attempts a on a.exam_id=i.exam_id and i.id=any(a.item_order) where a.id=$1 and not i.voided")
         .bind(attempt_id).fetch_one(&state.db).await?;
     let pass_marks: f64 = row.try_get("pass_marks")?;
     let published_at: time::OffsetDateTime = row.try_get("results_published_at")?;
@@ -571,7 +580,7 @@ async fn candidate_result(
         .and_then(Value::as_bool)
         .unwrap_or(false)
     {
-        let answers = sqlx::query("select i.id as item_id,i.position,i.kind,i.stem,i.marks::float8 as marks,i.voided,a.response,i.correct,i.options,i.explanation,a.feedback,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
+        let answers = sqlx::query("select i.id as item_id,i.position,i.kind,i.stem,case when i.voided then 0::float8 else attempt_item_max_marks(t.id,i.id) end as marks,i.voided,a.response,i.correct,i.options,i.explanation,a.feedback,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
             .bind(attempt_id).fetch_all(&state.db).await?;
         Some(answers.into_iter().map(|answer| {
             let position: i32 = answer.try_get("position")?;
@@ -631,7 +640,7 @@ async fn attempt_report(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let items = if should_include_attempt_report_breakdown(is_owner, show_breakdown) {
-        let questions = sqlx::query("select i.position,i.stem,i.marks::float8 as marks,i.voided,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks,a.feedback from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
+        let questions = sqlx::query("select i.position,i.stem,case when i.voided then 0::float8 else attempt_item_max_marks(t.id,i.id) end as marks,i.voided,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks,a.feedback from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
             .bind(attempt_id).fetch_all(&state.db).await?;
         questions.into_iter().map(|answer| {
             let position: i32 = answer.try_get("position")?;
@@ -647,7 +656,7 @@ async fn attempt_report(
     };
     let display_name: String = row.try_get("display_name")?;
     let title: String = row.try_get("title")?;
-    let total_marks: f64 = sqlx::query_scalar("select coalesce(sum(i.marks),0)::float8 from exam_items i join attempts a on a.exam_id=i.exam_id and i.id=any(a.item_order) where a.id=$1 and not i.voided")
+    let total_marks: f64 = sqlx::query_scalar("select coalesce(sum(attempt_item_max_marks(a.id,i.id)),0)::float8 from exam_items i join attempts a on a.exam_id=i.exam_id and i.id=any(a.item_order) where a.id=$1 and not i.voided")
         .bind(attempt_id).fetch_one(&state.db).await?;
     let pass_marks: f64 = row.try_get("pass_marks")?;
     let total_score: Option<f64> = row.try_get("total_score")?;
@@ -742,11 +751,12 @@ async fn exam_report(
 /// Recalculate an attempt's objective and written scores from its frozen paper.
 /// Safe to call repeatedly; manual marks are preserved and objective marks are replaced.
 pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> AppResult<()> {
-    // item_marks is optional in older deployments; the migration adds it for new installs.
-    let attempt = sqlx::query("select item_order, coalesce(item_marks, '{}'::jsonb) as item_marks from attempts where id=$1")
-        .bind(attempt_id).fetch_optional(&mut *conn).await?.ok_or_else(AppError::not_found)?;
+    let attempt = sqlx::query("select item_order from attempts where id=$1")
+        .bind(attempt_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(AppError::not_found)?;
     let order: Vec<Uuid> = attempt.try_get("item_order")?;
-    let item_marks: Value = attempt.try_get("item_marks")?;
 
     let mut auto_score = 0.0_f64;
     let mut manual_score = 0.0_f64;
@@ -756,6 +766,7 @@ pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> App
     for item_id in &order {
         let row = sqlx::query(
             "select i.kind, i.correct, i.options, i.marks::float8 as marks, \
+                    attempt_item_max_marks($1, i.id) as effective_marks, \
                     i.negative_marks::float8 as negative_marks, i.multi_rule, i.voided, i.accepted_alternatives, \
                     a.response, a.manual_marks::float8 as manual_marks \
              from exam_items i left join answers a on a.item_id = i.id and a.attempt_id = $1 \
@@ -777,13 +788,13 @@ pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> App
                 .await?;
             continue;
         }
-        let marks_for_attempt = item_marks.get(item_id.to_string()).and_then(Value::as_f64);
+        let effective_marks: Option<f64> = row.try_get("effective_marks")?;
         let manual_marks: Option<f64> = row.try_get("manual_marks")?;
         if kind == "written" {
             written_count += 1;
             if let Some(marks) = manual_marks {
                 graded_count += 1;
-                let maximum = marks_for_attempt.unwrap_or(row.try_get("marks")?);
+                let maximum = effective_marks.unwrap_or(row.try_get("marks")?);
                 manual_score += marks.min(maximum);
             }
             continue;
@@ -819,7 +830,7 @@ pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> App
             kind,
             correct: scoring_correct,
             option_count,
-            marks: marks_for_attempt.unwrap_or(row.try_get("marks")?),
+            marks: effective_marks.unwrap_or(row.try_get("marks")?),
             negative_marks: row.try_get("negative_marks")?,
             multi_rule: row.try_get("multi_rule")?,
         };
@@ -843,8 +854,8 @@ pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> App
         "pending"
     };
     let total_score = round2((auto_score + manual_score).max(0.0));
-    let effective_total: f64 = sqlx::query_scalar("select coalesce(sum(marks),0)::float8 from exam_items where exam_id=(select exam_id from attempts where id=$1) and id=any($2) and not voided")
-        .bind(attempt_id).bind(&order).fetch_one(&mut *conn).await?;
+    let effective_total: f64 = sqlx::query_scalar("select coalesce(sum(attempt_item_max_marks(a.id,i.id)),0)::float8 from attempts a join exam_items i on i.exam_id=a.exam_id and i.id=any(a.item_order) where a.id=$1 and not i.voided")
+        .bind(attempt_id).fetch_one(&mut *conn).await?;
     let adjusted_total = if effective_total > 0.0 {
         total_score.min(effective_total)
     } else {
@@ -949,6 +960,73 @@ mod tests {
         let second: (f64, f64, String) = sqlx::query_as("select auto_score::float8,total_score::float8,grading_status from attempts where id=$1")
             .bind(attempt_id).fetch_one(&db).await?;
         assert_eq!(first, second);
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn blueprint_override_controls_score_cap_and_effective_total(
+        db: sqlx::PgPool,
+    ) -> Result<(), sqlx::Error> {
+        let owner: Uuid = sqlx::query_scalar("insert into users(email,role) values('blueprint-grade-owner@example.test','examiner') returning id").fetch_one(&db).await?;
+        let candidate: Uuid = sqlx::query_scalar("insert into users(email) values('blueprint-grade-candidate@example.test') returning id").fetch_one(&db).await?;
+        let exam_id: Uuid = sqlx::query_scalar("insert into exams(owner_id,title,starts_at,ends_at,duration_minutes,total_marks,pass_marks) values($1,'Blueprint grading',now()-interval '1 day',now()+interval '1 day',60,5,3) returning id").bind(owner).fetch_one(&db).await?;
+        let item_id: Uuid = sqlx::query_scalar("insert into exam_items(exam_id,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule) values($1,0,'test',1,'single','Choose','[{\"id\":\"a\"}]','[\"a\"]',1,0,'all_or_nothing') returning id").bind(exam_id).fetch_one(&db).await?;
+        let marks = json!({item_id.to_string(): 5.0});
+        let attempt_id: Uuid = sqlx::query_scalar("insert into attempts(exam_id,candidate_id,status,finalized_by,deadline_at,seed,item_order,item_marks,journal_genesis) values($1,$2,'submitted','candidate',now(),1,$3,$4,$5) returning id")
+            .bind(exam_id).bind(candidate).bind(vec![item_id]).bind(marks).bind(vec![0_u8;32]).fetch_one(&db).await?;
+        sqlx::query("insert into answers(attempt_id,item_id,response,client_seq) values($1,$2,'{\"selected\":[\"a\"]}',1)").bind(attempt_id).bind(item_id).execute(&db).await?;
+        let mut tx = db.begin().await?;
+        autograde_attempt(&mut tx, attempt_id)
+            .await
+            .map_err(|_| sqlx::Error::Protocol("autograde failed".into()))?;
+        tx.commit().await?;
+        let (score,total):(f64,f64)=sqlx::query_as("select total_score::float8,(select sum(attempt_item_max_marks(a.id,i.id)) from exam_items i where i.exam_id=a.exam_id and i.id=any(a.item_order) and not i.voided)::float8 from attempts a where a.id=$1").bind(attempt_id).fetch_one(&db).await?;
+        assert_eq!((score, total), (5.0, 5.0));
+        let mut tx = db.begin().await?;
+        issue_certificate(
+            &mut tx,
+            attempt_id,
+            "Blueprint grading",
+            "Candidate",
+            score,
+            1.0,
+            3.0,
+        )
+        .await
+        .map_err(|_| sqlx::Error::Protocol("certificate issue failed".into()))?;
+        tx.commit().await?;
+        let percent: f64 = sqlx::query_scalar(
+            "select (statement->>'percent')::float8 from result_certificates where attempt_id=$1",
+        )
+        .bind(attempt_id)
+        .fetch_one(&db)
+        .await?;
+        assert_eq!(percent, 100.0);
+
+        sqlx::query("update result_certificates set revoked_at=now() where attempt_id=$1")
+            .bind(attempt_id)
+            .execute(&db)
+            .await?;
+        let mut tx = db.begin().await?;
+        issue_certificate(
+            &mut tx,
+            attempt_id,
+            "Blueprint grading",
+            "Candidate",
+            score,
+            1.0,
+            3.0,
+        )
+        .await
+        .map_err(|_| sqlx::Error::Protocol("certificate reissue failed".into()))?;
+        tx.commit().await?;
+        let (reissued_percent, revoked): (f64, Option<time::OffsetDateTime>) =
+            sqlx::query_as("select (statement->>'percent')::float8,revoked_at from result_certificates where attempt_id=$1")
+                .bind(attempt_id)
+                .fetch_one(&db)
+                .await?;
+        assert_eq!(reissued_percent, 100.0);
+        assert!(revoked.is_none());
         Ok(())
     }
 

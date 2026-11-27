@@ -1,0 +1,216 @@
+{
+  "03-examiner": [
+    {
+      "file": "bank.png",
+      "eyebrow": "Examiner · Question bank",
+      "caption": "One shared bank, every topic",
+      "focus": [
+        0.45,
+        0.45
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "new-exam.png",
+      "eyebrow": "Examiner · New exam",
+      "caption": "Window, marks and integrity rules",
+      "focus": [
+        0.4,
+        0.6
+      ],
+      "zoom": 1.14,
+      "click": [
+        0.3,
+        0.62
+      ]
+    },
+    {
+      "file": "paper.png",
+      "eyebrow": "Examiner · Paper",
+      "caption": "Pick questions, fair papers per candidate",
+      "focus": [
+        0.55,
+        0.55
+      ],
+      "zoom": 1.12
+    }
+  ],
+  "04-publish": [
+    {
+      "file": "candidates.png",
+      "eyebrow": "Examiner · Candidates",
+      "caption": "Enrol by email or CSV",
+      "focus": [
+        0.5,
+        0.6
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "review.png",
+      "eyebrow": "Examiner · Review & publish",
+      "caption": "Every rule checked before publishing",
+      "focus": [
+        0.6,
+        0.55
+      ],
+      "zoom": 1.14,
+      "click": [
+        0.78,
+        0.62
+      ]
+    }
+  ],
+  "05-candidate": [
+    {
+      "file": "lobby.png",
+      "eyebrow": "Candidate · Lobby",
+      "caption": "Server-timed, clear instructions",
+      "focus": [
+        0.5,
+        0.6
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "workspace.png",
+      "eyebrow": "Candidate · Exam",
+      "caption": "Every answer saved within a second",
+      "focus": [
+        0.4,
+        0.45
+      ],
+      "zoom": 1.14,
+      "click": [
+        0.3,
+        0.42
+      ]
+    }
+  ],
+  "06-offline": [
+    {
+      "file": "offline.png",
+      "eyebrow": "Resilience · Offline",
+      "caption": "Stored on the device, hash-chained",
+      "focus": [
+        0.3,
+        0.2
+      ],
+      "zoom": 1.16,
+      "click": [
+        0.3,
+        0.5
+      ]
+    },
+    {
+      "file": "synced.png",
+      "eyebrow": "Resilience · Back online",
+      "caption": "Synced the moment it reconnects",
+      "focus": [
+        0.2,
+        0.12
+      ],
+      "zoom": 1.14
+    }
+  ],
+  "07-monitor": [
+    {
+      "file": "monitor.png",
+      "eyebrow": "Control room · Live",
+      "caption": "Every candidate, in real time",
+      "focus": [
+        0.5,
+        0.65
+      ],
+      "zoom": 1.12
+    },
+    {
+      "file": "monitor-dark.png",
+      "eyebrow": "Control room · Dark mode",
+      "caption": "Activity charts and integrity signals",
+      "focus": [
+        0.5,
+        0.45
+      ],
+      "zoom": 1.1,
+      "dark": true
+    }
+  ],
+  "08-grading": [
+    {
+      "file": "grading.png",
+      "eyebrow": "Grading · AI assistant",
+      "caption": "A suggested mark. The examiner decides.",
+      "focus": [
+        0.72,
+        0.82
+      ],
+      "zoom": 1.22
+    }
+  ],
+  "09-results": [
+    {
+      "file": "analytics.png",
+      "eyebrow": "Results · Analytics",
+      "caption": "Item analysis and topic performance",
+      "focus": [
+        0.5,
+        0.6
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "results.png",
+      "eyebrow": "Results · Branded PDFs",
+      "caption": "Statements and reports, properly named",
+      "focus": [
+        0.5,
+        0.5
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "verify.png",
+      "eyebrow": "Results · Public verify",
+      "caption": "Ed25519-signed, checked in seconds",
+      "focus": [
+        0.5,
+        0.55
+      ],
+      "zoom": 1.12,
+      "url": "invigil-ivory.vercel.app/verify"
+    }
+  ],
+  "10-admin": [
+    {
+      "file": "admin.png",
+      "eyebrow": "Admin · Overview",
+      "caption": "Sign-ins, sessions and accounts, live",
+      "focus": [
+        0.5,
+        0.6
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "requests.png",
+      "eyebrow": "Admin · Institute requests",
+      "caption": "Every enquiry, tracked",
+      "focus": [
+        0.5,
+        0.5
+      ],
+      "zoom": 1.1
+    },
+    {
+      "file": "audit.png",
+      "eyebrow": "Admin · Audit trail",
+      "caption": "Every action, on the record",
+      "focus": [
+        0.5,
+        0.5
+      ],
+      "zoom": 1.1
+    }
+  ]
+}

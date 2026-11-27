@@ -210,7 +210,7 @@ function ResultBadge({ attemptId }: { attemptId: string }) {
       </span>
       <Link
         href={`/verify/${encodeURIComponent(result.verifyCode)}`}
-        className="inline-flex min-h-6 items-center py-1 font-mono text-[11px] tracking-[0.12em] text-cobalt-deep uppercase underline underline-offset-4 hover:text-ink"
+        className="inline-flex min-h-11 items-center py-1 font-mono text-[11px] tracking-[0.12em] text-cobalt-deep uppercase underline underline-offset-4 hover:text-ink"
       >
         Verify code
       </Link>

@@ -28,6 +28,8 @@ function typeInto(input: HTMLInputElement, value: string) {
  */
 export function DemoAccounts() {
   const [message, setMessage] = useState<string>();
+  // Hidden until asked for, so the real sign-in stays the focus.
+  const [open, setOpen] = useState(false);
 
   function signInAs(email: string) {
     const emailInput = document.querySelector<HTMLInputElement>('input[name="email"]');
@@ -43,11 +45,24 @@ export function DemoAccounts() {
     form.requestSubmit();
   }
 
+  if (!open) {
+    return (
+      <div className="border-t border-rule pt-3">
+        <Button type="button" variant="secondary" size="sm" aria-expanded={false} aria-controls="demo-accounts-panel" onClick={() => setOpen(true)}>
+          Try a demo account
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <section aria-labelledby="demo-accounts" className="grid gap-3 border-t border-ink pt-4">
+    <section id="demo-accounts-panel" aria-labelledby="demo-accounts" className="grid gap-3 border-t border-ink pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h2 id="demo-accounts" className="font-mono text-[11px] tracking-[0.14em] uppercase">
+        <h2 id="demo-accounts" className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] uppercase">
           Demo accounts
+          <button type="button" aria-expanded={true} aria-controls="demo-accounts-panel" onClick={() => setOpen(false)} className="min-h-8 text-ink-muted underline underline-offset-4 hover:text-ink">
+            Hide
+          </button>
         </h2>
         <p className="font-mono text-[11px] tracking-wide text-ink-muted">
           Password for all three: <span className="text-ink">{DEMO_PASSWORD}</span>

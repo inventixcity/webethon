@@ -321,7 +321,7 @@ function QuestionRow({
   return (
     <li
       className={cn(
-        "grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-3 border-t border-rule py-4 transition-colors duration-(--duration-fast)",
+        "grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 border-t border-rule py-4 transition-colors duration-(--duration-fast) sm:grid-cols-[2rem_minmax(0,1fr)_auto]",
         selected ? "bg-paper-raised" : "hover:bg-paper-raised/60",
       )}
     >
@@ -332,7 +332,7 @@ function QuestionRow({
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
-          className="line-clamp-2 cursor-pointer text-left font-sans text-base leading-snug text-ink transition-colors duration-(--duration-fast) hover:text-vermilion-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+          className="min-h-11 w-full break-words py-2 cursor-pointer text-left font-sans text-base leading-snug text-ink transition-colors duration-(--duration-fast) hover:text-vermilion-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
         >
           {stem}
         </button>
@@ -369,7 +369,7 @@ function QuestionRow({
           </div>
         </dl>
       </div>
-      <div className="flex flex-col items-end gap-1">
+      <div className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-auto sm:flex-col sm:items-end sm:gap-1">
         <Button asChild variant="secondary" size="sm">
           <Link href={href} aria-label={`Edit question: ${stem.slice(0, 60)}`}>
             <Pencil aria-hidden="true" />

@@ -13,7 +13,9 @@ const BROWSERS: readonly (readonly [RegExp, string])[] = [
 // Order matters: iPhone user agents also say "Mac OS X", and Android ones also say "Linux".
 const SYSTEMS: readonly (readonly [RegExp, string])[] = [
   [/Windows/, "Windows"],
-  [/iPhone|iPad|iPod/, "iOS"],
+  [/iPhone/, "iPhone"],
+  [/iPad/, "iPad"],
+  [/iPod/, "iPod"],
   [/Android/, "Android"],
   [/CrOS/, "ChromeOS"],
   [/Mac OS X|Macintosh/, "macOS"],
@@ -28,7 +30,7 @@ export function describeDevice(userAgent: string): string {
   if (browser && system) return `${browser} on ${system}`;
   if (browser) return browser;
   if (system) return `Browser on ${system}`;
-  return "Unknown device";
+  return "Unidentified browser or device";
 }
 
 const MINUTE = 60_000;

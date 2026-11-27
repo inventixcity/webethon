@@ -48,8 +48,8 @@ export function SiteNav() {
   return (
     <header className={cn("sticky top-0 z-30 border-b border-rule bg-paper transition-[height] duration-(--duration-base) ease-(--ease-enter)", compact ? "h-14" : "h-16")}>
       <div className="mx-auto flex h-full items-center justify-between gap-4 px-5 font-mono text-[11px] tracking-[0.12em] uppercase md:px-8">
-        <Link href="/" className="flex min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-focus">
-          <span className="grid size-7 shrink-0 place-items-center bg-fill text-xs font-bold text-on-fill">{siteConfig.mark}</span>
+        <Link href="/" className="flex min-h-11 min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-focus">
+          <span className="grid size-10 shrink-0 place-items-center bg-fill text-xs font-bold text-on-fill">{siteConfig.mark}</span>
           <span className="truncate">Inventix Invigil</span>
         </Link>
         <nav aria-label="Page sections" className="hidden h-full items-center gap-5 lg:flex">
@@ -58,7 +58,7 @@ export function SiteNav() {
           <Link href="/contact" aria-current={pathname === "/contact" ? "page" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", pathname === "/contact" && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>Contact</Link>
         </nav>
         <div className="flex items-center gap-3">
-          <ThemeToggle className="hidden min-h-6 min-w-6 py-1 uppercase sm:flex" />
+          <ThemeToggle className="hidden min-h-11 min-w-11 justify-center uppercase sm:flex" />
           <Button asChild size="sm" className="hidden sm:inline-flex"><Link href="/contact">Contact us</Link></Button>
           <Button type="button" variant="secondary" size="icon" className="size-10 lg:hidden" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={menuOpen} aria-controls="site-mobile-nav" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</Button>
         </div>

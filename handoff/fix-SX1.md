@@ -1,0 +1,5 @@
+RESUME SX1. Lead decisions on your blockers:
+1. A1-18 (DELETE /me current password): you are authorised to add the `auth` crate as a dependency of `records` if there is no cycle (check `cargo tree`); otherwise move the password-verify helper (argon2 verify against users.password_hash) into a small pub fn in `kernel::crypto` and use it from both. Then finish the candidate attempt/dispute checks and in-transaction audit for A1-18.
+2. examcore::verify_lease_write_time: SX2 has now finished its examcore changes — re-read examcore and build against what exists; do not edit examcore yourself.
+3. Formatter churn: only run `cargo fmt -p <your crates>`, never `--all`.
+Then run clippy and tests for your crates and `-p server`; rebuild the API (`cd C:/Users/umerf/Desktop/webethon && RUST_IMAGE=invigil-rust:dev docker compose build api && docker compose up -d api` — use `up -d api`, never `docker compose run`); run both e2e scripts. Remove the old STATUS line from handoff/log/SX1.md and finish with STATUS: COMPLETE.

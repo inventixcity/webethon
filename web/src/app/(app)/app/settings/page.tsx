@@ -5,6 +5,7 @@ import { requireUser } from "@/features/auth/require-user";
 import { PageHeader } from "@/components/ui/page-header";
 import { describeError } from "@/lib/errors/describe";
 import { SettingsLoadError } from "./settings-load-error";
+import { SettingsPreferences } from "@/features/account/settings-preferences";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
           description="Your profile, sign-in and security."
         />
 
+        <SettingsPreferences role={profile.role} />
         <AccountSettings profile={profile} />
       </div>
     </main>

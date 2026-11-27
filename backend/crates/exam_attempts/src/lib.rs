@@ -149,8 +149,18 @@ fn validate_response_fields(
                 "Text cannot contain null characters.",
             ));
         }
-        if chars > 20_000 || max_words.is_some_and(|n| n <= 0 || chars > n as usize * 12) {
+        if chars > 20_000 {
             return Err(invalid("response.text", "Written answer is too long."));
+        }
+        if let Some(max_words) = max_words
+            && (max_words <= 0
+                || text.split_whitespace().count() > max_words as usize
+                || chars > max_words as usize * 12)
+        {
+            return Err(invalid(
+                "response.text",
+                "Written answer exceeds the word limit.",
+            ));
         }
         return Ok(());
     }
@@ -389,6 +399,12 @@ pub async fn start_attempt_tx(
                 "Blueprint rows cannot be filled with distinct questions.",
             )
         })?;
+        if best_distance > tolerance {
+            return Err(examcore::conflict(
+                "fairness_unavailable",
+                "No paper meets the configured fairness tolerance.",
+            ));
+        }
         predicted_facility =
             Some(selected.iter().map(|(_, f, _)| *f).sum::<f64>() / selected.len().max(1) as f64);
         item_ids = selected.iter().map(|(id, _, _)| *id).collect();

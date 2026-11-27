@@ -289,7 +289,7 @@ function ExamCard({ exam }: { exam: ExamSummary }) {
         </div>
         <Link
           href={base}
-          className="text-xl leading-snug font-medium tracking-[-0.02em] break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+          className="inline-flex min-h-11 items-center text-xl leading-snug font-medium tracking-[-0.02em] break-words underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
         >
           {exam.title}
         </Link>
@@ -372,7 +372,7 @@ function DraftList({ drafts }: { drafts: ExamSummary[] }) {
             const base = `/app/examiner/exams/${encodeURIComponent(exam.id)}`;
             return (
               <li key={exam.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-rule py-4">
-                <Link href={base} className="min-w-0 truncate font-medium underline-offset-4 hover:underline">
+                <Link href={base} className="inline-flex min-h-11 min-w-0 items-center truncate font-medium underline-offset-4 hover:underline">
                   {exam.title}
                 </Link>
                 <Button asChild size="sm" variant="secondary">
@@ -418,7 +418,7 @@ function FlowChecklist({ exams }: { exams: ExamSummary[] }) {
             <span className="font-mono text-[11px] text-ink-muted tabular-nums">{String(index + 1).padStart(2, "0")}</span>
             <span className="min-w-0 text-sm">
               {!step.done && index === next ? (
-                <Link href={step.href} className="font-medium underline underline-offset-4 hover:text-cobalt-deep">
+                <Link href={step.href} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 hover:text-cobalt-deep">
                   {step.label}
                 </Link>
               ) : (
@@ -459,7 +459,7 @@ function PublishQueue({ exams }: { exams: ExamSummary[] }) {
             <li key={exam.id} className="grid gap-2 border-b border-rule py-4">
               <Link
                 href={`/app/examiner/exams/${encodeURIComponent(exam.id)}/results`}
-                className="font-medium leading-snug underline-offset-4 hover:underline"
+                className="inline-flex min-h-11 items-center font-medium leading-snug underline-offset-4 hover:underline"
               >
                 {exam.title}
               </Link>

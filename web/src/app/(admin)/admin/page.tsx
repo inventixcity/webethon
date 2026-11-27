@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BarChart, StatTile } from "@/components/charts";
 import { ErrorPage } from "@/components/errors/error-page";
-import { PageHeading } from "@/components/admin/workspace";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/features/admin/client";
 import type { AdminStatsOverview } from "@/lib/exam/types";
@@ -26,7 +26,7 @@ export default function Page() {
   const refresh = useCallback(() => setRetry((value) => value + 1), []);
   useEffect(() => {
     let live = true;
-    const load = () => Promise.all([adminApi<Overview>("/admin/overview"), adminApi<AdminStatsOverview>("/admin-stats/overview")]).then(([value, charts]) => {
+    const load = () => Promise.all([adminApi<Omit<Overview, "stats">>("/admin/overview"), adminApi<AdminStatsOverview>("/admin-stats/overview")]).then(([value, charts]) => {
       if (live) { setData({ ...value, stats: charts }); setError(null); }
     }).catch((cause: unknown) => { if (live) setError(cause); }).finally(() => { if (live) setLoading(false); });
     setLoading(true);
@@ -35,13 +35,13 @@ export default function Page() {
     return () => { live = false; window.clearInterval(timer); };
   }, [retry]);
   return <>
-    <PageHeading title="Overview" description="A view of activity across the platform." />
+    <PageHeader eyebrow="Administration" title="Overview" description="A view of activity across the platform." className="mb-8" />
     {loading && !data ? <p role="status" className="py-8 font-mono text-xs text-ink-muted">LOADING PLATFORM METRICS</p> : null}
     {error && !data ? <ErrorPage code={503} as="div" onRetry={refresh} /> : null}
     {data ? <div className="grid gap-8">
       <dl className="grid grid-cols-2 gap-5 border-y border-rule py-4 md:grid-cols-4">
         <StatTile label="Accounts" value={data.users} />
-        <StatTile label="Active sessions" value={data.activeSessions} />
+        <StatTile label="Active sessions" value={data.stats.activeSessions} />
         <StatTile label="Audit events" value={data.auditEvents} />
         <StatTile label="HTTP errors · 60m" value={`${(data.httpErrorRate * 100).toFixed(2)}%`} />
       </dl>

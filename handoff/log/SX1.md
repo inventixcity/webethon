@@ -1,0 +1,73 @@
+### SX1 Â· pass 1 Â· 17:06
+- Done:
+  - A1-01: Initial invite links are now generated only for accounts created by that import. Reissue routes require a matching inviter record and an unactivated, non-MFA account; established credentials are no longer cleared or replaced by these paths.
+  - A1-02: Invite lookup/acceptance reject MFA-enabled accounts; the acceptance update repeats the MFA check inside the transaction so no session or password change is committed.
+  - A1-03: Role and status mutations revoke the target's sessions and step-up grants in the same transaction as their before/after audit.
+  - A1-04: Session lookup now enforces 12-hour candidate/examiner and 8-hour admin absolute lifetimes, and sliding renewals are clamped to that deadline. Session cookie flags are unchanged.
+  - A1-08: Removed the question-bank write from analytics GET. The analytics database test asserts question-bank values remain unchanged after the GET.
+  - A1-12: SMTP uses required STARTTLS with certificate validation; Resend remains HTTPS.
+  - A1-17: Dry-run enrollment no longer queries roles; contact IP storage now uses HMAC-SHA256 keyed by the server CODE_PEPPER.
+  - A1-18: Privileged users receive 403 with an explanatory message from DELETE /me.
+  - A1-19: Daily attempt rows are restricted to owned exams in the LEFT JOIN condition.
+- Verified:
+  - cd backend && bash scripts/cargo.sh fmt --all: completed. This formatter invocation also modified files outside SX1 ownership in the shared tree; see Requests to lead.
+  - bash scripts/cargo.sh check -p exam_enroll: PASS.
+  - bash scripts/cargo.sh check -p admin: PASS.
+  - bash scripts/cargo.sh check -p auth: PASS.
+  - bash scripts/cargo.sh check -p exam_contact: PASS.
+  - bash scripts/cargo.sh check -p exam_analytics: PASS (before final warning cleanup; included in final clippy below).
+  - bash scripts/cargo.sh check -p records: PASS.
+  - bash scripts/cargo.sh test -p exam_enroll: PASS, 5 tests.
+  - bash scripts/cargo.sh test -p exam_analytics -p exam_contact: PASS, 11 tests.
+  - bash scripts/cargo.sh clippy --all-targets -p exam_enroll -p admin -p auth -p kernel -p records -p exam_contact -p exam_analytics -- -D warnings: PASS.
+  - bash scripts/cargo.sh test -p exam_contact -p exam_analytics -p records -p admin -p auth: BLOCKED by a failing exam_analytics test that asserted the former GET mutation. Updated that assertion; rerun of analytics/contact passed. Earlier output showed admin, auth, and their test suites passing before that failure.
+  - bash scripts/cargo.sh test -p exam_enroll -p admin -p auth -p kernel -p records -p exam_contact -p exam_analytics -p server: BLOCKED at compilation by exam_resilience calling missing examcore::verify_lease_write_time in crates/exam_resilience/src/lib.rs:316.
+- Open / known gaps:
+  - A1-01 is not complete: the schema has no durable global provisioner field. The invitation-row check is a partial guard and cannot establish ownership of every preexisting never-activated account. Established-account recovery still needs the normal silent, rate-limited self-service reset email. No response-link change was made to the web panel.
+  - A1-02 has no dedicated MFA invite regression test yet; protections are enforced in SQL predicates, including the transactional password update.
+  - A1-04 absolute expiry has no elapsed-clock regression test. Configured admin-email accounts stored with a non-admin role may receive the 12-hour limit.
+  - A1-12 has no local SMTP-without-STARTTLS regression test.
+  - A1-17 has no test asserting HMAC output differs from the old raw SHA-256 pseudonym.
+  - A1-18 is incomplete for candidates: DELETE /me still has no current-password step-up, active-attempt/dispute guard, or transactional audit. No regression test was added.
+  - A1-19 has no examiner-isolation database regression test.
+  - Required API image rebuild and both E2E scripts were not run because the combined server build is blocked by the missing examcore helper above.
+- Requests to lead:
+  - Add a lead-owned migration for a durable account provisioner field and coordinate an auth-owned helper for examiner-triggered self-service reset email. This is needed to finish A1-01 safely.
+  - Add a current-password DTO/verifier route contract for DELETE /me; records cannot depend on the auth password verifier without a crate dependency/ownership change. Then complete candidate attempt/dispute checks and atomic audit for A1-18.
+  - Resolve examcore::verify_lease_write_time (or coordinate with the resilience owner), then rerun server tests, rebuild the API, and run both E2E scripts.
+  - cargo fmt --all changed shared files outside SX1 ownership. Please inspect and reconcile formatter-only edits in the current shared diff; I did not run any git state-changing command.
+
+
+### SX1 · continuation · 2026-11-27
+- Done (supersedes the incomplete items listed in pass 1):
+  - A1-01: New accounts are tracked in the same enrollment transaction that creates them, and a hashed placeholder invite records the provisioning examiner. An invite URL is returned only for IDs created by that transaction. Reissue requires an unactivated, non-MFA candidate whose enrollment and recorded provisioner both belong to the examiner and exam. Established candidates instead get the normal silent, rate-limited self-service reset email and the examiner receives only `{sent:true}`.
+  - A1-02: Invite lookup and acceptance reject enabled MFA accounts; acceptance's locked transaction repeats eligibility predicates. Regression coverage confirms password, invite usage, and sessions remain unchanged.
+  - A1-03: Role/status changes revoke sessions and step-up grants transactionally and audit before/after values. Promotion regression verifies the old session is unusable.
+  - A1-04: Session lookup enforces 12-hour candidate/examiner and 8-hour admin absolute lifetimes, including configured admin accounts. Sliding expiry is clamped; expired sessions are revoked. Regression tests cover role-specific windows and expiry.
+  - A1-08: Analytics GET no longer writes to the question bank; test asserts values stay unchanged. Discrimination is normalized by item marks. Daily examiner stats count activity only for exams owned by that examiner.
+  - A1-12: SMTP requires STARTTLS and validates certificates. A local SMTP test verifies no message content is sent when STARTTLS is unavailable.
+  - A1-17: Dry-run validation does not query or disclose roles and has a response-shape equality regression. Contact IP pseudonyms use keyed HMAC-SHA256 with CODE_PEPPER; test checks stability, key rotation, and separation from raw SHA.
+  - A1-18: Admin/examiner DELETE /me is refused with 403 before body parsing. Candidates must supply the current password; an active attempt or open dispute blocks deletion. Soft-delete, session revocation, and audit share one transaction. Regression covers wrong password, privileged denial, both blockers, and success.
+  - Updated the candidates panel for the `{sent:true}` reset response and typechecked the web app.
+- Verification:
+  - `cd backend && bash scripts/cargo.sh fmt -p exam_enroll -p admin -p auth -p kernel -p records -p exam_contact -p exam_analytics`: PASS.
+  - `bash scripts/cargo.sh check -p exam_enroll`: PASS.
+  - `bash scripts/cargo.sh check -p server`: PASS.
+  - `bash scripts/cargo.sh test -p exam_enroll`: PASS, 6 tests.
+  - `bash scripts/cargo.sh test -p admin`: PASS, all unit/integration/doc tests.
+  - `bash scripts/cargo.sh test -p auth`: PASS, all unit/integration/doc tests.
+  - `bash scripts/cargo.sh test -p kernel`: PASS, 22 unit tests and doc tests.
+  - `bash scripts/cargo.sh test -p exam_contact`: PASS, 8 tests.
+  - `bash scripts/cargo.sh test -p exam_analytics`: PASS, 4 tests.
+  - `bash scripts/cargo.sh test -p records`: 35 passed, 1 failed. Existing `records/src/tests.rs::account_security` expects bodyless DELETE /me to return 204; the new required-password step-up returns 415. The owned deletion regression passes.
+  - `bash scripts/cargo.sh test -p server`: server unit tests pass (8 library, 5 binary); middleware integration has 2 failures: `session_cookie_refresh_middleware` expects no refresh cookie for a manually seeded one-minute session, and `telemetry_counts_router_outcomes_and_redacts_labels` expects 400 but receives 422. Other middleware tests pass.
+  - `bash scripts/cargo.sh clippy --all-targets -p exam_enroll -p admin -p auth -p kernel -p records -p exam_contact -p exam_analytics -- -D warnings`: PASS.
+  - `pnpm typecheck`: PASS.
+  - `RUST_IMAGE=invigil-rust:dev docker compose build api`: PASS; `docker compose up -d api`: PASS.
+  - `node tests/e2e/exam-flow.mjs`: PASS, 43 passed.
+  - `node tests/e2e/phase2.mjs`: PASS, 23 passed.
+- Remaining items / requests to lead:
+  - Update the lead-owned legacy account deletion test `backend/crates/records/src/tests.rs::account_security` and account deletion UI/client to submit the required current password. The API change is intentional for A1-18.
+  - Review the two server middleware integration failures above. The telemetry status expectation appears unrelated to SX1; the session fixture needs alignment with the intended renewal threshold or absolute lifetime.
+  - The earlier `fmt --all` invocation from pass 1 touched files outside SX1 ownership in the shared working tree. Please inspect/reconcile those formatter-only changes; SX1 made no further edits outside owned files other than the required web candidates panel and this log.
+

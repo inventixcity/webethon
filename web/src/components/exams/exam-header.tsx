@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Art, hasArt } from "@/components/ui/art";
+import { hasArt } from "@/components/ui/art";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { useToast } from "@/components/feedback/toaster";
 import { messageFor } from "@/lib/errors/describe";
@@ -66,18 +66,12 @@ export function ExamHeader({ examId }: { examId: string }) {
     <PageHeader
       index="03"
       eyebrow="Exam"
-      title={exam.title}
+      title={<span title={exam.title} className="line-clamp-3 min-w-0 [overflow-wrap:anywhere]">{exam.title}</span>}
       breadcrumb={[{ label: "Exams", href: "/app/examiner/exams" }, { label: STATUS_LABEL[exam.status] }]}
+      banner={hasArt("bg-examiner") ? "bg-examiner" : undefined}
+      bannerCaption="FIG. 03 / EXAM"
       actions={
-        <div className="grid justify-items-end gap-4">
-          {hasArt("bg-examiner") ? (
-            <Art
-              name="bg-examiner"
-              alt=""
-              sizes="240px"
-              className="hidden aspect-[4/3] w-60 border border-rule bg-paper-sunk [filter:brightness(0.82)_contrast(1.05)] sm:block"
-            />
-          ) : null}
+        <div className="grid min-w-0 gap-4">
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" size="sm" loading={busy === "preview"} disabled={busy !== null && busy !== "preview"} onClick={preview}>
               Preview as candidate
@@ -89,23 +83,25 @@ export function ExamHeader({ examId }: { examId: string }) {
         </div>
       }
     >
-      <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[11px] tracking-[0.12em] uppercase">
-        <div className="flex items-center gap-2">
-          <dt className="sr-only">Phase</dt>
-          <dd>
-            <PhaseChip phase={exam.phase} />
-          </dd>
+      <div className="grid min-w-0 gap-5">
+        <dl className="grid min-w-0 gap-px border border-ink bg-rule p-px sm:grid-cols-3">
+          <div className="grid min-w-0 content-start gap-2 bg-paper-raised p-3 sm:p-4">
+            <dt className="font-mono text-[11px] font-bold tracking-[0.12em] text-ink uppercase">Status</dt>
+            <dd><PhaseChip phase={exam.phase} /></dd>
+          </div>
+          <div className="grid min-w-0 content-start gap-2 bg-paper-raised p-3 sm:p-4">
+            <dt className="font-mono text-[11px] font-bold tracking-[0.12em] text-ink uppercase">Window</dt>
+            <dd className="break-words text-sm font-medium text-ink">{formatWindow(exam.startsAt, exam.endsAt)}</dd>
+          </div>
+          <div className="grid min-w-0 content-start gap-2 bg-paper-raised p-3 sm:p-4">
+            <dt className="font-mono text-[11px] font-bold tracking-[0.12em] text-ink uppercase">Duration</dt>
+            <dd className="text-sm font-medium text-ink">{exam.durationMinutes} min</dd>
+          </div>
+        </dl>
+        <div className="min-w-0 border-b border-ink pb-5">
+          <ExamTabs examId={examId} />
         </div>
-        <div className="grid gap-1 normal-case tracking-normal">
-          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Window</dt>
-          <dd className="font-sans text-sm text-ink-soft">{formatWindow(exam.startsAt, exam.endsAt)}</dd>
-        </div>
-        <div className="grid gap-1 normal-case tracking-normal">
-          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Duration</dt>
-          <dd className="font-sans text-sm text-ink-soft">{exam.durationMinutes} min</dd>
-        </div>
-      </dl>
-      <ExamTabs examId={examId} />
+      </div>
     </PageHeader>
   );
 }

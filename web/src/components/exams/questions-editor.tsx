@@ -206,7 +206,7 @@ function PaperEditor({ exam }: { exam: Exam }) {
         ) : null}
 
         <section aria-labelledby="paper-heading" className={cn("grid content-start gap-6", editable ? "lg:col-span-7" : "lg:col-span-12")}>
-          <div className="grid gap-3 border-b border-ink pb-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="grid gap-3 border border-ink bg-paper-raised p-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
             <div className="grid gap-2"><h2 id="paper-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">{editable ? "02 / Paper" : "Paper"} <span className="text-ink-muted">({rows.length} questions)</span></h2><p className="max-w-prose text-sm text-ink-soft">The questions candidates will get, in order, with marks.</p></div>
             <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Exam total {formatMarks(exam.totalMarks)} marks</p>
           </div>
@@ -236,7 +236,7 @@ function PaperEditor({ exam }: { exam: Exam }) {
               {editable ? "Choose questions from the bank. They are added in the order you pick them." : "This exam has no questions."}
             </EmptyState>
           ) : (
-            <ol aria-label="Questions on the paper" className="grid">
+          <ol aria-label="Questions on the paper" className="grid gap-3 pb-32">
               {rows.map((row, index) => (
                 <PaperItem
                   key={row.question.id}
@@ -254,7 +254,7 @@ function PaperEditor({ exam }: { exam: Exam }) {
           )}
 
           {editable ? (
-            <div className="mobile-safe-action sticky bottom-0 z-10 -mx-2 grid gap-4 border-y border-ink bg-paper px-3 py-4 sm:mx-0 sm:flex sm:items-center sm:justify-between sm:px-4">
+            <div className="mobile-safe-action sticky bottom-0 z-10 -mx-2 grid gap-4 border border-ink bg-paper-raised px-3 py-4 [padding-bottom:calc(1rem+env(safe-area-inset-bottom))] sm:mx-0 sm:flex sm:items-center sm:justify-between sm:px-4">
               <p className={cn("font-mono text-sm tracking-[0.08em] uppercase tabular-nums", mismatch ? "text-amber-deep" : "text-cobalt-deep")} aria-live="polite">Total {formatMarks(total)} of {formatMarks(exam.totalMarks)} marks</p>
               {saveError ? (
                 <p role="alert" className="text-sm text-vermilion-deep">
@@ -302,7 +302,7 @@ function PaperItem({
   const label = `${row.question.stem.slice(0, 60)}${row.question.stem.length > 60 ? "..." : ""}`;
 
   return (
-    <li className="grid gap-4 border-b border-rule py-5 md:grid-cols-[3rem_1fr]">
+    <li className="grid gap-4 border border-rule bg-paper-raised p-4 md:grid-cols-[3rem_1fr]">
       <span className="font-mono text-sm tracking-[0.08em] text-ink-muted tabular-nums">{String(position).padStart(2, "0")}</span>
       <div className="grid min-w-0 gap-3">
         <p className="text-base leading-relaxed break-words">{row.question.stem}</p>
@@ -317,7 +317,7 @@ function PaperItem({
             <div className="grid gap-2">
               <Label htmlFor={`${id}-marks`}>Marks</Label>
               <div className="flex items-center gap-2">
-                <Input
+                <Input variant="box"
                   id={`${id}-marks`}
                   inputMode="decimal"
                   value={row.marksText}
@@ -430,7 +430,7 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2 sm:col-span-2">
           <Label htmlFor={`${idPrefix}-q`}>Search</Label>
-          <Input id={`${idPrefix}-q`} type="search" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search stems" autoComplete="off" />
+          <Input variant="box" id={`${idPrefix}-q`} type="search" value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search stems" autoComplete="off" />
         </div>
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-topic`}>Topic</Label>
@@ -486,8 +486,8 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
           {items.map((question) => {
             const added = inPaper.has(question.id);
             return (
-              <li key={question.id} className="grid gap-3 border-t border-rule py-4">
-                <p className="line-clamp-2 text-sm leading-relaxed break-words">{question.stem}</p>
+              <li key={question.id} className="grid gap-3 border border-rule bg-paper-raised p-4">
+                <p className="text-sm leading-relaxed break-words">{question.stem}</p>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
                     <span>{question.topic}</span>

@@ -53,6 +53,7 @@ pub fn build_router(registry: Arc<records::EntityRegistry>) -> Router<AppState> 
         .merge(exam_contact::router())
         .merge(exam_disputes::router())
         .merge(exam_assist::router())
+        .merge(exam_settings::router())
         .merge(records::account_router())
         // Optional AI grading suggestions remain available; unused product routers are not mounted.
         .layer(Extension(registry));
@@ -363,7 +364,11 @@ async fn guarded(state: &AppState, mut request: Request, next: Next) -> Response
                 .into_response();
         }
         if too_deep(&bytes) {
-            return AppError::bad_request("JSON is nested too deeply.").into_response();
+            return if parts.uri.path().starts_with("/api/v1/") {
+                validation_response("JSON is nested too deeply.")
+            } else {
+                AppError::bad_request("JSON is nested too deeply.").into_response()
+            };
         }
     }
     let path = parts.uri.path().to_owned();
@@ -382,13 +387,25 @@ async fn guarded(state: &AppState, mut request: Request, next: Next) -> Response
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.starts_with("text/plain"))
     {
-        response = AppError::bad_request("Please check your request.").into_response();
+        response = if path.starts_with("/api/v1/") {
+            validation_response("Please check your request.")
+        } else {
+            AppError::bad_request("Please check your request.").into_response()
+        };
     }
     if let Some(remaining) = remaining
         && let Ok(value) = HeaderValue::from_str(&remaining.to_string())
     {
         response.headers_mut().insert("ratelimit-remaining", value);
     }
+    response
+}
+
+fn validation_response(message: &str) -> Response {
+    let mut response = AppError::new(ErrorCode::ValidationFailed, message)
+        .with_details(serde_json::json!([{ "path": "body", "message": message }]))
+        .into_response();
+    *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
     response
 }
 
@@ -404,7 +421,7 @@ async fn normalize_contract_error(path: &str, response: Response) -> Response {
     let Ok(bytes) = axum::body::to_bytes(body, API_ERROR_BODY_BYTES).await else {
         return AppError::internal("Could not read the API error response.").into_response();
     };
-    let value: serde_json::Value = match serde_json::from_slice(&bytes) {
+    let mut value: serde_json::Value = match serde_json::from_slice(&bytes) {
         Ok(value) => value,
         Err(_) => return Response::from_parts(parts, Body::from(bytes)),
     };
@@ -415,16 +432,56 @@ async fn normalize_contract_error(path: &str, response: Response) -> Response {
         return Response::from_parts(parts, Body::from(bytes));
     };
 
+    if status == StatusCode::BAD_REQUEST {
+        normalize_body_validation(&mut value);
+        parts.headers.remove(header::CONTENT_LENGTH);
+        parts.headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        parts.status = contract_status;
+        return Response::from_parts(
+            parts,
+            Body::from(serde_json::to_vec(&value).unwrap_or_default()),
+        );
+    }
+
     parts.status = contract_status;
     Response::from_parts(parts, Body::from(bytes))
+}
+
+fn normalize_body_validation(value: &mut serde_json::Value) {
+    if let Some(error) = value
+        .get_mut("error")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        let message = error
+            .get("message")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("The request body is invalid.")
+            .to_owned();
+        error.insert(
+            "code".to_owned(),
+            serde_json::Value::String("VALIDATION_FAILED".to_owned()),
+        );
+        if !error
+            .get("details")
+            .is_some_and(serde_json::Value::is_array)
+        {
+            error.insert(
+                "details".to_owned(),
+                serde_json::json!([{ "path": "body", "message": message }]),
+            );
+        }
+    }
 }
 
 fn contract_error_status(
     path: &str,
     status: StatusCode,
-    error_code: Option<&str>,
+    _error_code: Option<&str>,
 ) -> Option<StatusCode> {
-    if status == StatusCode::BAD_REQUEST && error_code == Some("VALIDATION_FAILED") {
+    if status == StatusCode::BAD_REQUEST {
         return Some(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
@@ -442,7 +499,10 @@ fn is_examiner_only_path(path: &str) -> bool {
         || path.starts_with("/api/v1/attempts/")
             && (path.ends_with("/grade")
                 || path.ends_with("/integrity")
-                || path.ends_with("/outages"))
+                || path.ends_with("/outages")
+                || path.ends_with("/suggest"))
+        || path.starts_with("/api/v1/disputes/")
+        || path.starts_with("/api/v1/me/disputes")
 }
 
 fn is_import_path(path: &str) -> bool {
@@ -483,7 +543,10 @@ fn too_deep(bytes: &[u8]) -> bool {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use super::{contract_error_status, is_import_path, too_deep};
+    use super::{
+        contract_error_status, is_import_path, normalize_body_validation, too_deep,
+        validation_response,
+    };
     use axum::http::StatusCode;
 
     #[test]
@@ -502,8 +565,30 @@ mod tests {
                 StatusCode::BAD_REQUEST,
                 Some("BAD_REQUEST"),
             ),
-            None
+            Some(StatusCode::UNPROCESSABLE_ENTITY)
         );
+    }
+
+    #[test]
+    fn body_validation_uses_field_error_envelope() {
+        let mut value =
+            serde_json::json!({"error":{"code":"BAD_REQUEST","message":"Invalid JSON"}});
+        normalize_body_validation(&mut value);
+        assert_eq!(value["error"]["code"], "VALIDATION_FAILED");
+        assert_eq!(value["error"]["details"][0]["path"], "body");
+        assert_eq!(value["error"]["details"][0]["message"], "Invalid JSON");
+    }
+
+    #[tokio::test]
+    async fn malformed_json_validation_is_422_with_body_field_error() {
+        let response = validation_response("Please check your request.");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .expect("read validation response");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("parse error body");
+        assert_eq!(value["error"]["code"], "VALIDATION_FAILED");
+        assert_eq!(value["error"]["details"][0]["path"], "body");
     }
 
     #[test]

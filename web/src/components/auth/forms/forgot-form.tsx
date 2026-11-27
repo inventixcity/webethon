@@ -136,7 +136,7 @@ export function ForgotForm({ onType, onSent, onError }: ForgotFormProps) {
         </SubmitButton>
         <Link
           href={routes.login}
-          className="font-mono text-[11px] tracking-[0.12em] uppercase underline underline-offset-4 hover:text-vermilion-deep"
+          className="inline-flex min-h-11 items-center font-mono text-[11px] tracking-[0.12em] uppercase underline underline-offset-4 hover:text-vermilion-deep"
         >
           I remembered it
         </Link>

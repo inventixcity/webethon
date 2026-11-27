@@ -1,0 +1,13 @@
+[
+  {"id": "01-open", "text": "Online exams break at the worst possible moment. The Wi-Fi drops. A tab switches. A result gets questioned. Meet Inventix Invigil. Exams that hold up."},
+  {"id": "02-stack", "text": "Under the hood, a Rust core built on Axum and SQLx, with PostgreSQL seventeen on Supabase, locked down with row level security. The web app runs on Next.js sixteen and React nineteen. Sessions live in HTTP-only host cookies, with CSRF checks, rate limits, Argon2 passwords and step-up confirmation for admins. Results are signed with Ed25519. More than five hundred automated tests guard every release, deployed on Vercel and Render."},
+  {"id": "03-examiner", "text": "Let's run a real exam. The examiner builds from a shared question bank, sets the window, marks and integrity rules, then picks questions for the paper. Fair papers draw a different, equally difficult paper for every candidate."},
+  {"id": "04-publish", "text": "Candidates are enrolled by email or CSV. Review and publish checks every rule before the paper is frozen, so nothing ships half ready."},
+  {"id": "05-candidate", "text": "Now the candidate. The lobby counts down from the server clock. Every answer saves within a second."},
+  {"id": "06-offline", "text": "And when the connection drops, nothing stops. Answers are sealed into a hash-chained journal on the device, and synced the moment the network returns. The deadline is kept by the server, so time can't be gamed."},
+  {"id": "07-monitor", "text": "Back in the control room, the examiner watches every candidate live: progress, connection health and integrity signals, with activity charts updating in real time. Signals support human review. They are never verdicts."},
+  {"id": "08-grading", "text": "Grading is blind. For written answers, the AI assistant suggests a mark against the rubric, and the examiner always decides."},
+  {"id": "09-results", "text": "Results come with item analysis, score distributions and topic performance. Every candidate gets a branded PDF statement, and anyone can verify a certificate in seconds."},
+  {"id": "10-admin", "text": "Admins manage accounts, read the full audit trail, track institute requests and set policy, all behind password re-confirmation."},
+  {"id": "11-close", "text": "Resilient. Fair. Verifiable. Inventix Invigil. Exams that hold up."}
+]

@@ -5,7 +5,7 @@ use std::time::Duration;
 use axum::http::{HeaderMap, Method};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -120,6 +120,29 @@ pub async fn audit(db: &PgPool, request: &RequestMeta, entry: AuditEntry<'_>) {
     }
 }
 
+/// Records an audit entry in the caller's transaction so the event and its change commit or roll back together.
+pub async fn audit_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &RequestMeta,
+    entry: AuditEntry<'_>,
+) -> AppResult<()> {
+    sqlx::query(
+        "insert into audit_log (actor_id, action, target_type, target_id, ip, user_agent, request_id, meta)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)",
+    )
+    .bind(entry.actor_id)
+    .bind(entry.action)
+    .bind(entry.target_type)
+    .bind(entry.target_id)
+    .bind(&request.ip)
+    .bind(&request.user_agent)
+    .bind(&request.request_id)
+    .bind(entry.meta)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 /// Cross-site request forgery check for cookie-authenticated writes, using headers browsers set
 /// themselves. Requests carrying neither header come from non-browser clients, which can't hold a
 /// victim's cookies.
@@ -150,6 +173,36 @@ mod tests {
         http::{StatusCode, header},
         response::IntoResponse,
     };
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn audit_tx_obeys_caller_transaction(db: PgPool) -> AppResult<()> {
+        let request = RequestMeta {
+            ip: "127.0.0.1".to_owned(),
+            user_agent: "test".to_owned(),
+            request_id: "audit-transaction-test".to_owned(),
+        };
+        let mut tx = db.begin().await?;
+        audit_tx(
+            &mut tx,
+            &request,
+            AuditEntry {
+                action: "test.atomic",
+                actor_id: None,
+                target_type: Some("test"),
+                target_id: None,
+                meta: serde_json::json!({}),
+            },
+        )
+        .await?;
+        tx.rollback().await?;
+        let rows: i64 = sqlx::query_scalar(
+            "select count(*) from audit_log where request_id='audit-transaction-test'",
+        )
+        .fetch_one(&db)
+        .await?;
+        assert_eq!(rows, 0);
+        Ok(())
+    }
 
     #[sqlx::test(migrations = "../../migrations")]
     async fn exhausted_budget_returns_retry_after(db: PgPool) {

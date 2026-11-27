@@ -278,10 +278,13 @@ pub async fn assign_tx(
     Ok(())
 }
 pub async fn publish_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResult<()> {
-    let state: String = sqlx::query_scalar("select status from exams where id=$1 for update")
-        .bind(id)
-        .fetch_one(&mut **tx)
-        .await?;
+    let state: Option<String> = sqlx::query_scalar(
+        "select status from exams where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let state = state.ok_or_else(AppError::not_found)?;
     if state == "published" {
         return Ok(());
     }
@@ -440,8 +443,8 @@ async fn create(
     validate(&i)?;
     let mut tx = s.db.begin().await?;
     let id = create_exam_tx(&mut tx, v.0.id, &i).await?;
+    audit_tx(&mut tx, &m, v.0.id, "exam.created", id, json!({})).await?;
     tx.commit().await?;
-    audit(&s, &m, v.0.id, "exam.created", id, json!({})).await;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 async fn list(
@@ -509,16 +512,16 @@ async fn assign(
     examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
     let mut tx = s.db.begin().await?;
     assign_tx(&mut tx, id, &i.items, v.0.id, v.0.is_admin()).await?;
-    tx.commit().await?;
-    audit(
-        &s,
+    audit_tx(
+        &mut tx,
         &m,
         v.0.id,
         "exam.questions_assigned",
         id,
         json!({"count":i.items.len()}),
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 async fn update(
@@ -582,14 +585,16 @@ async fn update(
         settings: p.settings.unwrap_or_else(|| settings(e.settings.clone())),
     };
     validate(&i)?;
-    let result=sqlx::query("update exams set title=$2,instructions=$3,starts_at=$4,ends_at=$5,duration_minutes=$6,total_marks=$7,pass_marks=$8,settings=$9,version=version+1,updated_at=now() where id=$1 and version=$10").bind(id).bind(title).bind(ins).bind(st).bind(ends).bind(duration).bind(total).bind(pass).bind(serde_json::to_value(i.settings).map_err(AppError::internal)?).bind(version).execute(&s.db).await?;
+    let mut tx = s.db.begin().await?;
+    let result=sqlx::query("update exams set title=$2,instructions=$3,starts_at=$4,ends_at=$5,duration_minutes=$6,total_marks=$7,pass_marks=$8,settings=$9,version=version+1,updated_at=now() where id=$1 and version=$10").bind(id).bind(title).bind(ins).bind(st).bind(ends).bind(duration).bind(total).bind(pass).bind(serde_json::to_value(i.settings).map_err(AppError::internal)?).bind(version).execute(&mut *tx).await?;
     if result.rows_affected() != 1 {
         return Err(examcore::conflict(
             "version",
             "The exam changed. Reload before editing.",
         ));
     }
-    audit(&s, &m, v.0.id, "exam.updated", id, json!({})).await;
+    audit_tx(&mut tx, &m, v.0.id, "exam.updated", id, json!({})).await?;
+    tx.commit().await?;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 async fn publish(
@@ -601,8 +606,8 @@ async fn publish(
     examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
     let mut tx = s.db.begin().await?;
     publish_tx(&mut tx, id).await?;
+    audit_tx(&mut tx, &m, v.0.id, "exam.published", id, json!({})).await?;
     tx.commit().await?;
-    audit(&s, &m, v.0.id, "exam.published", id, json!({})).await;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 
@@ -831,16 +836,16 @@ async fn put_blueprint(
     }
     sqlx::query("insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,$2,$3,$4) on conflict(exam_id) do update set enabled=excluded.enabled,rows=excluded.rows,tolerance=excluded.tolerance,updated_at=now()")
         .bind(id).bind(input.enabled).bind(rows).bind(input.tolerance).execute(&mut *tx).await?;
-    tx.commit().await?;
-    audit(
-        &s,
+    audit_tx(
+        &mut tx,
         &m,
         v.0.id,
         "exam.blueprint_updated",
         id,
         json!({"enabled":input.enabled}),
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok(examcore::ok(
         json!({"enabled":input.enabled,"rows":input.rows,"tolerance":input.tolerance}),
     ))
@@ -1047,8 +1052,8 @@ async fn unpublish(
     examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
     let mut tx = s.db.begin().await?;
     unpublish_tx(&mut tx, id).await?;
+    audit_tx(&mut tx, &m, v.0.id, "exam.unpublished", id, json!({})).await?;
     tx.commit().await?;
-    audit(&s, &m, v.0.id, "exam.unpublished", id, json!({})).await;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 async fn complete(
@@ -1061,18 +1066,18 @@ async fn complete(
     examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
     let mut tx = s.db.begin().await?;
     let changed = complete_tx(&mut tx, id, q.force).await?;
-    tx.commit().await?;
     if changed {
-        audit(
-            &s,
+        audit_tx(
+            &mut tx,
             &m,
             v.0.id,
             "exam.completed",
             id,
             json!({"forced":q.force}),
         )
-        .await;
+        .await?;
     }
+    tx.commit().await?;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
 async fn duplicate(
@@ -1110,16 +1115,16 @@ async fn duplicate(
     .map(|(question_id, marks)| AssignItem { question_id, marks })
     .collect();
     assign_tx(&mut tx, new, &items, v.0.id, v.0.is_admin()).await?;
-    tx.commit().await?;
-    audit(
-        &s,
+    audit_tx(
+        &mut tx,
         &m,
         v.0.id,
         "exam.duplicated",
         new,
         json!({"sourceId":id}),
     )
-    .await;
+    .await?;
+    tx.commit().await?;
     Ok(examcore::ok(get_data(&s.db, &v.0, new).await?))
 }
 async fn remove(
@@ -1128,15 +1133,28 @@ async fn remove(
     m: RequestMeta,
     Path(id): Path<Uuid>,
 ) -> examcore::ApiJson {
-    let e = examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
-    if e.status != "draft" {
+    let mut tx = s.db.begin().await?;
+    let row = sqlx::query(
+        "select owner_id,status from exams where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(row) = row else {
+        return Err(AppError::not_found());
+    };
+    let owner: Uuid = row.try_get("owner_id")?;
+    if owner != v.0.id && !v.0.is_admin() {
+        return Err(AppError::not_found());
+    }
+    let status: String = row.try_get("status")?;
+    if status != "draft" {
         return Err(examcore::conflict("state", "Only drafts can be deleted."));
     }
-    sqlx::query("update exams set deleted_at=now(),updated_at=now(),version=version+1 where id=$1")
-        .bind(id)
-        .execute(&s.db)
-        .await?;
-    audit(&s, &m, v.0.id, "exam.deleted", id, json!({})).await;
+    sqlx::query("update exams set deleted_at=now(),updated_at=now(),version=version+1 where id=$1 and status='draft' and deleted_at is null")
+        .bind(id).execute(&mut *tx).await?;
+    audit_tx(&mut tx, &m, v.0.id, "exam.deleted", id, json!({})).await?;
+    tx.commit().await?;
     Ok(examcore::ok(json!({"id":id})))
 }
 async fn sandbox(
@@ -1210,20 +1228,20 @@ async fn sandbox(
     let mut genesis = [0u8; 32];
     rng.fill_bytes(&mut genesis);
     let attempt:Uuid=sqlx::query_scalar("insert into attempts(exam_id,candidate_id,sandbox,deadline_at,seed,item_order,option_order,journal_genesis) values($1,$2,true,now()+($3||' minutes')::interval,$4,$5,$6,$7) returning id").bind(id).bind(v.0.id).bind(e.duration_minutes).bind(seed as i64).bind(&order).bind(Value::Object(option_order)).bind(genesis.to_vec()).fetch_one(&mut *tx).await?;
+    audit_tx(&mut tx, &m, v.0.id, "exam.sandbox_started", id, json!({})).await?;
     tx.commit().await?;
-    audit(&s, &m, v.0.id, "exam.sandbox_started", id, json!({})).await;
     Ok(examcore::ok(json!({"attemptId":attempt})))
 }
-async fn audit(
-    s: &AppState,
+async fn audit_tx(
+    tx: &mut Transaction<'_, Postgres>,
     m: &RequestMeta,
     actor: Uuid,
     action: &'static str,
     id: Uuid,
     meta: Value,
-) {
-    security::audit(
-        &s.db,
+) -> AppResult<()> {
+    security::audit_tx(
+        tx,
         m,
         AuditEntry {
             action,
@@ -1233,7 +1251,7 @@ async fn audit(
             meta,
         },
     )
-    .await;
+    .await
 }
 
 #[cfg(test)]
@@ -1478,6 +1496,57 @@ mod tests {
             .expect_err("one item cannot fill two distinct slots");
         assert_eq!(error.code, examcore::ErrorCode::Conflict);
         tx.rollback().await.expect("rollback rejected publish");
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn publish_waiting_on_draft_deletion_rechecks_locked_status(db: PgPool) {
+        let (_, exam, _) = fixture(&db, 5.0, 5.0).await;
+        let mut deletion = db.begin().await.expect("begin draft deletion");
+        sqlx::query("select id from exams where id=$1 and deleted_at is null for update")
+            .bind(exam)
+            .fetch_one(&mut *deletion)
+            .await
+            .expect("lock draft for deletion");
+
+        let publish_db = db.clone();
+        let publishing = tokio::spawn(async move {
+            let mut tx = publish_db.begin().await.expect("begin publish");
+            let result = publish_tx(&mut tx, exam).await;
+            if result.is_ok() {
+                tx.commit().await.expect("commit publish");
+            } else {
+                tx.rollback().await.expect("rollback publish");
+            }
+            result
+        });
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), async {
+                while !publishing.is_finished() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .is_err()
+        );
+
+        sqlx::query("update exams set deleted_at=now() where id=$1 and status='draft'")
+            .bind(exam)
+            .execute(&mut *deletion)
+            .await
+            .expect("mark draft deleted");
+        deletion.commit().await.expect("commit deletion");
+
+        let result = publishing.await.expect("publish task joins");
+        assert_eq!(
+            result.expect_err("deleted draft cannot publish").code,
+            AppError::not_found().code
+        );
+        let status: Option<String> = sqlx::query_scalar("select status from exams where id=$1")
+            .bind(exam)
+            .fetch_optional(&db)
+            .await
+            .expect("read final status");
+        assert_eq!(status.as_deref(), Some("draft"));
     }
 
     #[sqlx::test(migrations = "../../migrations")]

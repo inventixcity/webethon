@@ -275,7 +275,7 @@ function RankedBoard({ rows, totalMarks }: { rows: ResultRow[]; totalMarks: numb
           <article key={row.attemptId} className={cn("grid gap-3 border-b border-rule p-4 last:border-b-0", index % 2 ? "bg-paper-sunk" : "bg-paper")}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0"><p className="font-mono text-[11px] text-ink-muted">RANK {String(index + 1).padStart(2, "0")}</p><p className="truncate font-medium">{row.displayName}</p><p className="truncate font-mono text-[11px] text-ink-muted">{row.email}</p></div>
-              <a href={`/api/reports/attempt/${row.attemptId}`} className="shrink-0 font-mono text-[11px] uppercase underline underline-offset-4">PDF<span className="sr-only"> for {row.displayName}</span></a>
+              <a href={`/api/reports/attempt/${row.attemptId}`} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center font-mono text-[11px] uppercase underline underline-offset-4">PDF<span className="sr-only"> for {row.displayName}</span></a>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm"><p><span className="block font-mono text-[10px] text-ink-muted">SCORE</span>{formatMarks(row.totalScore)} / {formatMarks(totalMarks)}</p><p><span className="block font-mono text-[10px] text-ink-muted">RESULT</span>{row.passed === null ? "Pending" : row.passed ? "Pass" : "Not passed"}</p></div>
             <Meter value={row.percent ?? 0} max={100} tone={row.passed === false ? "muted" : row.passed === true ? "info" : "caution"} label={`${row.displayName}: ${formatPercent(row.percent, 1)}`} valueText={formatPercent(row.percent, 1)} />
@@ -349,7 +349,7 @@ function RankedBoard({ rows, totalMarks }: { rows: ResultRow[]; totalMarks: numb
             <span role="cell">
               <a
                 href={`/api/reports/attempt/${row.attemptId}`}
-                className="font-mono text-[11px] tracking-[0.1em] uppercase underline underline-offset-4 hover:text-vermilion-deep"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center font-mono text-[11px] tracking-[0.1em] uppercase underline underline-offset-4 hover:text-vermilion-deep"
               >
                 PDF<span className="sr-only"> for {row.displayName}</span>
               </a>

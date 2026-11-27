@@ -183,11 +183,18 @@ pub(crate) async fn create(
     tx.commit().await?;
     let msg = kernel::email::Email {
         to: email.clone(),
-        subject: "You are invited to Inventix Invigil".into(),
-        html: format!(
-            "<p>Your Invigil account is ready.</p><p><a href=\"{link}\">Set your password</a></p>"
+        subject: kernel::email_layout::subject("You are invited to Inventix Invigil"),
+        html: kernel::email_layout::layout(
+            "ACCOUNT / INVITATION",
+            "Your account is ready",
+            "Set up your Inventix Invigil account",
+            &kernel::email_layout::button(&link, "Set your password"),
+            "An administrator created an account for you.",
         ),
-        text: format!("Set your Invigil password: {link}"),
+        text: format!(
+            "Your Inventix Invigil account is ready.\n\nSet your password: {link}\n\nAn administrator created an account for you.\nWe never ask for your password by email."
+        ),
+        reply_to: None,
     };
     if let Err(error) = state.email.send(&msg).await {
         tracing::warn!(error=%error,"admin invite email delivery failed");
@@ -408,7 +415,17 @@ async fn mutate(
         }
         _ => {}
     }
-    if ["suspend", "delete", "revoke", "mfa_reset"].contains(&action) {
+    if [
+        "role",
+        "suspend",
+        "unsuspend",
+        "delete",
+        "restore",
+        "revoke",
+        "mfa_reset",
+    ]
+    .contains(&action)
+    {
         sqlx::query("update sessions set revoked_at=coalesce(revoked_at,now()) where user_id=$1")
             .bind(id)
             .execute(&mut *tx)
@@ -486,8 +503,26 @@ pub(crate) async fn resend(
             })
             .collect();
         let link = format!("{}/signup?email={}", state.config.app_origin, encoded);
-        let text = format!("Please restart your signup and choose a new password: {link}");
-        state.email.send(&kernel::email::Email{to:email,subject:"Restart your signup".into(),html:format!("<p>Please restart your signup and choose a new password.</p><p><a href=\"{link}\">Continue signup</a></p>"),text}).await.map_err(AppError::internal)?;
+        let text = format!(
+            "Please restart your signup and choose a new password.\n\nContinue signup: {link}\n\nWe never ask for your password by email."
+        );
+        state
+            .email
+            .send(&kernel::email::Email {
+                to: email,
+                subject: kernel::email_layout::subject("Restart your signup"),
+                html: kernel::email_layout::layout(
+                    "ACCOUNT / SECURITY",
+                    "Restart your signup",
+                    "Continue setting up your account",
+                    &kernel::email_layout::button(&link, "Continue signup"),
+                    "An administrator reissued your account access link.",
+                ),
+                text,
+                reply_to: None,
+            })
+            .await
+            .map_err(AppError::internal)?;
     }
     Ok(axum::http::StatusCode::ACCEPTED)
 }
@@ -757,6 +792,54 @@ mod tests {
             .status(),
             StatusCode::CONFLICT
         );
+        sqlx::query("update users set email_verified_at=now() where id=$1")
+            .bind(user)
+            .execute(&db)
+            .await
+            .unwrap();
+        let (old_user_token, old_user_hash) = kernel::crypto::new_token();
+        let old_user_session: Uuid = sqlx::query_scalar(
+            "insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour') returning id",
+        )
+        .bind(user)
+        .bind(old_user_hash.as_slice())
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(
+            request(
+                &state,
+                &token,
+                "POST",
+                &format!("/users/{user}/role"),
+                r#"{"role":"examiner"}"#
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+        assert!(
+            kernel::session::lookup(&db, &state.config, &old_user_token)
+                .await
+                .unwrap()
+                .is_none(),
+            "promotion must invalidate the previous candidate session"
+        );
+        let role_audited: bool = sqlx::query_scalar(
+            "select exists(select 1 from audit_log where action='admin.user.role' and target_id=$1)",
+        )
+        .bind(user.to_string())
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert!(role_audited);
+        let revoked: bool =
+            sqlx::query_scalar("select revoked_at is not null from sessions where id=$1")
+                .bind(old_user_session)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert!(revoked);
         assert_eq!(
             request(
                 &state,
@@ -824,7 +907,7 @@ mod tests {
                 .fetch_all(&db)
                 .await
                 .unwrap();
-        assert_eq!(audits.len(), 2);
+        assert_eq!(audits.len(), 3);
         assert!(!json!(audits).to_string().contains("sensitive-hash"));
         assert_eq!(
             request(&state, &token, "GET", "/users?limit=0", "")
