@@ -1,12 +1,16 @@
 import { ApiError, api } from "@/lib/api/client";
 import type { AnswerResponse, HeartbeatResult, JournalEntry, JournalSyncResult, Lease, SaveAnswerInput, SaveAnswerResult } from "@/lib/exam/types";
-import { JOURNAL_SEQ_BASE, acknowledgeEntries, appendEntry, getMeta, leaseElapsed, listEntries, nextClientSeq, setLease } from "@/lib/exam/journal";
+import { JOURNAL_SEQ_BASE, acknowledgeEntries, appendEntry, cacheAnswer, getMeta, leaseElapsed, listEntries, nextClientSeq, setLease } from "@/lib/exam/journal";
 import { attemptHeaders } from "@/lib/exam/device";
 import { observeServerTime, serverNowMs } from "@/lib/exam/clock";
 import { isNetworkOnline } from "@/lib/exam/network";
 
 export type SavedValue = { response: AnswerResponse; flagged: boolean; typing?: SaveAnswerInput["typing"] };
 export type SyncCallbacks = { onState?: (state: "saved" | "saving" | "queued" | "offline" | "error") => void; onDeviceActive?: (active: boolean) => void; onClosed?: () => void };
+export type JournalRejection = JournalSyncResult["rejected"][number] & { itemId: string };
+export class JournalSyncError extends Error {
+  constructor(readonly rejected: JournalRejection[]) { super(`Journal sync rejected: ${rejected.map((entry) => entry.reason).join(", ")}`); this.name = "JournalSyncError"; }
+}
 const attemptPath = (id: string, suffix: string) => `/attempts/${encodeURIComponent(id)}/${suffix}` as const;
 const transient = (error: unknown) => error instanceof ApiError && (error.status === 0 || error.status === 429 || error.status >= 500);
 
@@ -34,7 +38,14 @@ export function syncJournal(attemptId: string, callbacks: SyncCallbacks = {}): P
     let total = 0;
     try {
       for (;;) {
-        const batch = await listEntries(attemptId, 200);
+        const available = await listEntries(attemptId, 200);
+        const batch: JournalEntry[] = [];
+        let bytes = 32;
+        for (const entry of available) {
+          const size = new TextEncoder().encode(JSON.stringify(entry)).length + 1;
+          if (batch.length && bytes + size > 750_000) break;
+          batch.push(entry); bytes += size;
+        }
         if (!batch.length) return total;
         if (!isNetworkOnline()) throw new ApiError({ status: 0, code: "UNAVAILABLE", message: "The connection is offline. Answers remain saved on this device." });
         callbacks.onState?.("saving");
@@ -43,7 +54,8 @@ export function syncJournal(attemptId: string, callbacks: SyncCallbacks = {}): P
         const acknowledged = batch.filter((entry) => entry.seq <= result.seq).map((entry) => entry.seq);
         await acknowledgeEntries(attemptId, acknowledged, result.head, result.seq);
         total += acknowledged.length;
-        if (result.rejected.some((entry) => entry.seq > result.seq)) throw new Error(`Journal sync rejected: ${result.rejected.filter((entry) => entry.seq > result.seq).map((entry) => entry.reason).join(", ")}`);
+        const rejected = result.rejected.filter((entry) => entry.seq > result.seq);
+        if (rejected.length) throw new JournalSyncError(rejected.map((entry) => ({ ...entry, itemId: batch.find((candidate) => candidate.seq === entry.seq)?.itemId ?? "" })));
         if (!acknowledged.length) throw new Error("Journal synchronization made no progress.");
       }
     } catch (error) { reportConflict(error, callbacks); throw error; }
@@ -56,7 +68,11 @@ export function syncJournal(attemptId: string, callbacks: SyncCallbacks = {}): P
 export async function saveOnline(attemptId: string, itemId: string, value: SavedValue, _callbacks: SyncCallbacks = {}, seq?: number): Promise<SaveAnswerResult> {
   const clientSeq = seq ?? await nextClientSeq(attemptId);
   for (let attempt = 0; ; attempt++) {
-    try { return await api<SaveAnswerResult>(attemptPath(attemptId, `answers/${encodeURIComponent(itemId)}`), { method: "PUT", body: { ...value, clientSeq }, headers: attemptHeaders() }); }
+    try {
+      const result = await api<SaveAnswerResult>(attemptPath(attemptId, `answers/${encodeURIComponent(itemId)}`), { method: "PUT", body: { ...value, clientSeq }, headers: attemptHeaders() });
+      if (result.accepted) await cacheAnswer(attemptId, { itemId, response: value.response, flagged: value.flagged, clientSeq: result.clientSeq, savedAt: result.savedAt });
+      return result;
+    }
     catch (error) {
       // Durable edits recover through journal replay. Without a journal, retry the same idempotent
       // sequence with backoff, then surface failure so submission cannot silently lose the answer.
@@ -110,7 +126,7 @@ export class AttemptSaveQueue {
       this.pending.delete(itemId);
       const task = this.tail.then(async () => {
         const entry = await prepared;
-        if (!send && entry) return;
+        if (!send) return;
         if (!isNetworkOnline() || this.options.offline?.()) {
           if (!entry) throw new Error("Answer could not be saved while offline.");
           report("queued"); return;
@@ -156,6 +172,9 @@ export class AttemptSaveQueue {
     try { await this.flush(); await syncJournal(this.id, { onDeviceActive: this.options.onDeviceActive, onClosed: this.options.onClosed }); await finalize(); }
     catch (error) { this.stopped = false; throw error; }
   }
+
+  /** Called only after an authoritative heartbeat reports an audited reopening. */
+  resume(): void { this.stopped = false; }
 
   dispose(): void { this.stopped = true; for (const { timer, run } of [...this.pending.values()]) { clearTimeout(timer); void run().catch(() => {}); } }
 }

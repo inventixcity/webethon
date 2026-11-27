@@ -1,9 +1,10 @@
-import type { AttemptPayload, JournalEntry, Lease } from "@/lib/exam/types";
+import type { AttemptPayload, JournalEntry, Lease, SavedAnswer } from "@/lib/exam/types";
 
 const DB_NAME = "invigil-journal";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const ENTRY_STORE = "entries";
 const META_STORE = "meta";
+const ANSWER_STORE = "answers";
 const appendLocks = new Map<string, Promise<void>>();
 export const JOURNAL_SEQ_BASE = 1_000_000_000;
 
@@ -17,6 +18,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(ENTRY_STORE)) db.createObjectStore(ENTRY_STORE, { keyPath: ["attemptId", "seq"] });
       if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: "attemptId" });
+      if (!db.objectStoreNames.contains(ANSWER_STORE)) db.createObjectStore(ANSWER_STORE, { keyPath: ["attemptId", "itemId"] });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"));
@@ -25,7 +27,7 @@ function openDb(): Promise<IDBDatabase> {
 
 function transact<T>(attemptId: string, stores: string[], mode: IDBTransactionMode, run: (tx: IDBTransaction, done: (value: T) => void) => void): Promise<T> {
   return openDb().then((db) => new Promise<T>((resolve, reject) => {
-    const tx = db.transaction(stores, mode);
+    const tx = db.transaction(stores, mode, mode === "readwrite" ? { durability: "strict" } : undefined);
     let result: T;
     run(tx, (value) => { result = value; });
     tx.oncomplete = () => { db.close(); resolve(result!); };
@@ -96,6 +98,25 @@ export async function cacheAttempt(attemptId: string, payload: AttemptPayload): 
   await mutateMeta(attemptId, (meta) => ({ ...meta, payload }));
 }
 
+/** Keep acknowledged answers after their pending journal entries are deleted. */
+export async function cacheAnswer(attemptId: string, answer: SavedAnswer): Promise<void> {
+  await transact<void>(attemptId, [ANSWER_STORE], "readwrite", (tx, done) => {
+    const store = tx.objectStore(ANSWER_STORE);
+    const request = store.get([attemptId, answer.itemId]);
+    request.onsuccess = () => {
+      if (!request.result || request.result.clientSeq <= answer.clientSeq) store.put({ ...answer, attemptId });
+      done();
+    };
+  });
+}
+
+export async function cachedAnswers(attemptId: string): Promise<SavedAnswer[]> {
+  return transact(attemptId, [ANSWER_STORE], "readonly", (tx, done) => {
+    const request = tx.objectStore(ANSWER_STORE).getAll(IDBKeyRange.bound([attemptId, ""], [attemptId, "\uffff"]));
+    request.onsuccess = () => done((request.result as Array<SavedAnswer & { attemptId: string }>).map(({ attemptId: _id, ...answer }) => { void _id; return answer; }));
+  });
+}
+
 /** Reload fallback uses wall-clock delta. Never clamp a late edit back to the signed deadline. */
 export async function leaseElapsed(meta: JournalMeta): Promise<number> {
   if (!meta.lease || meta.leaseReceivedAt === null || meta.receivedAtWall === null) return 0;
@@ -117,7 +138,7 @@ export async function appendEntry(attemptId: string, itemId: string, response: J
   // The read, sequence allocation, hash/head and entry write share ONE readwrite transaction.
   // IndexedDB also serializes this transaction against other tabs. WebCrypto is asynchronous;
   // keep a read request outstanding and perform writes inside its active onsuccess callback.
-  return await transact<JournalEntry>(attemptId, [ENTRY_STORE, META_STORE], "readwrite", (tx, done) => {
+  return await transact<JournalEntry>(attemptId, [ENTRY_STORE, META_STORE, ANSWER_STORE], "readwrite", (tx, done) => {
     const store = tx.objectStore(META_STORE);
     const req = store.get(attemptId);
     req.onsuccess = () => {
@@ -135,6 +156,7 @@ export async function appendEntry(attemptId: string, itemId: string, response: J
           if (hash === undefined) { keepAlive(); return; }
           const entry: JournalEntry = { seq, itemId, response, flagged, lease, elapsedMs: Math.floor(elapsedMs), writtenAt, hash };
           tx.objectStore(ENTRY_STORE).add({ ...entry, attemptId });
+          tx.objectStore(ANSWER_STORE).put({ attemptId, itemId, response, flagged, clientSeq: JOURNAL_SEQ_BASE + seq, savedAt: new Date(writtenAt).toISOString() });
           store.put({ ...meta, attemptId, head: hash, seq, clientSeq: Math.max(meta.clientSeq, JOURNAL_SEQ_BASE + seq) });
           done(entry);
         };

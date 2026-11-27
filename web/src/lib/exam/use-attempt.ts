@@ -13,8 +13,8 @@ import { ApiError, api } from "@/lib/api/client";
 import type { AnswerResponse, Announcement, AttemptPayload } from "@/lib/exam/types";
 import { observeServerTime, serverNowMs } from "@/lib/exam/clock";
 import { attemptHeaders } from "@/lib/exam/device";
-import { cacheAttempt, getMeta, initializeJournal, leaseElapsed, listEntries, pendingCount, setLease } from "@/lib/exam/journal";
-import { AttemptSaveQueue, heartbeat, syncJournal, type SavedValue } from "@/lib/exam/sync";
+import { cacheAttempt, cachedAnswers, getMeta, initializeJournal, leaseElapsed, listEntries, pendingCount, setLease } from "@/lib/exam/journal";
+import { AttemptSaveQueue, JournalSyncError, heartbeat, syncJournal, type JournalRejection, type SavedValue } from "@/lib/exam/sync";
 import { isNetworkOnline, useHeartbeatQuality } from "@/lib/exam/network";
 
 type AnswerState = "saved" | "saving" | "queued" | "offline" | "error";
@@ -38,6 +38,7 @@ export function useAttempt(attemptId: string) {
   const [submitting, setSubmitting] = useState(false);
   const [deviceActive, setDeviceActive] = useState(true);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [journalRejected, setJournalRejected] = useState<JournalRejection[]>([]);
   const values = useRef<Record<string, AttemptAnswer>>({});
   const payloadRef = useRef<AttemptPayload | null>(null);
   const queue = useRef<AttemptSaveQueue | null>(null);
@@ -70,9 +71,12 @@ export function useAttempt(attemptId: string) {
     if (submitted.current) return Promise.resolve();
     if (!queue.current) return Promise.reject(new Error("The attempt is still loading."));
     setSubmitting(true); setError(null);
-    const promise = queue.current.finalize(() => api(`/attempts/${encodeURIComponent(attemptId)}/submit`, { body: { confirm: true }, headers: attemptHeaders() }))
+    const promise = queue.current.finalize(async () => {
+      const result = await api<{ status: AttemptPayload["status"] }>(`/attempts/${encodeURIComponent(attemptId)}/submit`, { body: { confirm: true }, headers: attemptHeaders() });
+      if (payloadRef.current) { const next = { ...payloadRef.current, status: result.status }; payloadRef.current = next; if (mounted.current) setPayload(next); }
+    })
       .then(() => { submitted.current = true; if (mounted.current) setClosed(true); })
-      .catch((cause: unknown) => { if (mounted.current) setError(cause instanceof Error ? cause.message : "Could not submit the attempt."); throw cause; })
+      .catch((cause: unknown) => { if (mounted.current) { setError(cause instanceof Error ? cause.message : "Could not submit the attempt."); if (cause instanceof JournalSyncError) setJournalRejected(cause.rejected); } throw cause; })
       .finally(() => { submission.current = null; if (mounted.current) setSubmitting(false); void refreshPending(); });
     submission.current = promise;
     return promise;
@@ -96,7 +100,9 @@ export function useAttempt(attemptId: string) {
           if (!(cause instanceof ApiError) || cause.status !== 0) throw cause;
           const meta = await getMeta(attemptId);
           if (!meta.payload || !meta.lease) throw cause;
-          result = meta.payload;
+          const restored = new Map(meta.payload.answers.map((answer) => [answer.itemId, answer]));
+          for (const answer of await cachedAnswers(attemptId)) if (answer.clientSeq >= (restored.get(answer.itemId)?.clientSeq ?? -1)) restored.set(answer.itemId, answer);
+          result = { ...meta.payload, answers: [...restored.values()] };
           observeServerTime(new Date(meta.lease.issuedAt + await leaseElapsed(meta)).toISOString());
           recovering.current = true;
         }
@@ -134,7 +140,7 @@ export function useAttempt(attemptId: string) {
         setDeviceActive(data.deviceActive);
         const current = payloadRef.current;
         if (current) { const next = { ...current, deadlineAt: data.deadlineAt, status: data.status, lease: data.lease }; payloadRef.current = next; setPayload(next); await cacheAttempt(attemptId, next); }
-        if (data.status === "in_progress" && Date.parse(data.deadlineAt) > serverNowMs()) { submitted.current = false; setClosed(false); }
+        if (current?.status === "expired" && data.status === "in_progress" && Date.parse(data.deadlineAt) > serverNowMs()) { submitted.current = false; queue.current?.resume(); setClosed(false); setError(null); }
         if (data.announcements.length) {
           lastAnnouncement.current = data.announcements.at(-1)?.createdAt ?? lastAnnouncement.current;
           setAnnouncements((old) => [...new Map([...old, ...data.announcements].map((item) => [item.id, item])).values()]);
@@ -148,6 +154,7 @@ export function useAttempt(attemptId: string) {
         await refreshPending();
       } catch (cause) {
         if (cancelled) return;
+        if (cause instanceof JournalSyncError) { setJournalRejected(cause.rejected); setError(cause.message); }
         if (cause instanceof ApiError && cause.status === 409 && (cause.details as { reason?: string })?.reason === "device") setDeviceActive(false);
         failures += 1; recovering.current = failures >= 2; record(null);
       }
@@ -197,5 +204,5 @@ export function useAttempt(attemptId: string) {
   }, [attemptId]);
   const states = Object.values(answers).map((answer) => answer.state);
   const saveState: "saved" | "saving" | "offline" | "syncing" | "error" = submitting ? "syncing" : states.includes("error") || error ? "error" : states.includes("saving") ? "saving" : pending || states.includes("queued") || states.includes("offline") ? "offline" : "saved";
-  return { status, error, payload, answers, setAnswer, toggleFlag, saveState, pendingCount: pending + states.filter((state) => state === "saving").length, remainingMs, deadlineAt, closed, deviceActive, takeover, submit, announcements, network };
+  return { status, error, payload, answers, setAnswer, toggleFlag, saveState, pendingCount: pending + states.filter((state) => state === "saving").length, remainingMs, deadlineAt, closed, deviceActive, takeover, submit, announcements, network, journalRejected };
 }

@@ -27,7 +27,7 @@ and the 5.3 and 5.1 mechanisms are in [INNOVATION.md](INNOVATION.md).
 │ proxy.ts            route gating (/app, /exam need a session)   │
 └───────────────┬─────────────────────────────────────────────────┘
                 │ server to server (API_ORIGIN)
-┌───────────────▼──────────── Rust API (Render) ──────────────────┐
+┌───────────────▼──────────── Rust API (Azure Container Apps) ────┐
 │ server     router assembly, middleware, housekeeping loops      │
 │ kernel     config, errors, sessions, CSRF, rate limits, audit   │
 │ auth/admin sign-in, Argon2id, MFA, user and role management     │
@@ -133,7 +133,7 @@ invariant first. Constraints and indexes are the last line of defence.
 | **404 for anything you can't see** | Debugging is slightly harder, but no endpoint confirms that an exam, attempt or question exists |
 | **One active device per attempt**, with an explicit takeover | A broken laptop can be swapped for another in seconds, and a hidden second device becomes a recorded incident. The old device stops at once |
 | **Hash-chained offline journal** plus signed leases, instead of trusting client timestamps | More code on both sides, and an unkeyed chain protects ordering and integrity rather than authenticity (see INNOVATION). It never extends time |
-| **A Rust API behind a same-origin proxy** | One extra hop (Vercel → Render) on every API call. In return there's no CORS and a first-party cookie, and security never depends on the Next layer, because every decision is made in Rust |
+| **A Rust API behind a same-origin proxy** | One extra hop (Vercel → Azure Container Apps) on every API call. In return there's no CORS and a first-party cookie, and security never depends on the Next layer, because every decision is made in Rust |
 | **Postgres for rate limits** instead of Redis | One less service and correct across replicas. It costs a write per request, which is acceptable at exam scale |
 | **The paper cache is in-process** | Each replica warms its own copy, and a miss is a single indexed query |
 | **Indicators, never verdicts** | We give up "automatic cheating detection" in exchange for fairness and fewer false accusations. The examiner always decides |

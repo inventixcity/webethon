@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { stripTypeScriptTypes } from "node:module";
 
 // Exercise real IndexedDB transaction scheduling, including independent browsing contexts.
@@ -59,7 +59,9 @@ beforeAll(async () => {
 afterAll(async () => {
   socket?.close(); processHandle?.kill();
   if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (directory) { try { rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* Chrome may still be releasing its profile. */ } }
+  if (directory && dirname(resolve(directory)) === resolve(tmpdir()) && basename(directory).startsWith("invigil-journal-")) {
+    try { rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* Chrome may still be releasing its profile. */ }
+  }
 });
 
 const source = readFileSync(new URL("./journal.ts", import.meta.url), "utf8").replace(/^import type[^;]+;/gm, "").replace(/^export /gm, "");
@@ -95,14 +97,23 @@ browserIt("keeps all answers and one valid chain across concurrent tabs, metadat
     const meta = await getMeta(id);
     const counters = await Promise.all(Array.from({length:20},()=>nextClientSeq(id)));
     const reload = await frame.contentWindow.nextClientSeq(id);
-    return { valid, count:entries.length, distinct:new Set(entries.map(e=>e.itemId)).size, head:meta.head, expectedHead:last.hash, seq:meta.seq, lease:meta.lease, counters, reload, remaining:(await listEntries(id,100)).length };
+    const remaining = (await listEntries(id,100)).length;
+    await acknowledgeEntries(id,entries.map(entry=>entry.seq),last.hash,last.seq);
+    await cacheAnswer(id,{itemId:entries[0].itemId,response:{text:'stale overwrite'},flagged:true,clientSeq:1,savedAt:new Date().toISOString()});
+    const cached = await frame.contentWindow.cachedAnswers(id);
+    const cacheValid = cached.length === 48 && cached.every(answer => {
+      const entry=entries.find(entry=>entry.itemId===answer.itemId);
+      return entry && answer.response.text===entry.response.text && answer.clientSeq===JOURNAL_SEQ_BASE+entry.seq;
+    });
+    return { valid, count:entries.length, distinct:new Set(entries.map(e=>e.itemId)).size, head:meta.head, expectedHead:last.hash, seq:meta.seq, lease:meta.lease, counters, reload, remaining, cacheValid, finalPending:(await listEntries(id,100)).length };
   })()`;
   const response = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (response.exceptionDetails) throw new Error(JSON.stringify(response.exceptionDetails));
-  const result = (response.result as { value: { valid: boolean; count: number; distinct: number; head: string; expectedHead: string; seq: number; lease: unknown; counters: number[]; reload: number; remaining: number } }).value;
+  const result = (response.result as { value: { valid: boolean; count: number; distinct: number; head: string; expectedHead: string; seq: number; lease: unknown; counters: number[]; reload: number; remaining: number; cacheValid: boolean; finalPending: number } }).value;
   expect(result.valid).toBe(true);
   expect(result.count).toBe(48); expect(result.distinct).toBe(48);
   expect(result.head).toBe(result.expectedHead); expect(result.seq).toBe(48); expect(result.lease).toBeTruthy();
   expect(result.counters).toEqual(Array.from({ length: 20 }, (_, i) => 1_000_000_049 + i));
   expect(result.reload).toBe(1_000_000_069); expect(result.remaining).toBe(46);
+  expect(result.finalPending).toBe(0); expect(result.cacheValid).toBe(true);
 }, 20_000);

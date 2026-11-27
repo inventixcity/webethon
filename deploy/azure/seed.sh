@@ -25,7 +25,33 @@ ENV_VARS=(APP_ENV=production RUN_MIGRATIONS=false APP_ORIGIN="$APP_ORIGIN" DATAB
 [[ -n "${RESEND_API_KEY:-}" ]] && ENV_VARS+=(RESEND_API_KEY=secretref:resend-api-key)
 if az containerapp job show --resource-group "$GROUP" --name "$JOB" >/dev/null 2>&1; then
   az containerapp job secret set --resource-group "$GROUP" --name "$JOB" --secrets "${SECRETS[@]}" --output none
-  az containerapp job update --resource-group "$GROUP" --name "$JOB" --image "$IMAGE" --command /app/api --args seed-demo --env-vars "${ENV_VARS[@]}" --cpu 0.5 --memory 1.0Gi --output none
+  JOB_JSON="$(mktemp)"
+  PATCH_JSON="$(mktemp)"
+  trap 'rm -f "$JOB_JSON" "$PATCH_JSON"' EXIT
+  az containerapp job show --resource-group "$GROUP" --name "$JOB" --output json >"$JOB_JSON"
+  node - "$JOB_JSON" "$PATCH_JSON" "$IMAGE" "${ENV_VARS[@]}" <<'NODE'
+const fs = require('node:fs');
+const job = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const container = job.properties.template.containers[0];
+container.image = process.argv[4];
+container.command = ['/app/api'];
+container.args = ['seed-demo'];
+container.resources = { cpu: 0.5, memory: '1.0Gi' };
+container.env = process.argv.slice(5).map((entry) => {
+  const separator = entry.indexOf('=');
+  return { name: entry.slice(0, separator), value: entry.slice(separator + 1) };
+});
+fs.writeFileSync(process.argv[3], JSON.stringify({
+  location: job.location,
+  properties: {
+    environmentId: job.properties.environmentId,
+    configuration: job.properties.configuration,
+    template: job.properties.template,
+  },
+}));
+NODE
+  JOB_ID="$(az containerapp job show --resource-group "$GROUP" --name "$JOB" --query id -o tsv)"
+  az rest --method patch --uri "https://management.azure.com${JOB_ID}?api-version=2024-03-01" --body "@$PATCH_JSON" --output none
 else
   az containerapp job create --resource-group "$GROUP" --name "$JOB" --environment "$ENVIRONMENT" --trigger-type Manual --replica-timeout 300 --replica-completion-count 1 --parallelism 1 --image "$IMAGE" --registry-server "$REGISTRY" --registry-username "$REGISTRY_USER" --registry-password "$REGISTRY_PASSWORD" --command /app/api --args seed-demo --secrets "${SECRETS[@]}" --env-vars "${ENV_VARS[@]}" --cpu 0.5 --memory 1.0Gi --output none
 fi

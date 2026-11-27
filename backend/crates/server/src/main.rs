@@ -334,12 +334,12 @@ async fn seed_demo_exams(
 
     let now = time::OffsetDateTime::now_utc();
     let a_ids = question_ids[..10].to_vec();
-    let b_ids = question_ids[10..20].to_vec();
-    let c_ids = [0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    let b_ids = question_ids[24..30].to_vec();
+    let c_ids = [0usize, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17]
         .into_iter()
         .map(|index| question_ids[index])
         .collect::<Vec<_>>();
-    let d_ids = question_ids[20..30].to_vec();
+    let d_ids = question_ids[6..12].to_vec();
     let total = |ids: &[sqlx::types::Uuid]| -> f64 {
         ids.iter()
             .filter_map(|id| question_ids.iter().position(|candidate| candidate == id))
@@ -617,7 +617,7 @@ fn validate_exam_secrets() -> anyhow::Result<()> {
 }
 
 fn valid_lease_key(key: &str) -> bool {
-    key.len() >= 32
+    key.is_ascii() && key.len() >= 32
 }
 
 fn valid_result_signing_key(key: &str) -> bool {
@@ -721,6 +721,7 @@ mod hashing_tests {
 
         assert!(!super::valid_lease_key("short"));
         assert!(super::valid_lease_key(&"x".repeat(32)));
+        assert!(!super::valid_lease_key(&"é".repeat(32)));
 
         let valid = base64::engine::general_purpose::STANDARD.encode([7_u8; 32]);
         let wrong_size = base64::engine::general_purpose::STANDARD.encode([7_u8; 31]);

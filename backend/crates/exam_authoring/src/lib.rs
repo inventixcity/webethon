@@ -913,7 +913,7 @@ mod tests {
         assert_eq!(error.code, examcore::ErrorCode::Conflict);
         tx.rollback().await.expect("rollback blocked publish");
 
-        let (_, ready_exam, question) = fixture(&db, 5.0, 5.0).await;
+        let (owner, ready_exam, question) = fixture(&db, 5.0, 5.0).await;
         let mut tx = db.begin().await.expect("begin publish");
         publish_tx(&mut tx, ready_exam)
             .await
@@ -954,6 +954,18 @@ mod tests {
                 .await
                 .expect("read paper snapshot");
         assert_eq!(snapshot, "Original prompt");
+        let viewer = Viewer {
+            id: owner,
+            session_id: Uuid::new_v4(),
+            email: "owner@example.test".into(),
+            display_name: "Owner".into(),
+            role: Role::Examiner,
+            via_cookie: false,
+        };
+        let exam = get_data(&db, &viewer, ready_exam)
+            .await
+            .expect("read exam with frozen question");
+        assert_eq!(exam["questions"][0]["question"]["stem"], "Original prompt");
     }
 
     #[sqlx::test(migrations = "../../migrations")]

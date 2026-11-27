@@ -158,12 +158,14 @@ async fn heartbeat(
         .transpose()?;
     rate(&s, id, "heartbeat", 20, 60).await?;
     let mut tx = s.db.begin().await?;
-    let row = sqlx::query("select status,deadline_at,active_device,last_heartbeat_at,clock_timestamp() as server_now from attempts where id=$1 for update").bind(id).fetch_optional(&mut *tx).await?.ok_or_else(AppError::not_found)?;
+    let row = sqlx::query("select status,deadline_at,active_device,last_heartbeat_at from attempts where id=$1 for update").bind(id).fetch_optional(&mut *tx).await?.ok_or_else(AppError::not_found)?;
     let status: String = row.try_get("status")?;
     let deadline: OffsetDateTime = row.try_get("deadline_at")?;
     let active: Option<String> = row.try_get("active_device")?;
     let previous: Option<OffsetDateTime> = row.try_get("last_heartbeat_at")?;
-    let now: OffsetDateTime = row.try_get("server_now")?;
+    let now: OffsetDateTime = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&mut *tx)
+        .await?;
     if status == "in_progress" && now > deadline + time::Duration::seconds(JOURNAL_GRACE_SECS) {
         exam_attempts::finalize(&mut tx, id, "timer").await?;
     }
@@ -206,7 +208,7 @@ async fn heartbeat(
         .await;
     }
     Ok(examcore::ok(
-        json!({"serverNow":stamp(now),"deadlineAt":stamp(deadline),"status":status,"lease":examcore::issue_lease(id,deadline),"deviceActive":device_active,"announcements":announcements}),
+        json!({"serverNow":stamp(examcore::now()),"deadlineAt":stamp(deadline),"status":status,"lease":examcore::issue_lease(id,deadline),"deviceActive":device_active,"announcements":announcements}),
     ))
 }
 
@@ -468,8 +470,29 @@ async fn verified_outages(
     conn: &mut sqlx::PgConnection,
     id: Uuid,
 ) -> AppResult<Vec<VerifiedOutage>> {
-    let rows=sqlx::query("with bounds as (select started_at,least(deadline_at,coalesce(submitted_at,deadline_at)) stop from attempts where id=$1), points as (select started_at at from bounds union select at from attempt_heartbeats where attempt_id=$1), gaps as (select lag(at) over(order by at) prev,at from points), clipped as (select greatest(prev,started_at) lo,least(at,stop) hi from gaps cross join bounds where prev is not null) select lo,hi,extract(epoch from (hi-lo))::bigint seconds,exists(select 1 from time_credits c where c.attempt_id=$1 and c.outage_from<hi and c.outage_to>lo) credited from clipped where hi-lo>=interval '45 seconds' order by lo")
-        .bind(id).fetch_all(conn).await?;
+    let rows = sqlx::query(
+        r#"
+        with bounds as (
+            select started_at,least(deadline_at,coalesce(submitted_at,deadline_at)) stop
+            from attempts where id=$1
+        ), points as (
+            select started_at at from bounds
+            union select at from attempt_heartbeats where attempt_id=$1
+        ), gaps as (
+            select lag(at) over(order by at) prev,at from points
+        ), clipped as (
+            select greatest(prev,started_at) lo,least(at,stop) hi
+            from gaps cross join bounds where prev is not null
+        )
+        select lo,hi,floor(extract(epoch from (hi-lo)))::bigint seconds,
+            exists(select 1 from time_credits c where c.attempt_id=$1
+                and c.outage_from<hi and c.outage_to>lo) credited
+        from clipped where hi-lo>=interval '45 seconds' order by lo
+        "#,
+    )
+    .bind(id)
+    .fetch_all(conn)
+    .await?;
     rows.into_iter()
         .map(|row| {
             Ok(VerifiedOutage {
@@ -499,7 +522,7 @@ async fn time_credit(
     if !(1..=3600).contains(&input.seconds) {
         return Err(invalid("seconds", "Provide between 1 and 3600 seconds."));
     }
-    if !(3..=500).contains(&input.reason.trim().chars().count()) {
+    if !(3..=500).contains(&input.reason.trim().chars().count()) || input.reason.contains('\0') {
         return Err(invalid("reason", "Provide a 3–500 character reason."));
     }
     let mut from = input
@@ -561,9 +584,7 @@ async fn time_credit(
         })?;
         // HANDOFF's strict cap and R1 pass 2: no tolerance beyond verified outage time.
         // Under this row lock overlapping requests cannot reuse a gap or exceed cumulative time.
-        if i64::from(input.seconds) > gap.seconds
-            || granted + i64::from(input.seconds) > total
-        {
+        if i64::from(input.seconds) > gap.seconds || granted + i64::from(input.seconds) > total {
             return Err(examcore::conflict(
                 "credit_cap",
                 "Credit exceeds verified uncredited outage time.",

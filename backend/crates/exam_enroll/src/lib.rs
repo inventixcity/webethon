@@ -394,7 +394,7 @@ async fn invite_one(
     )
     .await?;
     let mut tx = state.db.begin().await?;
-    let row:Option<(String,String,bool)>=sqlx::query_as("select u.email::text,u.display_name,u.password_hash is not null from enrollments e join users u on u.id=e.candidate_id where e.exam_id=$1 and e.candidate_id=$2 and e.status='enrolled'").bind(id).bind(cid).fetch_optional(&mut *tx).await?;
+    let row:Option<(String,String,bool)>=sqlx::query_as("select u.email::text,u.display_name,u.password_hash is not null from enrollments e join users u on u.id=e.candidate_id where e.exam_id=$1 and e.candidate_id=$2 and e.status='enrolled' for update of u").bind(id).bind(cid).fetch_optional(&mut *tx).await?;
     let (email, name, active) = row.ok_or_else(AppError::not_found)?;
     if active {
         return Err(examcore::invalid(
@@ -484,7 +484,7 @@ async fn lookup_invite(
     )
     .await?;
     let hash = crypto::hash_token(&token).ok_or_else(AppError::not_found)?;
-    let row:Option<(String,String)>=sqlx::query_as("select u.email::text,u.display_name from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null").bind(hash.as_slice()).fetch_optional(&state.db).await?;
+    let row:Option<(String,String)>=sqlx::query_as("select u.email::text,u.display_name from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.role='user' and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
     let (email, display) = row.ok_or_else(AppError::not_found)?;
     Ok(examcore::ok(json!({"email":email,"displayName":display})))
 }
@@ -500,7 +500,7 @@ async fn accept(
     )
     .await?;
     let hash = crypto::hash_token(&input.token).ok_or_else(AppError::not_found)?;
-    let email:Option<String>=sqlx::query_scalar("select u.email::text from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now()").bind(hash.as_slice()).fetch_optional(&state.db).await?;
+    let email:Option<String>=sqlx::query_scalar("select u.email::text from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.role='user' and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
     let email = email.ok_or_else(AppError::not_found)?;
     auth::password::policy(&state, &email, &input.password).await?;
     if !(1..=120).contains(&input.display_name.trim().chars().count()) {
@@ -510,7 +510,7 @@ async fn accept(
     let mut tx = state.db.begin().await?;
     let uid:Option<Uuid>=sqlx::query_scalar("update account_invites set used_at=now() where token_hash=$1 and used_at is null and expires_at>now() returning user_id").bind(hash.as_slice()).fetch_optional(&mut *tx).await?;
     let uid = uid.ok_or_else(AppError::not_found)?;
-    let updated=sqlx::query("update users set password_hash=$1,email_verified_at=now(),display_name=$2 where id=$3 and role='user' and password_hash is null").bind(password).bind(input.display_name.trim()).bind(uid).execute(&mut *tx).await?;
+    let updated=sqlx::query("update users set password_hash=$1,email_verified_at=now(),display_name=$2 where id=$3 and role='user' and status='active' and deleted_at is null and password_hash is null").bind(password).bind(input.display_name.trim()).bind(uid).execute(&mut *tx).await?;
     if updated.rows_affected() != 1 {
         return Err(AppError::not_found());
     }
@@ -788,9 +788,48 @@ mod tests {
         let (expired, expired_hash) = crypto::new_token();
         sqlx::query("insert into account_invites(token_hash,user_id,expires_at) values($1,$2,now()-interval '1 second')").bind(expired_hash.as_slice()).bind(expired_user).execute(&db).await.expect("expired invite");
         assert!(
-            lookup_invite(State(state), meta(), Path(expired))
+            lookup_invite(State(state.clone()), meta(), Path(expired))
                 .await
                 .is_err()
+        );
+
+        let deleted_user: Uuid = sqlx::query_scalar(
+            "insert into users(email,display_name,role) values('deleted-invite@example.org','Deleted','user') returning id",
+        )
+        .fetch_one(&db)
+        .await
+        .expect("deleted user");
+        let (deleted_token, deleted_hash) = crypto::new_token();
+        sqlx::query(
+            "insert into account_invites(token_hash,user_id,expires_at) values($1,$2,now()+interval '7 days')",
+        )
+        .bind(deleted_hash.as_slice())
+        .bind(deleted_user)
+        .execute(&db)
+        .await
+        .expect("deleted invite");
+        sqlx::query("update users set deleted_at=now() where id=$1")
+            .bind(deleted_user)
+            .execute(&db)
+            .await
+            .expect("soft delete");
+        assert!(
+            lookup_invite(State(state.clone()), meta(), Path(deleted_token.clone()),)
+                .await
+                .is_err()
+        );
+        assert!(
+            accept(
+                State(state),
+                meta(),
+                JsonBody(AcceptInput {
+                    token: deleted_token,
+                    password: "A-strong-password-9!".into(),
+                    display_name: "Deleted Name".into(),
+                }),
+            )
+            .await
+            .is_err()
         );
     }
 }

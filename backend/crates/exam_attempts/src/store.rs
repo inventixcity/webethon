@@ -23,7 +23,13 @@ pub async fn upsert_answer(
          values($1,$2,$3,$4,$5,$6,$7,$8)
          on conflict(attempt_id,item_id) do update set
            response=excluded.response,flagged=excluded.flagged,client_seq=excluded.client_seq,
-           source=excluded.source,written_at=excluded.written_at,typing=excluded.typing,
+           source=excluded.source,written_at=excluded.written_at,
+           typing=jsonb_build_object(
+             'keystrokes', least(10000000::bigint, coalesce((answers.typing->>'keystrokes')::bigint, 0) + coalesce((excluded.typing->>'keystrokes')::bigint, 0)),
+             'pastes', least(10000000::bigint, coalesce((answers.typing->>'pastes')::bigint, 0) + coalesce((excluded.typing->>'pastes')::bigint, 0)),
+             'pastedChars', least(10000000::bigint, coalesce((answers.typing->>'pastedChars')::bigint, 0) + coalesce((excluded.typing->>'pastedChars')::bigint, 0)),
+             'activeMs', least(10000000::bigint, coalesce((answers.typing->>'activeMs')::bigint, 0) + coalesce((excluded.typing->>'activeMs')::bigint, 0))
+           ),
            saved_at=clock_timestamp()
          where answers.client_seq < excluded.client_seq returning item_id",
     ).bind(attempt_id).bind(item_id).bind(response).bind(flagged).bind(seq)

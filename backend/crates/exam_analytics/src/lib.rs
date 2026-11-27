@@ -1,5 +1,5 @@
 //! Examiner analytics calculated from finalized, non-sandbox attempts.
-use axum::{Json, Router, extract::State, routing::get};
+use axum::{Router, extract::State, routing::get};
 use examcore::ExaminerViewer;
 use kernel::{AppError, AppResult, AppState};
 use serde_json::{Value, json};
@@ -44,7 +44,7 @@ async fn exam_analytics(
     State(s): State<AppState>,
     v: ExaminerViewer,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     let owned: bool = sqlx::query_scalar(
         "select exists(select 1 from exams where id=$1 and owner_id=$2 and deleted_at is null)",
     )
@@ -56,7 +56,7 @@ async fn exam_analytics(
         return Err(AppError::not_found());
     }
     let items: Vec<Item> = sqlx::query_as("select id,question_id,topic,kind,marks::float8 marks,correct,options,position,difficulty,stem from exam_items where exam_id=$1 and not sandbox order by position").bind(id).fetch_all(&s.db).await?;
-    let mut attempts: Vec<Attempt> = sqlx::query_as("select a.id,u.display_name candidate,a.total_score::float8 score,a.status from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status in ('submitted','expired') and a.grading_status='complete' and a.total_score is not null order by a.started_at desc,a.id limit 501").bind(id).fetch_all(&s.db).await?;
+    let mut attempts: Vec<Attempt> = sqlx::query_as("select a.id,u.display_name candidate,a.total_score::float8 score,a.status from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status in ('submitted','expired')  and a.total_score is not null order by a.started_at desc,a.id limit 501").bind(id).fetch_all(&s.db).await?;
     let capped = attempts.len() > 500;
     attempts.truncate(500);
     let ids: Vec<Uuid> = attempts.iter().map(|a| a.id).collect();
@@ -205,8 +205,8 @@ async fn exam_analytics(
         .enumerate()
         .map(|(i, count)| json!({"from":i*10,"to":(i+1)*10,"count":count}))
         .collect();
-    Ok(Json(
-        json!({"data":{"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted").count(),"attemptsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":"Indicators for review, not evidence. Analysis capped at 500 attempts."}}),
+    Ok(examcore::ok(
+        json!({"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted").count(),"attemptsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":"Indicators for review, not evidence. Analysis capped at 500 attempts."}),
     ))
 }
 
@@ -375,7 +375,7 @@ async fn update_bank(s: &AppState, items: &[Item]) -> AppResult<()> {
     if questions.is_empty() {
         return Ok(());
     }
-    sqlx::query("update questions q set observed_facility=x.facility,observed_count=x.n from (select ei.question_id,count(a.id)::int n,avg(greatest(0,least(1,coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8))) facility from exam_items ei join attempts a on a.exam_id=ei.exam_id and not a.sandbox and a.status in ('submitted','expired') and a.grading_status='complete' left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=any($1) and not ei.sandbox group by ei.question_id) x where q.id=x.question_id").bind(questions).execute(&s.db).await?;
+    sqlx::query("update questions q set observed_facility=x.facility,observed_count=x.n from (select ei.question_id,count(a.id)::int n,avg(greatest(0,least(1,coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8))) facility from exam_items ei join attempts a on a.exam_id=ei.exam_id and not a.sandbox and a.status in ('submitted','expired')  left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=any($1) and not ei.sandbox group by ei.question_id) x where q.id=x.question_id").bind(questions).execute(&s.db).await?;
     Ok(())
 }
 
@@ -383,8 +383,8 @@ async fn question_stats(
     State(s): State<AppState>,
     v: ExaminerViewer,
     axum::extract::Path(qid): axum::extract::Path<Uuid>,
-) -> AppResult<Json<Value>> {
-    let mut rows:Vec<Value>=sqlx::query_scalar("select jsonb_build_object('examId',e.id,'examTitle',e.title,'facility',case when count(a.id)=0 then null else greatest(0,least(1,avg(coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8))) end,'attemptCount',count(a.id)) from exam_items ei join exams e on e.id=ei.exam_id left join attempts a on a.exam_id=e.id and a.status in ('submitted','expired') and a.grading_status='complete' and not a.sandbox left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=$1 and not ei.sandbox and e.owner_id=$2 group by e.id,e.title,e.starts_at order by e.starts_at").bind(qid).bind(v.0.id).fetch_all(&s.db).await?;
+) -> examcore::ApiJson {
+    let mut rows:Vec<Value>=sqlx::query_scalar("select jsonb_build_object('examId',e.id,'examTitle',e.title,'facility',case when count(a.id)=0 then null else greatest(0,least(1,avg(coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8))) end,'attemptCount',count(a.id)) from exam_items ei join exams e on e.id=ei.exam_id left join attempts a on a.exam_id=e.id and a.status in ('submitted','expired')  and not a.sandbox left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=$1 and not ei.sandbox and e.owner_id=$2 group by e.id,e.title,e.starts_at order by e.starts_at").bind(qid).bind(v.0.id).fetch_all(&s.db).await?;
     if rows.is_empty() {
         let exists: bool = sqlx::query_scalar(
             "select exists(select 1 from questions where id=$1 and owner_id=$2)",
@@ -402,10 +402,10 @@ async fn question_stats(
             .as_str()
             .and_then(|x| Uuid::parse_str(x).ok())
             .ok_or_else(|| AppError::internal("invalid exam id"))?;
-        let vals:Vec<(f64,f64)>=sqlx::query_as("select coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8,a.total_score::float8 from exam_items ei join exams e on e.id=ei.exam_id join attempts a on a.exam_id=e.id and a.status in ('submitted','expired') and a.grading_status='complete' and not a.sandbox left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=$1 and ei.exam_id=$2 and not ei.sandbox").bind(qid).bind(eid).fetch_all(&s.db).await?;
+        let vals:Vec<(f64,f64)>=sqlx::query_as("select coalesce(an.manual_marks,an.auto_marks,0)::float8/ei.marks::float8,a.total_score::float8 from exam_items ei join exams e on e.id=ei.exam_id join attempts a on a.exam_id=e.id and a.status in ('submitted','expired')  and not a.sandbox left join answers an on an.attempt_id=a.id and an.item_id=ei.id where ei.question_id=$1 and ei.exam_id=$2 and not ei.sandbox").bind(qid).bind(eid).fetch_all(&s.db).await?;
         row["discrimination"] = json!(discrimination(&vals));
     }
-    Ok(Json(json!({"data":{"questionId":qid,"history":rows}})))
+    Ok(examcore::ok(json!({"questionId":qid,"history":rows})))
 }
 
 #[cfg(test)]
@@ -515,6 +515,48 @@ mod tests {
         let value: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(value["data"]["attempts"], 1);
         assert_eq!(value["data"]["items"][0]["facility"], 1.0);
+        let repeat = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/exams/{exam}/analytics"))
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(repeat.status(), axum::http::StatusCode::OK);
+        let observed: (i32, f64) = sqlx::query_as(
+            "select observed_count,observed_facility::float8 from questions where id=$1",
+        )
+        .bind(question)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(observed.0, 1);
+        assert_eq!(observed.1, 1.0);
+        let history = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/questions/{question}/stats"))
+                    .header("authorization", format!("Bearer {session}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(history.status(), axum::http::StatusCode::OK);
+        let history_body = axum::body::to_bytes(history.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let history_value: Value = serde_json::from_slice(&history_body).unwrap();
+        assert_eq!(history_value["data"]["history"][0]["facility"], 1.0);
+        assert_eq!(
+            history_value["data"]["history"][0]["discrimination"],
+            Value::Null
+        );
         let denied = app
             .clone()
             .oneshot(

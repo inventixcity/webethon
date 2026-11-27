@@ -93,7 +93,10 @@ async fn request(
         )
         .await?;
     let status = response.status();
-    let body = serde_json::from_slice(&to_bytes(response.into_body(), 1_000_000).await?)?;
+    let bytes = to_bytes(response.into_body(), 1_000_000).await?;
+    // Standalone router extractor rejections are plain text; server middleware normalizes them.
+    let body =
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({"extractorRejection":true}));
     Ok((status, body))
 }
 
@@ -262,6 +265,135 @@ async fn late_entries_grace_and_broken_suffix(db: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn voluntary_submit_is_final_but_timer_expiry_allows_grace_recovery(
+    db: PgPool,
+) -> TestResult {
+    let f = fixture(db).await?;
+    let lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
+    let good = entry(&f, 1, &[7; 32], lease.clone(), 0, json!({"selected":["a"]}));
+    let (status, body) = request(
+        &f,
+        &format!("/attempts/{}/submit", f.id),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"confirm":true}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["status"], "submitted");
+    assert_eq!(
+        send(&f, vec![good.clone()]).await?["rejected"][0]["reason"],
+        "closed"
+    );
+    let count: i64 = sqlx::query_scalar("select count(*) from answers where attempt_id=$1")
+        .bind(f.id)
+        .fetch_one(&f.state.db)
+        .await?;
+    assert_eq!(count, 0);
+    // Simulate an expiry shortly after the signed edit; no client timestamp or sleep is needed.
+    let deadline = examcore::from_unix_ms(lease.issued_at + 1).ok_or("timestamp")?;
+    sqlx::query("update attempts set status='expired',deadline_at=$2,submitted_at=clock_timestamp(),finalized_by='timer' where id=$1").bind(f.id).bind(deadline).execute(&f.state.db).await?;
+    let result = send(&f, vec![good]).await?;
+    assert_eq!(result["accepted"], json!([1]));
+    let score: f64 = sqlx::query_scalar("select total_score::float8 from attempts where id=$1")
+        .bind(f.id)
+        .fetch_one(&f.state.db)
+        .await?;
+    assert_eq!(score, 10.0);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn heartbeat_announcements_verified_outages_and_strict_inputs(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    let path = format!("/attempts/{}/heartbeat", f.id);
+    let examiner: Uuid = sqlx::query_scalar("select owner_id from exams where id=$1")
+        .bind(f.exam)
+        .fetch_one(&f.state.db)
+        .await?;
+    sqlx::query(
+        "insert into announcements(exam_id,body,author_id) values($1,'Reconnect safely',$2)",
+    )
+    .bind(f.exam)
+    .bind(examiner)
+    .execute(&f.state.db)
+    .await?;
+    sqlx::query("update attempts set started_at=now()-interval '2 minutes',last_heartbeat_at=now()-interval '60 seconds' where id=$1").bind(f.id).execute(&f.state.db).await?;
+    sqlx::query("insert into attempt_heartbeats(attempt_id,at) select id,last_heartbeat_at from attempts where id=$1").bind(f.id).execute(&f.state.db).await?;
+    let (status, body) = request(
+        &f,
+        &path,
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"online":true,"pending":3,"lastAnnouncementAt":null}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["deviceActive"], true);
+    assert_eq!(body["data"]["announcements"][0]["body"], "Reconnect safely");
+    let lease: Lease = serde_json::from_value(body["data"]["lease"].clone())?;
+    assert!(examcore::verify_lease(&lease, f.id));
+    let events: i64 = sqlx::query_scalar(
+        "select count(*) from attempt_events where attempt_id=$1 and kind in ('offline','online')",
+    )
+    .bind(f.id)
+    .fetch_one(&f.state.db)
+    .await?;
+    assert_eq!(events, 2);
+    let after = body["data"]["announcements"][0]["createdAt"].clone();
+    let (_, next) = request(
+        &f,
+        &path,
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"online":true,"pending":0,"lastAnnouncementAt":after}),
+    )
+    .await?;
+    assert_eq!(next["data"]["announcements"], json!([]));
+    let (status, body) = request(
+        &f,
+        &path,
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"online":true,"pending":0,"lastAnnouncementAt":"invalid"}),
+    )
+    .await?;
+    assert!(!status.is_success());
+    assert_eq!(body["error"]["code"], "VALIDATION_FAILED");
+    let mut e = serde_json::to_value(entry(&f, 1, &[7; 32], lease, 0, json!({"selected":[]})))?;
+    e["lease"]["untrusted"] = json!(true);
+    let (status, _) = request(
+        &f,
+        &format!("/attempts/{}/journal", f.id),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"entries":[e]}),
+    )
+    .await?;
+    assert!(!status.is_success());
+    sqlx::query("update attempts set deadline_at=now()-interval '121 seconds' where id=$1")
+        .bind(f.id)
+        .execute(&f.state.db)
+        .await?;
+    let (_, expired) = request(
+        &f,
+        &path,
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"online":true,"pending":0,"lastAnnouncementAt":null}),
+    )
+    .await?;
+    assert_eq!(expired["data"]["status"], "expired");
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn takeover_blocks_old_device_and_denies_strangers(db: PgPool) -> TestResult {
     let f = fixture(db).await?;
     let old_lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
@@ -335,7 +467,8 @@ async fn credits_require_verified_gap_and_cannot_reuse_it(db: PgPool) -> TestRes
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["details"]["reason"], "credit_cap");
     sqlx::query("update attempts set started_at=date_trunc('second',now())-interval '5 minutes' where id=$1").bind(f.id).execute(&f.state.db).await?;
-    sqlx::query("insert into attempt_heartbeats(attempt_id,at) select id,started_at+interval '120 seconds' from attempts where id=$1").bind(f.id).execute(&f.state.db).await?;
+    // Fractional outage seconds must be floored, never rounded up into extra examination time.
+    sqlx::query("insert into attempt_heartbeats(attempt_id,at) select id,started_at+interval '120.9 seconds' from attempts where id=$1").bind(f.id).execute(&f.state.db).await?;
     assert_eq!(
         request(
             &f,

@@ -233,7 +233,7 @@ impl Config {
             session_ttl: Duration::from_secs(parse("SESSION_TTL_DAYS", 30u64)? * 86_400),
             secure_cookies: parse("SECURE_COOKIES", production)?,
             email_from: var("EMAIL_FROM")
-                .unwrap_or_else(|| "Invigil <onboarding@resend.dev>".into()),
+                .unwrap_or_else(|| "Inventix Invigil <onboarding@resend.dev>".into()),
             resend_api_key: secret("RESEND_API_KEY"),
             smtp_url: var("SMTP_URL"),
             admin_emails: var("ADMIN_EMAILS")

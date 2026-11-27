@@ -71,7 +71,7 @@ container.probes = [
 ];
 fs.writeFileSync(process.argv[3], JSON.stringify({
   location: app.location,
-  // Template only: show never returns secret values, so echoing configuration back could clear them.
+  // Revision settings only: show never returns secret values, so preserve non-revision settings.
   properties: { template: properties.template },
 }));
 NODE

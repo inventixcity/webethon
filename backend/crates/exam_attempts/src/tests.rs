@@ -755,13 +755,29 @@ async fn response_validation_typing_and_unknown_fields(db: PgPool) -> TestResult
         .0,
         StatusCode::OK
     );
+    let delta = json!({"keystrokes": 4, "pastes": 2, "pastedChars": 7, "activeMs": 250});
+    let second = json!({
+        "response": {"text": "Answer continued"},
+        "flagged": true,
+        "clientSeq": 3,
+        "typing": delta
+    });
+    assert_eq!(
+        f.call(&f.candidate, "PUT", &path, Some(DEVICE), Some(second))
+            .await?
+            .0,
+        StatusCode::OK
+    );
     let stored: Value =
         sqlx::query_scalar("select typing from answers where attempt_id=$1 and item_id=$2")
             .bind(id)
             .bind(f.written)
             .fetch_one(&f.db)
             .await?;
-    assert_eq!(stored, typing);
+    assert_eq!(
+        stored,
+        json!({"keystrokes": 14, "pastes": 3, "pastedChars": 9, "activeMs": 750})
+    );
     for patch in [
         json!({"typing": {"keystrokes": -1, "pastes": 0, "pastedChars": 0, "activeMs": 0}}),
         json!({"extra": true}),

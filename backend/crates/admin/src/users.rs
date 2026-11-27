@@ -431,7 +431,13 @@ mod tests {
 
     #[test]
     fn provisioned_email_validation_rejects_malformed_domains() {
-        for email in ["a..b@example.test", ".a@example.test", "a@-bad.example", "a@example..test", "a @example.test"] {
+        for email in [
+            "a..b@example.test",
+            ".a@example.test",
+            "a@-bad.example",
+            "a@example..test",
+            "a @example.test",
+        ] {
             assert!(!valid_provisioned_email(email), "{email}");
         }
         assert!(valid_provisioned_email("name+tag@invigil.app"));
@@ -576,6 +582,18 @@ mod tests {
                 StatusCode::FORBIDDEN
             );
         }
+        assert_eq!(
+            request(
+                &state,
+                &user_token,
+                "POST",
+                "/users",
+                r#"{"email":"blocked@example.test","displayName":"Blocked","role":"candidate"}"#
+            )
+            .await
+            .status(),
+            StatusCode::FORBIDDEN
+        );
         for path in [
             "suspend",
             "unsuspend",
@@ -634,6 +652,18 @@ mod tests {
                 "{path}"
             );
         }
+        assert_eq!(
+            request(
+                &state,
+                &token,
+                "POST",
+                "/users",
+                r#"{"email":"stepup@example.test","displayName":"Step Up","role":"candidate"}"#
+            )
+            .await
+            .status(),
+            StatusCode::PRECONDITION_REQUIRED
+        );
         sqlx::query("delete from admin_step_up where session_id=$1")
             .bind(sid)
             .execute(&db)

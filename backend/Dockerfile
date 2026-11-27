@@ -55,7 +55,7 @@ COPY migrations /app/migrations
 COPY config /app/config
 
 # Secure default: an image run without env uses production rules and refuses to start
-# unless the secrets are set. Compose and Render set APP_ENV explicitly.
+# unless the secrets are set. Compose and Azure Container Apps set APP_ENV explicitly.
 ENV APP_ENV=production \
     BIND_ADDR=0.0.0.0:8080 \
     METRICS_ADDR=0.0.0.0:9090 \
