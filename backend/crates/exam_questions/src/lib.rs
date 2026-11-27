@@ -8,7 +8,7 @@ use axum::{
 use examcore::{ExaminerViewer, invalid_many};
 use kernel::{
     AppError, AppResult, AppState, ErrorCode,
-    extract::{Json, ResponseJson},
+    extract::Json,
     request::RequestMeta,
     security::{AuditEntry, Limit, audit, enforce_rate_limit},
 };
@@ -271,7 +271,7 @@ async fn list(
     State(s): State<AppState>,
     v: ExaminerViewer,
     Query(q): Query<ListQuery>,
-) -> AppResult<ResponseJson<Page<Question>>> {
+) -> examcore::ApiJson {
     if q.topic
         .as_ref()
         .is_some_and(|x| x.trim() != x || x.is_empty() || x.chars().count() > 80)
@@ -329,7 +329,7 @@ async fn list(
     } else {
         None
     };
-    Ok(ResponseJson(Page {
+    Ok(examcore::ok(Page {
         items: rows,
         next_cursor: next,
     }))
@@ -361,7 +361,7 @@ async fn create(
     v: ExaminerViewer,
     m: RequestMeta,
     Json(i): Json<QuestionInput>,
-) -> AppResult<ResponseJson<Question>> {
+) -> examcore::ApiJson {
     let e = validate(&i);
     if !e.is_empty() {
         return Err(invalid_many(e));
@@ -370,16 +370,16 @@ async fn create(
     let q = insert_question(&mut tx, v.0.id, &i).await?;
     tx.commit().await?;
     audit_it(&s, &m, &v, "questions.create", Some(q.id)).await;
-    Ok(ResponseJson(q))
+    Ok(examcore::ok(q))
 }
 async fn get_one(
     State(s): State<AppState>,
     v: ExaminerViewer,
     Path(id): Path<Uuid>,
-) -> AppResult<ResponseJson<Question>> {
+) -> examcore::ApiJson {
     let owner = if v.0.is_admin() { None } else { Some(v.0.id) };
     let q=sqlx::query_as::<_,Question>(&format!("select {} from questions where id=$1 and deleted_at is null and ($2::uuid is null or owner_id=$2)",cols())).bind(id).bind(owner).fetch_optional(&s.db).await?.ok_or_else(AppError::not_found)?;
-    Ok(ResponseJson(q))
+    Ok(examcore::ok(q))
 }
 async fn update(
     State(s): State<AppState>,
@@ -388,7 +388,7 @@ async fn update(
     Path(id): Path<Uuid>,
     h: HeaderMap,
     Json(i): Json<QuestionInput>,
-) -> AppResult<ResponseJson<Question>> {
+) -> examcore::ApiJson {
     let version = match h
         .get(header::IF_MATCH)
         .and_then(|v| v.to_str().ok())
@@ -423,32 +423,29 @@ async fn update(
     };
     tx.commit().await?;
     audit_it(&s, &m, &v, "questions.update", Some(id)).await;
-    Ok(ResponseJson(q))
+    Ok(examcore::ok(q))
 }
 async fn remove(
     State(s): State<AppState>,
     v: ExaminerViewer,
     m: RequestMeta,
     Path(id): Path<Uuid>,
-) -> AppResult<ResponseJson<Value>> {
+) -> examcore::ApiJson {
     let owner = if v.0.is_admin() { None } else { Some(v.0.id) };
     let n=sqlx::query("update questions set deleted_at=now(),version=version+1,updated_at=now() where id=$1 and deleted_at is null and ($2::uuid is null or owner_id=$2)").bind(id).bind(owner).execute(&s.db).await?.rows_affected();
     if n == 0 {
         return Err(AppError::not_found());
     }
     audit_it(&s, &m, &v, "questions.delete", Some(id)).await;
-    Ok(ResponseJson(json!({"deleted":true})))
+    Ok(examcore::ok(json!({"deleted":true})))
 }
-async fn topics(
-    State(s): State<AppState>,
-    v: ExaminerViewer,
-) -> AppResult<ResponseJson<Vec<Value>>> {
+async fn topics(State(s): State<AppState>, v: ExaminerViewer) -> examcore::ApiJson {
     let owner = if v.0.is_admin() { None } else { Some(v.0.id) };
     let rows=sqlx::query_as::<_,(String,i64)>("select topic,count(*) from questions where deleted_at is null and ($1::uuid is null or owner_id=$1) group by topic order by topic").bind(owner).fetch_all(&s.db).await?;
-    Ok(ResponseJson(
+    Ok(examcore::ok(
         rows.into_iter()
             .map(|(topic, count)| json!({"topic":topic,"count":count}))
-            .collect(),
+            .collect::<Vec<_>>(),
     ))
 }
 fn parse_row(v: Value) -> Result<QuestionInput, String> {
@@ -514,7 +511,7 @@ async fn import(
     v: ExaminerViewer,
     m: RequestMeta,
     Json(r): Json<ImportRequest>,
-) -> AppResult<ResponseJson<ImportResult>> {
+) -> examcore::ApiJson {
     enforce_rate_limit(
         &s.db,
         &format!("questions-import:{}", v.0.id),
@@ -549,7 +546,7 @@ async fn import(
         }
     }
     if r.dry_run || !errors.is_empty() {
-        return Ok(ResponseJson(ImportResult {
+        return Ok(examcore::ok(ImportResult {
             dry_run: r.dry_run,
             created: 0,
             updated: 0,
@@ -562,7 +559,7 @@ async fn import(
     }
     tx.commit().await?;
     audit_it(&s, &m, &v, "questions.import", None).await;
-    Ok(ResponseJson(ImportResult {
+    Ok(examcore::ok(ImportResult {
         dry_run: false,
         created: parsed.len(),
         updated: 0,
@@ -767,7 +764,8 @@ mod tests {
                 .expect("response body"),
         )
         .expect("response JSON");
-        let question_id = created_body["id"].as_str().expect("question id");
+        assert_eq!(created_body["data"]["version"], 1);
+        let question_id = created_body["data"]["id"].as_str().expect("question id");
         let path = format!("/questions/{question_id}");
         assert_eq!(
             http(&state, "GET", &path, &other_token, json!({}), None)

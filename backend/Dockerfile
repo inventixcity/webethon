@@ -55,7 +55,7 @@ COPY migrations /app/migrations
 COPY config /app/config
 
 # Secure default: an image run without env uses production rules and refuses to start
-# unless the secrets are set. Compose and Kubernetes set APP_ENV explicitly.
+# unless the secrets are set. Compose and Render set APP_ENV explicitly.
 ENV APP_ENV=production \
     BIND_ADDR=0.0.0.0:8080 \
     METRICS_ADDR=0.0.0.0:9090 \
@@ -63,7 +63,7 @@ ENV APP_ENV=production \
 
 EXPOSE 8080 9090
 
-# Numeric form of the distroless `nonroot` user (uid 65532), so Kubernetes can verify runAsNonRoot.
+# Numeric form of the distroless `nonroot` user (uid 65532), so runtimes can verify a non-root user.
 USER 65532:65532
 
 # `api healthcheck` probes the local liveness endpoint; exec form needs no shell in distroless.

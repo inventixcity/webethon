@@ -113,6 +113,13 @@ pub struct AssignItem {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ListQuery {
     status: Option<String>,
+    cursor: Option<Uuid>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ForceQuery {
+    #[serde(default)]
+    force: bool,
 }
 
 pub fn router() -> Router<AppState> {
@@ -130,7 +137,7 @@ pub fn router() -> Router<AppState> {
 
 fn validate(i: &ExamInput) -> AppResult<()> {
     let mut e = Vec::new();
-    if !(1..=160).contains(&i.title.chars().count()) {
+    if !(1..=160).contains(&i.title.trim().chars().count()) {
         e.push((
             "title".into(),
             "Title must contain 1 to 160 characters.".into(),
@@ -179,25 +186,16 @@ fn settings(v: Value) -> ExamSettings {
     serde_json::from_value(v).unwrap_or_default()
 }
 fn dto(
-    id: Uuid,
-    title: String,
-    status: String,
-    starts: OffsetDateTime,
-    ends: OffsetDateTime,
-    duration: i32,
-    total: f64,
-    pass: f64,
+    exam: examcore::ExamRow,
     instructions: String,
-    raw: Value,
-    version: i32,
     q: Value,
     enrolled: i64,
     attempts: i64,
     updated: OffsetDateTime,
 ) -> Value {
     let now = examcore::now();
-    let p = examcore::phase(&status, starts, ends, now);
-    json!({"id":id,"title":title,"status":status,"phase":p,"startsAt":starts,"endsAt":ends,"durationMinutes":duration,"totalMarks":total,"questionCount":q.as_array().map_or(0,Vec::len),"enrolledCount":enrolled,"attemptCount":attempts,"resultsPublishedAt":Value::Null,"updatedAt":updated,"instructions":instructions,"passMarks":pass,"settings":settings(raw),"version":version,"questions":q})
+    let phase = examcore::phase(&exam.status, exam.starts_at, exam.ends_at, now);
+    json!({"id":exam.id,"title":exam.title,"status":exam.status,"phase":phase,"startsAt":exam.starts_at,"endsAt":exam.ends_at,"durationMinutes":exam.duration_minutes,"totalMarks":exam.total_marks,"questionCount":q.as_array().map_or(0,Vec::len),"enrolledCount":enrolled,"attemptCount":attempts,"resultsPublishedAt":exam.results_published_at,"updatedAt":updated,"instructions":instructions,"passMarks":exam.pass_marks,"settings":settings(exam.settings),"version":exam.version,"questions":q})
 }
 pub async fn create_exam_tx(
     tx: &mut Transaction<'_, Postgres>,
@@ -283,14 +281,14 @@ pub async fn publish_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResu
             "Only draft exams can be published.",
         ));
     }
-    let ready:bool=sqlx::query_scalar("select e.ends_at>now() and count(eq.question_id)>0 and abs(e.total_marks::float8-coalesce(sum(coalesce(eq.marks,q.marks))::float8,0))<0.009 and e.duration_minutes*60<=extract(epoch from(e.ends_at-e.starts_at)) and count(*) filter(where q.kind in ('single','multi') and jsonb_array_length(q.correct)=0)=0 from exams e left join exam_questions eq on eq.exam_id=e.id left join questions q on q.id=eq.question_id where e.id=$1 group by e.id").bind(id).fetch_one(&mut **tx).await?;
+    let ready:bool=sqlx::query_scalar("select e.ends_at>now() and count(q.id)>0 and count(q.id)=count(eq.question_id) and abs(e.total_marks::float8-coalesce(sum(coalesce(eq.marks,q.marks))::float8,0))<0.009 and e.duration_minutes*60<=extract(epoch from(e.ends_at-e.starts_at)) and count(*) filter(where q.kind in ('single','multi') and jsonb_array_length(q.correct)=0)=0 from exams e left join exam_questions eq on eq.exam_id=e.id left join questions q on q.id=eq.question_id and q.deleted_at is null where e.id=$1 group by e.id").bind(id).fetch_one(&mut **tx).await?;
     if !ready {
         return Err(examcore::conflict(
             "review",
             "Exam is not ready to publish.",
         ));
     }
-    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 order by eq.position").bind(id).execute(&mut **tx).await?;
+    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 order by eq.position").bind(id).execute(&mut **tx).await?;
     sqlx::query("update exams set status='published',published_at=now(),version=version+1,updated_at=now() where id=$1").bind(id).execute(&mut **tx).await?;
     Ok(())
 }
@@ -332,16 +330,23 @@ async fn unpublish_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResult
             "An exam with real attempts cannot be unpublished.",
         ));
     }
-    if state == "published" {
-        sqlx::query("delete from exam_items where exam_id=$1 and not sandbox")
-            .bind(id)
-            .execute(&mut **tx)
-            .await?;
-        sqlx::query("update exams set status='draft',published_at=null,version=version+1,updated_at=now() where id=$1")
-            .bind(id)
-            .execute(&mut **tx)
-            .await?;
+    if state == "draft" {
+        return Ok(());
     }
+    if state != "published" {
+        return Err(examcore::conflict(
+            "state",
+            "Only published exams can be unpublished.",
+        ));
+    }
+    sqlx::query("delete from exam_items where exam_id=$1 and not sandbox")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("update exams set status='draft',published_at=null,version=version+1,updated_at=now() where id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -352,6 +357,32 @@ async fn real_attempt_count(db: &PgPool, id: Uuid) -> AppResult<i64> {
             .fetch_one(db)
             .await?,
     )
+}
+
+async fn complete_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid, force: bool) -> AppResult<bool> {
+    let row: Option<(String, OffsetDateTime)> = sqlx::query_as(
+        "select status,ends_at from exams where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((status, ends_at)) = row else {
+        return Err(AppError::not_found());
+    };
+    if status == "completed" {
+        return Ok(false);
+    }
+    if status != "published" || (ends_at > examcore::now() && !force) {
+        return Err(examcore::conflict(
+            "state",
+            "The exam window has not closed.",
+        ));
+    }
+    sqlx::query("update exams set status='completed',completed_at=now(),version=version+1,updated_at=now() where id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(true)
 }
 
 async fn create(
@@ -372,9 +403,27 @@ async fn list(
     v: ExaminerViewer,
     Query(q): Query<ListQuery>,
 ) -> examcore::ApiJson {
-    let rows=sqlx::query("select e.id,e.owner_id,e.title,e.status,e.starts_at,e.ends_at,e.duration_minutes,e.total_marks::float8 total_marks,e.updated_at,(select count(*) from exam_questions x where x.exam_id=e.id) question_count,(select count(*) from enrollments x where x.exam_id=e.id and x.status='enrolled') enrolled_count,(select count(*) from attempts x where x.exam_id=e.id and not x.sandbox) attempt_count,e.results_published_at from exams e where e.deleted_at is null and ($1 or e.owner_id=$2) and ($3::text is null or e.status=$3) order by e.updated_at desc limit 200").bind(v.0.is_admin()).bind(v.0.id).bind(q.status).fetch_all(&s.db).await?;
-    let data:Vec<Value>=rows.iter().map(|r|json!({"id":r.get::<Uuid,_>("id"),"title":r.get::<String,_>("title"),"status":r.get::<String,_>("status"),"phase":examcore::phase(r.get::<&str,_>("status"),r.get("starts_at"),r.get("ends_at"),examcore::now()),"startsAt":r.get::<OffsetDateTime,_>("starts_at"),"endsAt":r.get::<OffsetDateTime,_>("ends_at"),"durationMinutes":r.get::<i32,_>("duration_minutes"),"totalMarks":r.get::<f64,_>("total_marks"),"questionCount":r.get::<i64,_>("question_count"),"enrolledCount":r.get::<i64,_>("enrolled_count"),"attemptCount":r.get::<i64,_>("attempt_count"),"resultsPublishedAt":r.get::<Option<OffsetDateTime>,_>("results_published_at"),"updatedAt":r.get::<OffsetDateTime,_>("updated_at")})).collect();
-    Ok(examcore::ok(json!({"items":data,"nextCursor":null})))
+    if q.status
+        .as_deref()
+        .is_some_and(|status| !["draft", "published", "completed", "archived"].contains(&status))
+    {
+        return Err(invalid("status", "Choose a valid exam status."));
+    }
+    let rows=sqlx::query("select e.id,e.owner_id,e.title,e.status,e.starts_at,e.ends_at,e.duration_minutes,e.total_marks::float8 total_marks,e.updated_at,(select count(*) from exam_questions x join questions q on q.id=x.question_id and q.deleted_at is null where x.exam_id=e.id) question_count,(select count(*) from enrollments x where x.exam_id=e.id and x.status='enrolled') enrolled_count,(select count(*) from attempts x where x.exam_id=e.id and not x.sandbox) attempt_count,e.results_published_at from exams e where e.deleted_at is null and ($1 or e.owner_id=$2) and ($3::text is null or e.status=$3) and ($4::uuid is null or e.id<$4) order by e.id desc limit 101").bind(v.0.is_admin()).bind(v.0.id).bind(q.status).bind(q.cursor).fetch_all(&s.db).await?;
+    let mut data:Vec<Value>=rows.iter().map(|r|json!({"id":r.get::<Uuid,_>("id"),"title":r.get::<String,_>("title"),"status":r.get::<String,_>("status"),"phase":examcore::phase(r.get::<&str,_>("status"),r.get("starts_at"),r.get("ends_at"),examcore::now()),"startsAt":r.get::<OffsetDateTime,_>("starts_at"),"endsAt":r.get::<OffsetDateTime,_>("ends_at"),"durationMinutes":r.get::<i32,_>("duration_minutes"),"totalMarks":r.get::<f64,_>("total_marks"),"questionCount":r.get::<i64,_>("question_count"),"enrolledCount":r.get::<i64,_>("enrolled_count"),"attemptCount":r.get::<i64,_>("attempt_count"),"resultsPublishedAt":r.get::<Option<OffsetDateTime>,_>("results_published_at"),"updatedAt":r.get::<OffsetDateTime,_>("updated_at")})).collect();
+    let has_more = data.len() > 100;
+    if has_more {
+        data.pop();
+    }
+    let next_cursor = if has_more {
+        data.last()
+            .and_then(|item| item.get("id"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    } else {
+        None
+    };
+    Ok(examcore::ok(json!({"items":data,"nextCursor":next_cursor})))
 }
 async fn get_exam(
     State(s): State<AppState>,
@@ -385,8 +434,8 @@ async fn get_exam(
 }
 async fn get_data(db: &PgPool, v: &kernel::Viewer, id: Uuid) -> AppResult<Value> {
     let e = examcore::load_exam_for_examiner(db, v, id).await?;
-    let rows=sqlx::query("select coalesce(i.question_id,q.id) question_id,coalesce(i.position,eq.position) position,coalesce(i.marks::float8,eq.marks::float8,q.marks::float8) marks,coalesce(i.topic,q.topic) topic,coalesce(i.difficulty,q.difficulty) difficulty,coalesce(i.kind,q.kind) kind,coalesce(i.stem,q.stem) stem,coalesce(i.options,q.options) options,coalesce(i.correct,q.correct) correct,coalesce(i.negative_marks::float8,q.negative_marks::float8) negative_marks,coalesce(i.multi_rule,q.multi_rule) multi_rule,coalesce(i.rubric,q.rubric) rubric,coalesce(i.max_words,q.max_words) max_words,coalesce(i.explanation,q.explanation) explanation,q.version,q.created_at,q.updated_at from exams x left join exam_items i on i.exam_id=x.id and not i.sandbox left join exam_questions eq on x.status='draft' and eq.exam_id=x.id and i.id is null left join questions q on q.id=coalesce(i.question_id,eq.question_id) where x.id=$1 order by coalesce(i.position,eq.position)").bind(id).fetch_all(db).await?;
-    let q:Vec<Value>=rows.iter().filter(|r|r.get::<Option<Uuid>,_>("question_id").is_some()).map(|r|{let id=r.get::<Uuid,_>("question_id");json!({"questionId":id,"position":r.get::<i32,_>("position"),"marks":r.get::<f64,_>("marks"),"question":{"id":id,"topic":r.get::<String,_>("topic"),"difficulty":r.get::<i16,_>("difficulty"),"kind":r.get::<String,_>("kind"),"stem":r.get::<String,_>("stem"),"options":r.get::<Value,_>("options"),"correct":r.get::<Value,_>("correct"),"marks":r.get::<f64,_>("marks"),"negativeMarks":r.get::<f64,_>("negative_marks"),"multiRule":r.get::<String,_>("multi_rule"),"rubric":r.get::<String,_>("rubric"),"maxWords":r.get::<Option<i32>,_>("max_words"),"explanation":r.get::<String,_>("explanation"),"observedFacility":Value::Null,"observedCount":0,"version":r.get::<Option<i32>,_>("version").unwrap_or(1),"createdAt":r.get::<Option<OffsetDateTime>,_>("created_at"),"updatedAt":r.get::<Option<OffsetDateTime>,_>("updated_at")}})}).collect();
+    let rows=sqlx::query("select coalesce(i.question_id,q.id) question_id,i.id item_id,coalesce(i.position,eq.position) position,coalesce(i.marks::float8,eq.marks::float8,q.marks::float8) marks,coalesce(i.topic,q.topic) topic,coalesce(i.difficulty,q.difficulty) difficulty,coalesce(i.kind,q.kind) kind,coalesce(i.stem,q.stem) stem,coalesce(i.options,q.options) options,coalesce(i.correct,q.correct) correct,coalesce(i.negative_marks::float8,q.negative_marks::float8) negative_marks,coalesce(i.multi_rule,q.multi_rule) multi_rule,coalesce(i.rubric,q.rubric) rubric,coalesce(i.max_words,q.max_words) max_words,coalesce(i.explanation,q.explanation) explanation,q.version,q.observed_facility::float8 observed_facility,q.observed_count,q.created_at,q.updated_at,i.created_at item_created_at from exams x left join exam_items i on i.exam_id=x.id and not i.sandbox left join exam_questions eq on x.status='draft' and eq.exam_id=x.id and i.id is null left join questions q on q.id=coalesce(i.question_id,eq.question_id) and (i.id is not null or q.deleted_at is null) where x.id=$1 order by coalesce(i.position,eq.position)").bind(id).fetch_all(db).await?;
+    let q:Vec<Value>=rows.iter().filter(|r|r.get::<Option<Uuid>,_>("question_id").is_some()||r.get::<Option<Uuid>,_>("item_id").is_some()).map(|r|{let question_id:Option<Uuid>=r.get("question_id");let object_id=question_id.unwrap_or_else(||r.get("item_id"));let created=r.get::<Option<OffsetDateTime>,_>("created_at").or_else(||r.get("item_created_at"));let updated=r.get::<Option<OffsetDateTime>,_>("updated_at").or(created);json!({"questionId":question_id,"position":r.get::<i32,_>("position"),"marks":r.get::<f64,_>("marks"),"question":{"id":object_id,"topic":r.get::<String,_>("topic"),"difficulty":r.get::<i16,_>("difficulty"),"kind":r.get::<String,_>("kind"),"stem":r.get::<String,_>("stem"),"options":r.get::<Value,_>("options"),"correct":r.get::<Value,_>("correct"),"marks":r.get::<f64,_>("marks"),"negativeMarks":r.get::<f64,_>("negative_marks"),"multiRule":r.get::<String,_>("multi_rule"),"rubric":r.get::<String,_>("rubric"),"maxWords":r.get::<Option<i32>,_>("max_words"),"explanation":r.get::<String,_>("explanation"),"observedFacility":r.get::<Option<f64>,_>("observed_facility"),"observedCount":r.get::<Option<i32>,_>("observed_count").unwrap_or(0),"version":r.get::<Option<i32>,_>("version").unwrap_or(1),"createdAt":created,"updatedAt":updated}})}).collect();
     let enrolled_count: i64 = sqlx::query_scalar(
         "select count(*) from enrollments where exam_id=$1 and status='enrolled'",
     )
@@ -402,23 +451,7 @@ async fn get_data(db: &PgPool, v: &kernel::Viewer, id: Uuid) -> AppResult<Value>
         .bind(id)
         .fetch_one(db)
         .await?;
-    Ok(dto(
-        e.id,
-        e.title,
-        e.status,
-        e.starts_at,
-        e.ends_at,
-        e.duration_minutes,
-        e.total_marks,
-        e.pass_marks,
-        ins,
-        e.settings,
-        e.version,
-        json!(q),
-        enrolled_count,
-        attempts,
-        updated,
-    ))
+    Ok(dto(e, ins, json!(q), enrolled_count, attempts, updated))
 }
 async fn assign(
     State(s): State<AppState>,
@@ -481,7 +514,7 @@ async fn update(
     if phase != "draft" && ends < e.ends_at {
         return Err(invalid("endsAt", "The exam end may only be extended."));
     }
-    let title = p.title.unwrap_or(e.title);
+    let title = p.title.unwrap_or(e.title).trim().to_owned();
     let ins = p.instructions.unwrap_or(
         sqlx::query_scalar("select instructions from exams where id=$1")
             .bind(id)
@@ -532,11 +565,11 @@ async fn review(
     Path(id): Path<Uuid>,
 ) -> examcore::ApiJson {
     examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
-    let marks:f64=sqlx::query_scalar("select coalesce(sum(coalesce(eq.marks,q.marks)),0)::float8 from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1").bind(id).fetch_one(&s.db).await?;
-    let (total,start,end,duration,count,candidates):(f64,OffsetDateTime,OffsetDateTime,i32,i64,i64)=sqlx::query_as("select total_marks::float8,starts_at,ends_at,duration_minutes,(select count(*) from exam_questions where exam_id=$1),(select count(*) from enrollments where exam_id=$1 and status='enrolled') from exams where id=$1").bind(id).fetch_one(&s.db).await?;
-    let missing_keys:i64=sqlx::query_scalar("select count(*) from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 and q.kind in ('single','multi') and jsonb_array_length(q.correct)=0").bind(id).fetch_one(&s.db).await?;
-    let topic:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('topic',topic,'count',count,'marks',marks) order by topic),'[]'::jsonb) from (select q.topic,count(*)::int count,sum(coalesce(eq.marks,q.marks))::float8 marks from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 group by q.topic) t").bind(id).fetch_one(&s.db).await?;
-    let difficulty:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('difficulty',difficulty,'count',count) order by difficulty),'[]'::jsonb) from (select q.difficulty,count(*)::int count from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 group by q.difficulty) t").bind(id).fetch_one(&s.db).await?;
+    let marks:f64=sqlx::query_scalar("select coalesce(sum(coalesce(eq.marks,q.marks)),0)::float8 from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1").bind(id).fetch_one(&s.db).await?;
+    let (total,start,end,duration,count,candidates):(f64,OffsetDateTime,OffsetDateTime,i32,i64,i64)=sqlx::query_as("select total_marks::float8,starts_at,ends_at,duration_minutes,(select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1),(select count(*) from enrollments where exam_id=$1 and status='enrolled') from exams where id=$1").bind(id).fetch_one(&s.db).await?;
+    let missing_keys:i64=sqlx::query_scalar("select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 and q.kind in ('single','multi') and jsonb_array_length(q.correct)=0").bind(id).fetch_one(&s.db).await?;
+    let topic:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('topic',topic,'count',count,'marks',marks) order by topic),'[]'::jsonb) from (select q.topic,count(*)::int count,sum(coalesce(eq.marks,q.marks))::float8 marks from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 group by q.topic) t").bind(id).fetch_one(&s.db).await?;
+    let difficulty:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('difficulty',difficulty,'count',count) order by difficulty),'[]'::jsonb) from (select q.difficulty,count(*)::int count from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 group by q.difficulty) t").bind(id).fetch_one(&s.db).await?;
     let checks = json!([{"key":"title","ok":true,"message":"Exam has a title."},{"key":"questions","ok":count>0,"message":format!("Exam has {} questions.",count)},{"key":"marks","ok":(marks-total).abs()<0.01,"message":format!("Assigned marks: {} of {}.",marks,total)},{"key":"window","ok":end>examcore::now(),"message":"The exam window ends in the future."},{"key":"duration","ok":i64::from(duration)*60<=(end-start).whole_seconds(),"message":"The duration fits within the exam window."},{"key":"candidates","ok":candidates>0,"message":format!("{} candidates enrolled.",candidates)},{"key":"objectiveKeys","ok":missing_keys==0,"message":if missing_keys==0{"Objective questions have answer keys.".to_owned()}else{format!("{} objective questions are missing answer keys.",missing_keys)}}]);
     let ready = checks.as_array().is_some_and(|a| {
         a.iter()
@@ -565,27 +598,22 @@ async fn complete(
     v: ExaminerViewer,
     m: RequestMeta,
     Path(id): Path<Uuid>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
+    Query(q): Query<ForceQuery>,
 ) -> examcore::ApiJson {
-    let e = examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
-    if e.status == "published"
-        && (e.ends_at <= examcore::now() || q.get("force").is_some_and(|x| x == "true"))
-    {
-        sqlx::query("update exams set status='completed',completed_at=now(),version=version+1,updated_at=now() where id=$1").bind(id).execute(&s.db).await?;
+    examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
+    let mut tx = s.db.begin().await?;
+    let changed = complete_tx(&mut tx, id, q.force).await?;
+    tx.commit().await?;
+    if changed {
         audit(
             &s,
             &m,
             v.0.id,
             "exam.completed",
             id,
-            json!({"forced":e.ends_at>examcore::now()}),
+            json!({"forced":q.force}),
         )
         .await;
-    } else if e.status != "completed" {
-        return Err(examcore::conflict(
-            "state",
-            "The exam window has not closed.",
-        ));
     }
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
@@ -664,6 +692,15 @@ async fn sandbox(
         return Err(AppError::not_found());
     }
     let mut tx = s.db.begin().await?;
+    let locked_owner: Option<Uuid> = sqlx::query_scalar(
+        "select owner_id from exams where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if locked_owner != Some(v.0.id) {
+        return Err(AppError::not_found());
+    }
     sqlx::query("delete from attempts where exam_id=$1 and candidate_id=$2 and sandbox")
         .bind(id)
         .bind(v.0.id)
@@ -674,7 +711,7 @@ async fn sandbox(
         .execute(&mut *tx)
         .await?;
     if e.status == "draft" {
-        sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,true,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1").bind(id).execute(&mut *tx).await?;
+        sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,true,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1").bind(id).execute(&mut *tx).await?;
     } else {
         sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select exam_id,question_id,true,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation from exam_items where exam_id=$1 and not sandbox").bind(id).execute(&mut *tx).await?;
     }
@@ -706,10 +743,9 @@ async fn sandbox(
             .filter_map(|o| o.get("id").and_then(Value::as_str).map(str::to_owned))
             .collect();
         if config.shuffle_options {
-            examcore::shuffle(
-                &mut ids,
-                seed ^ u64::from_le_bytes(item.as_bytes()[..8].try_into().unwrap_or([0; 8])),
-            );
+            let mut item_seed = [0_u8; 8];
+            item_seed.copy_from_slice(&item.as_bytes()[..8]);
+            examcore::shuffle(&mut ids, seed ^ u64::from_le_bytes(item_seed));
         }
         option_order.insert(item.to_string(), json!(ids));
     }
@@ -743,9 +779,10 @@ async fn audit(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use examcore::kernel::{Role, Viewer};
+    use examcore::kernel::{Viewer, viewer::Role};
     use sqlx::PgPool;
 
     async fn fixture(db: &PgPool, total: f64, marks: f64) -> (Uuid, Uuid, Uuid) {
@@ -882,6 +919,29 @@ mod tests {
             .await
             .expect("ready exam publishes");
         tx.commit().await.expect("commit publish");
+        let published_version: i32 = sqlx::query_scalar("select version from exams where id=$1")
+            .bind(ready_exam)
+            .fetch_one(&db)
+            .await
+            .expect("read published version");
+        let mut tx = db.begin().await.expect("begin idempotent publish");
+        publish_tx(&mut tx, ready_exam)
+            .await
+            .expect("already-published exam is idempotent");
+        tx.commit().await.expect("commit idempotent publish");
+        let item_count: i64 =
+            sqlx::query_scalar("select count(*) from exam_items where exam_id=$1 and not sandbox")
+                .bind(ready_exam)
+                .fetch_one(&db)
+                .await
+                .expect("count published items");
+        let version_after_retry: i32 = sqlx::query_scalar("select version from exams where id=$1")
+            .bind(ready_exam)
+            .fetch_one(&db)
+            .await
+            .expect("read idempotent version");
+        assert_eq!(item_count, 1);
+        assert_eq!(version_after_retry, published_version);
         sqlx::query("update questions set stem='Edited bank prompt' where id=$1")
             .bind(question)
             .execute(&db)

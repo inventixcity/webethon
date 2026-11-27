@@ -6,7 +6,7 @@ name: invigil
 #   docker compose up -d --build api        Rust API on http://localhost:8080
 #   docker compose --profile full up -d     also the Next.js dev server on http://localhost:3000
 #
-# Development defaults are not secrets. Production uses Azure Container Apps with managed secrets.
+# Development defaults are not secrets. Production runs the GHCR image on Render (or Azure Container Apps) with managed secrets.
 
 services:
   postgres:
@@ -34,6 +34,9 @@ services:
   api:
     build:
       context: ./backend
+      args:
+        # On a slow link, reuse a local toolchain image: RUST_IMAGE=invigil-rust:dev docker compose build api
+        RUST_IMAGE: ${RUST_IMAGE:-rust:1-bookworm}
     image: invigil-api:dev
     environment:
       APP_ENV: development
@@ -42,6 +45,12 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/invigil
       SMTP_URL: smtp://mailpit:1025
       APP_ORIGIN: http://localhost:3000
+      # The API is also called directly on http://localhost:8080 (e2e tests, curl).
+      ALLOWED_ORIGINS: http://localhost:8080
+      EMAIL_FROM: Invigil <no-reply@invigil.local>
+      # Fixed development-only keys, so leases and signed certificates survive an API restart.
+      EXAM_LEASE_KEY: development-only-exam-lease-key-0000000000
+      RESULT_SIGNING_KEY: ZGV2ZWxvcG1lbnQtb25seS1zaWduaW5nLWtleS0wMDA=
       RUN_MIGRATIONS: "true"
       RUST_LOG: info
       # Local file storage must live on the writable /tmp mount: the root filesystem is read-only.
@@ -53,7 +62,7 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
-    # Hardening, matching the Kubernetes pod spec: no writable root filesystem, no capabilities,
+    # Hardening: no writable root filesystem, no capabilities,
     # no privilege escalation. /tmp is a memory-backed scratch space.
     read_only: true
     tmpfs:

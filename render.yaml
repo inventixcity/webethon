@@ -1,0 +1,57 @@
+# Render Blueprint for the Invigil API (https://render.com/docs/blueprint-spec).
+#
+# Render does not build the Rust code: GitHub Actions (.github/workflows/api-image.yml) builds
+# backend/Dockerfile and pushes ghcr.io/inventixcity/invigil-api:{latest,<sha>}; Render runs that image.
+# Secrets are `sync: false`, so Render asks for them when the Blueprint is first applied and never
+# reads them from this file. See deploy/render/README.md for the CLI/API path.
+
+services:
+  - type: web
+    name: invigil-api
+    runtime: image
+    image:
+      url: ghcr.io/inventixcity/invigil-api:latest
+    plan: free
+    region: singapore
+    # Liveness only (no database round trip), so a slow database never fails a deploy.
+    # /readyz also checks the database; /api/v1/health is the same check under the API prefix.
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      # Render routes traffic to $PORT; the image listens on 8080.
+      - key: PORT
+        value: "8080"
+      - key: BIND_ADDR
+        value: 0.0.0.0:8080
+      # Prometheus metrics stay inside the container.
+      - key: METRICS_ADDR
+        value: 127.0.0.1:9090
+      # Render free has 512 MB; keep the pool small (the Supabase session pooler also caps clients).
+      - key: DATABASE_MAX_CONNECTIONS
+        value: "8"
+      - key: RUST_LOG
+        value: info,sqlx=warn
+      # Secrets and per-deployment values: set in the dashboard or by deploy/render/deploy.sh.
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: PROXY_SECRET
+        sync: false
+      - key: CODE_PEPPER
+        sync: false
+      - key: EXAM_LEASE_KEY
+        sync: false
+      - key: RESULT_SIGNING_KEY
+        sync: false
+      - key: MFA_ENCRYPTION_KEY
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

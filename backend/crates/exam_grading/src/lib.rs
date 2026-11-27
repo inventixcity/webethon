@@ -67,7 +67,7 @@ async fn grading_list(
     ExaminerViewer(viewer): ExaminerViewer,
     Path(exam_id): Path<Uuid>,
     Query(query): Query<GradingQuery>,
-) -> AppResult<Json<Vec<GradingItem>>> {
+) -> examcore::ApiJson {
     load_exam_for_examiner(&state.db, &viewer, exam_id).await?;
     let rows = sqlx::query(
         "with scripts as (
@@ -109,7 +109,7 @@ async fn grading_list(
             graded_at: row.try_get("graded_at")?,
         });
     }
-    Ok(Json(items))
+    Ok(examcore::ok(items))
 }
 
 #[derive(Deserialize)]
@@ -125,7 +125,7 @@ async fn grade_answer(
     Path((attempt_id, item_id)): Path<(Uuid, Uuid)>,
     meta: RequestMeta,
     Json(input): Json<GradeInput>,
-) -> AppResult<Json<GradingItem>> {
+) -> examcore::ApiJson {
     if !valid_grade(input.marks, f64::MAX) || input.feedback.chars().count() > 4000 {
         return Err(examcore::invalid(
             "marks",
@@ -206,9 +206,9 @@ async fn grade_answer(
     let text: String = response
         .try_get::<Option<String>, _>("answer_text")?
         .unwrap_or_default();
-    let script_number: i64 = sqlx::query_scalar("select count(*) from attempts curr join attempts prev on prev.exam_id=curr.exam_id and not prev.sandbox and (prev.created_at,prev.id) <= (curr.created_at,curr.id) where curr.id=$1 and not curr.sandbox")
+    let script_number: i64 = sqlx::query_scalar("select count(*) from attempts curr join attempts prev on prev.exam_id=curr.exam_id and not prev.sandbox and prev.status<>'in_progress' and (prev.created_at,prev.id) <= (curr.created_at,curr.id) where curr.id=$1 and not curr.sandbox and curr.status<>'in_progress'")
         .bind(attempt_id).fetch_one(&state.db).await?;
-    Ok(Json(GradingItem {
+    Ok(examcore::ok(GradingItem {
         attempt_id,
         item_id,
         script_label: format!("Script {script_number:02}"),
@@ -232,9 +232,9 @@ async fn results(
     State(state): State<AppState>,
     ExaminerViewer(viewer): ExaminerViewer,
     Path(exam_id): Path<Uuid>,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     load_exam_for_examiner(&state.db, &viewer, exam_id).await?;
-    Ok(Json(results_value(&state, exam_id).await?))
+    Ok(examcore::ok(results_value(&state, exam_id).await?))
 }
 
 async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
@@ -243,24 +243,10 @@ async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
     let total_marks: f64 = exam.try_get("total_marks")?;
     let pass_marks: f64 = exam.try_get("pass_marks")?;
     let published: Option<time::OffsetDateTime> = exam.try_get("results_published_at")?;
-    let ends_at: time::OffsetDateTime = exam.try_get("ends_at")?;
-    let status: String = exam.try_get("status")?;
     let rows = sqlx::query("select a.id as attempt_id,a.candidate_id,u.display_name,u.email,a.status,a.auto_score::float8 as auto_score,a.manual_score::float8 as manual_score,a.total_score::float8 as total_score,case when a.total_score is null then null else round((a.total_score::numeric / $2::numeric * 100),2)::float8 end as percent,case when a.total_score is null then null else a.total_score >= $3 end as passed,a.grading_status,a.review_priority,a.submitted_at from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox order by a.created_at,a.id")
         .bind(exam_id).bind(total_marks).bind(pass_marks).fetch_all(&state.db).await?;
-    let mut blockers = Vec::new();
-    if time::OffsetDateTime::now_utc() < ends_at && status != "completed" {
-        blockers.push("The exam window is still open.".to_owned());
-    }
-    let in_progress: bool = sqlx::query_scalar("select exists(select 1 from attempts where exam_id=$1 and not sandbox and status='in_progress')")
-        .bind(exam_id).fetch_one(&state.db).await?;
-    if in_progress {
-        blockers.push("One or more attempts are still in progress.".to_owned());
-    }
-    let incomplete: bool = sqlx::query_scalar("select exists(select 1 from attempts where exam_id=$1 and not sandbox and grading_status <> 'complete')")
-        .bind(exam_id).fetch_one(&state.db).await?;
-    if incomplete {
-        blockers.push("One or more attempts are not fully graded.".to_owned());
-    }
+    let mut conn = state.db.acquire().await?;
+    let blockers = publication_blockers(&mut conn, exam_id).await?;
     let rows_json = rows.iter().map(|row| {
         let attempt_id: Uuid = row.try_get("attempt_id")?;
         let candidate_id: Uuid = row.try_get("candidate_id")?;
@@ -282,12 +268,35 @@ async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
     )
 }
 
+async fn publication_blockers(conn: &mut PgConnection, exam_id: Uuid) -> AppResult<Vec<String>> {
+    let exam = sqlx::query("select ends_at,status from exams where id=$1 and deleted_at is null")
+        .bind(exam_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(AppError::not_found)?;
+    let ends_at: time::OffsetDateTime = exam.try_get("ends_at")?;
+    let status: String = exam.try_get("status")?;
+    let mut blockers = Vec::new();
+    if time::OffsetDateTime::now_utc() < ends_at && status != "completed" {
+        blockers.push("The exam window is still open.".to_owned());
+    }
+    if sqlx::query_scalar::<_, bool>("select exists(select 1 from attempts where exam_id=$1 and not sandbox and status='in_progress')")
+        .bind(exam_id).fetch_one(&mut *conn).await? {
+        blockers.push("One or more attempts are still in progress.".to_owned());
+    }
+    if sqlx::query_scalar::<_, bool>("select exists(select 1 from attempts where exam_id=$1 and not sandbox and grading_status <> 'complete')")
+        .bind(exam_id).fetch_one(&mut *conn).await? {
+        blockers.push("One or more attempts are not fully graded.".to_owned());
+    }
+    Ok(blockers)
+}
+
 async fn publish_results(
     State(state): State<AppState>,
     ExaminerViewer(viewer): ExaminerViewer,
     Path(exam_id): Path<Uuid>,
     meta: RequestMeta,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     let mut tx = state.db.begin().await?;
     let owner: Option<Uuid> = sqlx::query_scalar(
         "select owner_id from exams where id=$1 and deleted_at is null for update",
@@ -298,8 +307,7 @@ async fn publish_results(
     if owner.is_none_or(|owner| owner != viewer.id && !viewer.is_admin()) {
         return Err(AppError::not_found());
     }
-    let blockers = sqlx::query_scalar::<_, String>("select reason from (select 'The exam window is still open.'::text as reason where exists(select 1 from exams where id=$1 and ends_at>now() and status<>'completed') union all select 'One or more attempts are still in progress.' where exists(select 1 from attempts where exam_id=$1 and not sandbox and status='in_progress') union all select 'One or more attempts are not fully graded.' where exists(select 1 from attempts where exam_id=$1 and not sandbox and grading_status<>'complete')) b")
-        .bind(exam_id).fetch_all(&mut *tx).await?;
+    let blockers = publication_blockers(&mut *tx, exam_id).await?;
     if !blockers.is_empty() {
         return Err(conflict(
             "grading_incomplete",
@@ -339,7 +347,7 @@ async fn publish_results(
         let hash =
             examcore::kernel::crypto::sha256(examcore::canonical_json(&statement).as_bytes());
         let (signature, key_id) = examcore::signer::sign(&hash);
-        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id,issued_at) values($1,$2,$3,$4,$5,$6,$7) on conflict(attempt_id) do nothing")
+        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id,issued_at) values($1,$2,$3,$4,$5,$6,$7) on conflict(attempt_id) where revoked_at is null do nothing")
             .bind(attempt_id).bind(verify_code).bind(statement).bind(hash.to_vec()).bind(signature.to_vec()).bind(key_id).bind(issued).execute(&mut *tx).await?;
     }
     tx.commit().await?;
@@ -355,7 +363,7 @@ async fn publish_results(
         },
     )
     .await;
-    Ok(Json(results_value(&state, exam_id).await?))
+    Ok(examcore::ok(results_value(&state, exam_id).await?))
 }
 
 fn new_verify_code() -> String {
@@ -374,7 +382,7 @@ async fn unpublish_results(
     ExaminerViewer(viewer): ExaminerViewer,
     Path(exam_id): Path<Uuid>,
     meta: RequestMeta,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     let mut tx = state.db.begin().await?;
     let owner: Option<Uuid> = sqlx::query_scalar(
         "select owner_id from exams where id=$1 and deleted_at is null for update",
@@ -404,14 +412,14 @@ async fn unpublish_results(
         },
     )
     .await;
-    Ok(Json(results_value(&state, exam_id).await?))
+    Ok(examcore::ok(results_value(&state, exam_id).await?))
 }
 
 async fn verify_certificate(
     State(state): State<AppState>,
     Path(code): Path<String>,
     meta: RequestMeta,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     kernel::security::enforce_rate_limit(
         &state.db,
         &format!("verify:{}", meta.ip),
@@ -421,25 +429,11 @@ async fn verify_certificate(
         },
     )
     .await?;
-    let normalized: String = code
-        .chars()
-        .filter(|character| !character.is_whitespace() && *character != '-')
-        .map(|character| character.to_ascii_uppercase())
-        .collect();
-    let canonical = if normalized.len() == 12 {
-        format!(
-            "{}-{}-{}",
-            &normalized[0..4],
-            &normalized[4..8],
-            &normalized[8..12]
-        )
-    } else {
-        normalized
-    };
+    let canonical = canonical_verify_code(&code);
     let row = sqlx::query("select statement,statement_hash,signature,key_id,revoked_at from result_certificates where verify_code=$1")
         .bind(canonical).fetch_optional(&state.db).await?;
     let Some(row) = row else {
-        return Ok(Json(
+        return Ok(examcore::ok(
             json!({"valid":false,"revoked":false,"statement":null,"signature":null}),
         ));
     };
@@ -458,9 +452,32 @@ async fn verify_certificate(
         "issuedAt": statement.get("issuedAt"),
         "issuer": statement.get("issuer").and_then(Value::as_str),
     });
-    Ok(Json(
+    Ok(examcore::ok(
         json!({"valid":valid && revoked.is_none(),"revoked":revoked.is_some(),"statement":public_statement,"signature":{"algorithm":"Ed25519","keyId":key_id,"valid":valid}}),
     ))
+}
+
+fn canonical_verify_code(code: &str) -> String {
+    let normalized: String = code
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != '-')
+        .map(|character| character.to_ascii_uppercase())
+        .take(64)
+        .collect();
+    let valid_shape = normalized.len() == 12
+        && normalized
+            .bytes()
+            .all(|byte| b"0123456789ABCDEFGHJKMNPQRSTVWXYZ".contains(&byte));
+    if valid_shape {
+        format!(
+            "{}-{}-{}",
+            &normalized[0..4],
+            &normalized[4..8],
+            &normalized[8..12]
+        )
+    } else {
+        normalized
+    }
 }
 
 fn verify_statement(statement: &Value, stored_hash: &[u8], signature: &[u8]) -> bool {
@@ -472,7 +489,7 @@ async fn candidate_result(
     State(state): State<AppState>,
     CandidateViewer(viewer): CandidateViewer,
     Path(attempt_id): Path<Uuid>,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     let row = sqlx::query("select a.exam_id,a.candidate_id,a.total_score::float8 as total_score,a.submitted_at,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,e.settings,c.verify_code from attempts a join exams e on e.id=a.exam_id join result_certificates c on c.attempt_id=a.id where a.id=$1 and a.sandbox=false and a.candidate_id=$2 and e.results_published_at is not null and c.revoked_at is null")
         .bind(attempt_id).bind(viewer.id).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
     let total_score: f64 = row.try_get("total_score")?;
@@ -507,7 +524,7 @@ async fn candidate_result(
     let title: String = row.try_get("title")?;
     let submitted_at: Option<time::OffsetDateTime> = row.try_get("submitted_at")?;
     let verify_code: String = row.try_get("verify_code")?;
-    Ok(Json(
+    Ok(examcore::ok(
         json!({"attemptId":attempt_id,"examTitle":title,"totalMarks":total_marks,"passMarks":pass_marks,"totalScore":total_score,"percent":round2(total_score/total_marks*100.0),"passed":total_score>=pass_marks,"submittedAt":submitted_at,"publishedAt":published_at,"verifyCode":verify_code,"breakdown":breakdown}),
     ))
 }
@@ -516,8 +533,8 @@ async fn attempt_report(
     State(state): State<AppState>,
     viewer: examcore::Viewer,
     Path(attempt_id): Path<Uuid>,
-) -> AppResult<Json<Value>> {
-    let row = sqlx::query("select a.exam_id,a.candidate_id,a.status,a.sandbox,a.total_score::float8 as total_score,a.submitted_at,u.display_name,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,c.verify_code,c.revoked_at from attempts a join users u on u.id=a.candidate_id join exams e on e.id=a.exam_id left join result_certificates c on c.attempt_id=a.id where a.id=$1")
+) -> examcore::ApiJson {
+    let row = sqlx::query("select a.exam_id,a.candidate_id,a.status,a.sandbox,a.total_score::float8 as total_score,a.submitted_at,u.display_name,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,c.verify_code,c.revoked_at from attempts a join users u on u.id=a.candidate_id join exams e on e.id=a.exam_id left join result_certificates c on c.attempt_id=a.id and c.revoked_at is null where a.id=$1")
         .bind(attempt_id).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
     let exam_id: Uuid = row.try_get("exam_id")?;
     let candidate_id: Uuid = row.try_get("candidate_id")?;
@@ -559,7 +576,7 @@ async fn attempt_report(
         return Err(AppError::not_found());
     }
     let code = verify_code.unwrap_or_default();
-    Ok(Json(
+    Ok(examcore::ok(
         json!({"attemptId":attempt_id,"candidate":display_name,"examTitle":title,"date":submitted_at,"score":total_score,"totalMarks":total_marks,"percent":round2(total_score/total_marks*100.0),"passed":total_score>=pass_marks,"items":items,"verifyCode":code,"verifyUrl":format!("{}/verify/{}",state.config.app_origin,code)}),
     ))
 }
@@ -568,7 +585,7 @@ async fn exam_report(
     State(state): State<AppState>,
     ExaminerViewer(viewer): ExaminerViewer,
     Path(exam_id): Path<Uuid>,
-) -> AppResult<Json<Value>> {
+) -> examcore::ApiJson {
     load_exam_for_examiner(&state.db, &viewer, exam_id).await?;
     let mut report = results_value(&state, exam_id).await?;
     let rows = report
@@ -633,7 +650,7 @@ async fn exam_report(
             .collect::<Vec<_>>()
     );
     report["itemSummary"] = json!(facilities);
-    Ok(Json(report))
+    Ok(examcore::ok(report))
 }
 
 #[cfg(test)]
@@ -659,6 +676,12 @@ mod tests {
         assert!(verify_statement(&statement, &hash, &signature));
         let tampered = json!({"candidate":"A. B****n","percent":92.5});
         assert!(!verify_statement(&tampered, &hash, &signature));
+    }
+
+    #[test]
+    fn malformed_unicode_verification_codes_do_not_slice_or_panic() {
+        assert_eq!(canonical_verify_code("abcd efgh jkmp"), "ABCD-EFGH-JKMP");
+        assert_eq!(canonical_verify_code("éééééééééééé"), "éééééééééééé");
     }
 
     #[sqlx::test(migrations = "../../migrations")]
@@ -760,6 +783,91 @@ mod tests {
             &tampered.try_get::<Vec<u8>, _>("statement_hash")?,
             &tampered.try_get::<Vec<u8>, _>("signature")?,
         ));
+        sqlx::query("update result_certificates set revoked_at=now() where attempt_id=$1")
+            .bind(attempt_id)
+            .execute(&db)
+            .await?;
+        let replacement = json!({"certificateId":"LMNP-QRST-VWXY","examTitle":"Certificate test"});
+        let replacement_hash = sha256(examcore::canonical_json(&replacement).as_bytes());
+        let (replacement_signature, replacement_key) = examcore::signer::sign(&replacement_hash);
+        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id) values($1,'LMNP-QRST-VWXY',$2,$3,$4,$5) on conflict(attempt_id) where revoked_at is null do nothing")
+            .bind(attempt_id)
+            .bind(replacement)
+            .bind(replacement_hash.to_vec())
+            .bind(replacement_signature.to_vec())
+            .bind(replacement_key)
+            .execute(&db)
+            .await?;
+        let (history_count, active_count): (i64, i64) = sqlx::query_as(
+            "select count(*),count(*) filter(where revoked_at is null) from result_certificates where attempt_id=$1",
+        )
+        .bind(attempt_id)
+        .fetch_one(&db)
+        .await?;
+        assert_eq!((history_count, active_count), (2, 1));
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn publishing_is_blocked_for_live_and_ungraded_attempts(
+        db: sqlx::PgPool,
+    ) -> Result<(), sqlx::Error> {
+        let owner: Uuid = sqlx::query_scalar(
+            "insert into users(email,role) values('publish-owner@example.test','examiner') returning id",
+        )
+        .fetch_one(&db)
+        .await?;
+        let candidate: Uuid = sqlx::query_scalar(
+            "insert into users(email) values('publish-candidate@example.test') returning id",
+        )
+        .fetch_one(&db)
+        .await?;
+        let exam_id: Uuid = sqlx::query_scalar(
+            "insert into exams(owner_id,title,starts_at,ends_at,duration_minutes,total_marks,pass_marks) values($1,'Publish test',now()-interval '2 days',now()-interval '1 day',60,10,5) returning id",
+        )
+        .bind(owner)
+        .fetch_one(&db)
+        .await?;
+        sqlx::query("insert into attempts(exam_id,candidate_id,deadline_at,seed,item_order,journal_genesis) values($1,$2,now(),1,'{}',$3)")
+            .bind(exam_id)
+            .bind(candidate)
+            .bind(vec![0_u8; 32])
+            .execute(&db)
+            .await?;
+        let mut conn = db.acquire().await?;
+        let blockers = publication_blockers(&mut conn, exam_id)
+            .await
+            .map_err(|_| sqlx::Error::Protocol("blocker check failed".into()))?;
+        assert!(blockers.iter().any(|reason| reason.contains("in progress")));
+        assert!(
+            blockers
+                .iter()
+                .any(|reason| reason.contains("fully graded"))
+        );
+        let statement = json!({"certificateId":"ZXCV-1234-5678","examTitle":"Publish test"});
+        let hash = sha256(examcore::canonical_json(&statement).as_bytes());
+        let (signature, key_id) = examcore::signer::sign(&hash);
+        let attempt_id: Uuid = sqlx::query_scalar("select id from attempts where exam_id=$1")
+            .bind(exam_id)
+            .fetch_one(&db)
+            .await?;
+        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id) values($1,'ZXCV-1234-5678',$2,$3,$4,$5)")
+            .bind(attempt_id)
+            .bind(statement)
+            .bind(hash.to_vec())
+            .bind(signature.to_vec())
+            .bind(key_id)
+            .execute(&db)
+            .await?;
+        let visible: bool = sqlx::query_scalar("select exists(select 1 from attempts a join exams e on e.id=a.exam_id join result_certificates c on c.attempt_id=a.id where a.id=$1 and a.candidate_id=$2 and not a.sandbox and e.results_published_at is not null and c.revoked_at is null)")
+            .bind(attempt_id)
+            .bind(candidate)
+            .fetch_one(&db)
+            .await?;
+        assert!(
+            !visible,
+            "candidate must not see a certificate before publication"
+        );
         Ok(())
     }
 }

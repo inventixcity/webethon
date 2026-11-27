@@ -16,6 +16,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }
+tokio.workspace = true
+reqwest.workspace = true
 
 [lints]
 workspace = true

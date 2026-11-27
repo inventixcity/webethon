@@ -70,6 +70,19 @@ nesting check → handler → security headers (`no-store`, nosniff, CSP, frame 
 | H4 | haiku | `web/src/app/(app)/app/examiner/page.tsx`, `web/src/app/(app)/app/examiner/exams/page.tsx`, `.../exams/new/**`, `.../exams/[examId]/(setup)/**` (overview, questions, candidates, review), `web/src/components/exams/**` |
 | H5 | haiku | `web/src/app/(app)/app/examiner/exams/[examId]/{monitor,grading,results,analytics}/**`, `web/src/components/monitor/**`, `web/src/components/grading/**`, `web/src/components/analytics/**`, `web/src/app/(admin)/admin/users/**` |
 
+**Reassignments (11:40 PKT):** C4 → **S1** (Codex Sol, high, 1 h), C5 → **S2** (Codex Sol, high, 1 h), and C9 → **O1** (integration, deploy) plus **O5** (docs). The Haiku H1–H5 first passes are done; their screens are now polished by **O2** (all except the workspace) and **O3** (workspace).
+
+| ID | Agent | Owns |
+| --- | --- | --- |
+| S1 | codex sol high | `backend/crates/exam_attempts/**` |
+| S2 | codex sol high | `backend/crates/exam_resilience/**`, `web/src/lib/exam/{journal,sync,use-attempt,network,device,clock}.ts` |
+| O1 | opus high | `backend/crates/server/**`, `backend/Dockerfile`, `docker-compose.yml`, `deploy/**`, `render.yaml`, `.github/**`, `tests/**`; runtime integration of every crate |
+| O2 | opus high | UI/UX across `web/src/app/**` and `web/src/components/**` EXCEPT the workspace, `(auth)/invite`, `verify` and `api/reports`; new shared primitives in `web/src/components/ui/**` |
+| O3 | opus high | `web/src/app/(exam)/**`, `web/src/components/workspace/**` (consumes S2's hook and C7's integrity lib) |
+| O4 | opus high | Security: `docs/SECURITY.md`, `tests/security/**`, `web/next.config.ts`, `web/src/proxy.ts`; may make minimal security fixes anywhere (logged) |
+| O5 | opus high | `README.md`, `docs/**` (except SECURITY.md), `web/public/**`, landing page content `web/src/app/page.tsx`, metadata and icons |
+| X1 | opus xhigh | Read-only principal reviewer. Writes `handoff/reviews/X1-*.md` only. |
+
 Shared read-only for all: `web/src/lib/api/client.ts` (`api<T>(path, {method, body, headers})` returns `data`, throws `ApiError{code,status,details}`), `web/src/components/ui/*` (Button, Input, Checkbox, Label), `web/src/components/charts`, `web/src/components/loaders`, `web/src/components/feedback/toaster.tsx`, `web/src/components/errors/*`, `web/src/lib/exam/types.ts`.
 
 ## 4. API contract (all under `/api/v1`, JSON, `{data}` envelope; types in `web/src/lib/exam/types.ts`)
@@ -186,6 +199,15 @@ Examiner exam pages share a tab bar component `web/src/components/exams/exam-tab
 | Pass | Time (PKT) | State |
 | --- | --- | --- |
 | 0 | 10:40 | Repo bootstrapped; schema, examcore, contract types and crate scaffolds compile. Workers launching. |
+| 1 | 11:50 | Pushed bf72cc9. Done: C1, C7 (tests pass), C6 nearly done, all H1–H5 screens. Running (Codex): C2, C3, C6, C8 loops, S1 (attempts), S2 (5.3 engine), R1 review. The Opus O1–O5 and X1 agents were STOPPED by the user mid-edit. |
+
+### RESUME HERE (lead ran out of usage at ~11:55)
+1. `web/src/components/workspace/workspace.tsx` doesn't typecheck: O3 changed the props of `TopBar` (needs totalMs, queued, failed, answered, total, simulated, helpOpen, onHelpOpenChange, onToggleSimulation), `PaletteItem` (needs failed, queued), the `PaletteTrigger` `answered` prop, and renamed `NetworkBanners` to `ConnectionBanner` and `JournalRejectedNotice`. Update workspace.tsx to the new component APIs (read top-bar.tsx, palette.tsx, network-banner.tsx).
+2. See `handoff/LEAD-TODO.md`: accumulate the typing telemetry in exam_attempts `store::upsert_answer`.
+3. Check each worker log (`handoff/log/*.md`) and reviews (`handoff/reviews/*.md`). Resume an unfinished Codex worker with `bash handoff/loop-worker.sh <ID>`.
+4. `cd backend && bash scripts/cargo.sh check -p server` must be green, then run `docker compose up -d --build api` locally, then `api seed-demo`, then `node tests/e2e/exam-flow.mjs` (if present).
+5. Deploy: the user adds `RENDER_API_KEY` and `SMTP_URL` (Zoho) to `.env.production`. Push to main (the GH Action builds the GHCR image), then run `deploy/render/` (render.yaml, written by O1; check whether deploy.sh exists). Then `vercel env add API_ORIGIN production` = the Render URL, and `cd web && npx vercel --prod`. The Vercel project `invigil` is linked, and PROXY_SECRET plus NEXT_PUBLIC_API_ENABLED are already set. Set APP_ORIGIN on Render = the Vercel prod URL.
+6. Images: the user drops them into web/public/images per handoff/IMAGE_PROMPTS.txt.
 
 ## 9. Worker log (APPEND ONLY, newest at bottom)
 

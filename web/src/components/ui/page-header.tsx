@@ -1,0 +1,162 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+
+export type Crumb = { label: string; href?: string };
+
+type PageHeaderProps = {
+  /** Two-digit section number, for example "02". Shown before the eyebrow. */
+  index?: string;
+  /** The mono caption above the headline, for example "Question bank". */
+  eyebrow: string;
+  title: ReactNode;
+  /** One line that says what this page is for. */
+  description?: ReactNode;
+  /** Primary actions. They sit on the right from md up, and under the text on phones. */
+  actions?: ReactNode;
+  /** Trail back to the parent pages. The last crumb is the current page and has no link. */
+  breadcrumb?: Crumb[];
+  /** Extra content under the description: a meta row, a timeline. */
+  children?: ReactNode;
+  /** h1 for a page, h2 for a section inside a page that already has its own h1 (the exam tabs). */
+  level?: 1 | 2;
+  id?: string;
+  className?: string;
+};
+
+/** Mono, uppercase, tracked: the label voice of the product. */
+export function Eyebrow({ index, children, className }: { index?: string; children: ReactNode; className?: string }) {
+  return (
+    <p className={cn("flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase", className)}>
+      <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
+      <span>
+        {index ? (
+          <>
+            <span className="text-ink tabular-nums">{index}</span>
+            <span aria-hidden="true"> / </span>
+          </>
+        ) : null}
+        {children}
+      </span>
+    </p>
+  );
+}
+
+export function Breadcrumb({ items, className }: { items: Crumb[]; className?: string }) {
+  return (
+    <nav aria-label="Breadcrumb" className={cn("font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase", className)}>
+      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {items.map((item, index) => {
+          const last = index === items.length - 1;
+          return (
+            <li key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-2">
+              {item.href && !last ? (
+                <Link href={item.href} className="underline-offset-4 transition-colors duration-(--duration-fast) hover:text-ink hover:underline">
+                  {item.label}
+                </Link>
+              ) : (
+                <span aria-current={last ? "page" : undefined} className="max-w-[28ch] truncate text-ink-soft">
+                  {item.label}
+                </span>
+              )}
+              {!last ? <span aria-hidden="true">/</span> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * The header every screen opens with: a numbered mono eyebrow, a large tight headline, one line of description and
+ * the primary actions on the right. Level 2 is the smaller variant used for a section inside a page.
+ */
+export function PageHeader({
+  index,
+  eyebrow,
+  title,
+  description,
+  actions,
+  breadcrumb,
+  children,
+  level = 1,
+  id,
+  className,
+}: PageHeaderProps) {
+  const Heading = level === 1 ? "h1" : "h2";
+  return (
+    <header
+      className={cn(
+        "grid gap-6",
+        level === 1 ? "border-b border-ink pt-10 pb-8 md:pt-14 md:pb-10" : "border-b border-rule pt-10 pb-6",
+        className,
+      )}
+    >
+      {breadcrumb && breadcrumb.length > 0 ? <Breadcrumb items={breadcrumb} /> : null}
+      <div className="grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
+        <div className={cn("grid min-w-0 gap-4", actions ? "md:col-span-8" : "md:col-span-12")}>
+          <Eyebrow index={index}>{eyebrow}</Eyebrow>
+          <Heading
+            id={id}
+            className={cn(
+              "font-medium tracking-[-0.03em] break-words",
+              level === 1
+                ? "text-[clamp(2.5rem,6vw,4.5rem)] leading-[0.95]"
+                : "text-[clamp(1.875rem,4vw,2.75rem)] leading-none",
+            )}
+          >
+            {title}
+          </Heading>
+          {description ? <p className="max-w-[62ch] text-base text-ink-soft">{description}</p> : null}
+        </div>
+        {actions ? (
+          <div className="flex flex-wrap items-center gap-3 md:col-span-4 md:justify-end">{actions}</div>
+        ) : null}
+      </div>
+      {children}
+    </header>
+  );
+}
+
+/**
+ * A numbered rule heading for a block inside a page, for example "02 / Marks". The rule sits under the label so
+ * blocks read as chapters, not boxes.
+ */
+export function SectionHeading({
+  index,
+  title,
+  description,
+  actions,
+  id,
+  as: Tag = "h2",
+  className,
+}: {
+  index?: string;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  id?: string;
+  as?: "h2" | "h3";
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid gap-3 border-b border-ink pb-4", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <Tag id={id} className="font-mono text-[11px] tracking-[0.14em] uppercase">
+          {index ? (
+            <>
+              <span className="tabular-nums">{index}</span>
+              <span aria-hidden="true" className="text-ink-muted">
+                {" / "}
+              </span>
+            </>
+          ) : null}
+          {title}
+        </Tag>
+        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+      </div>
+      {description ? <p className="max-w-[62ch] text-sm text-ink-soft">{description}</p> : null}
+    </div>
+  );
+}

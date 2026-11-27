@@ -1,6 +1,6 @@
 //! Candidate enrollment and account invitation routes.
 use axum::{
-    Json, Router,
+    Router,
     extract::State,
     http::{StatusCode, header},
     response::{IntoResponse, Response},
@@ -40,7 +40,7 @@ struct ExtraInput {
     extra_minutes: i32,
 }
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AcceptInput {
     token: String,
     password: String,
@@ -74,7 +74,7 @@ struct ImportRowError {
     path: String,
     message: String,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AttemptSummary {
     id: Uuid,
@@ -112,6 +112,12 @@ fn valid_email(input: &str) -> Option<String> {
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b == b'-')
         })
+    {
+        return None;
+    }
+    let tld = labels.last()?;
+    if !((tld.len() >= 2 && tld.bytes().all(|byte| byte.is_ascii_alphabetic()))
+        || tld.starts_with("xn--"))
     {
         return None;
     }
@@ -166,12 +172,44 @@ pub async fn enroll_tx(
                 "Choose a value from 0 to 600.",
             ));
         }
-        let user: Option<(Uuid, String)> =
-            sqlx::query_as("select id,role from users where email=$1 and deleted_at is null")
+        let user: Option<(Uuid, String)> = sqlx::query_as(
+            "select id,role from users where email=$1 and deleted_at is null for update",
+        )
+        .bind(&email)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let user = match user {
+            Some(user) => user,
+            None => {
+                let inserted: Option<Uuid> = sqlx::query_scalar(
+                    "insert into users(email,display_name,role,status) values($1,$2,'user','active') on conflict(email) do nothing returning id",
+                )
                 .bind(&email)
+                .bind(name)
                 .fetch_optional(&mut **tx)
                 .await?;
-        let id=match user {Some((_,role)) if role!="user"=>return Err(examcore::invalid("email","This email is not a candidate account.")),Some((id,_))=>id,None=>sqlx::query_scalar("insert into users(email,display_name,role,status) values($1,$2,'user','active') returning id").bind(&email).bind(name).fetch_one(&mut **tx).await?};
+                if let Some(id) = inserted {
+                    (id, "user".to_owned())
+                } else {
+                    sqlx::query_as(
+                        "select id,role from users where email=$1 and deleted_at is null for update",
+                    )
+                    .bind(&email)
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .ok_or_else(|| {
+                        examcore::invalid("email", "This email is already assigned to an account.")
+                    })?
+                }
+            }
+        };
+        if user.1 != "user" {
+            return Err(examcore::invalid(
+                "email",
+                "This email is not a candidate account.",
+            ));
+        }
+        let id = user.0;
         sqlx::query("insert into enrollments(exam_id,candidate_id,extra_minutes,enrolled_by,status) values($1,$2,$3,$4,'enrolled') on conflict(exam_id,candidate_id) do update set extra_minutes=excluded.extra_minutes,enrolled_by=excluded.enrolled_by,status='enrolled',updated_at=now()").bind(exam_id).bind(id).bind(extra).bind(by).execute(&mut **tx).await?;
     }
     Ok(())
@@ -384,8 +422,8 @@ async fn invite_one(
             html(&url)
         ),
         text: format!(
-            "You are invited to {}. Set your password: {url}\n\nInventix Invigil",
-            exam.title
+            "You are invited to {}. Schedule: {} to {}. Set your password: {url}\n\nInventix Invigil",
+            exam.title, exam.starts_at, exam.ends_at
         ),
     };
     if let Err(err) = state.email.send(&e).await {
@@ -455,6 +493,12 @@ async fn accept(
     meta: RequestMeta,
     JsonBody(input): JsonBody<AcceptInput>,
 ) -> AppResult<Response> {
+    security::enforce_rate_limit(
+        &state.db,
+        &format!("invite-accept:{}", meta.ip),
+        limits::CODE_PER_IP,
+    )
+    .await?;
     let hash = crypto::hash_token(&input.token).ok_or_else(AppError::not_found)?;
     let email:Option<String>=sqlx::query_scalar("select u.email::text from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now()").bind(hash.as_slice()).fetch_optional(&state.db).await?;
     let email = email.ok_or_else(AppError::not_found)?;
@@ -496,7 +540,22 @@ async fn accept(
         },
     )
     .await;
-    Ok(([(header::SET_COOKIE,session::cookie(&state.config,&token,state.config.session_ttl))],examcore::ok(json!({"user":{"id":uid,"email":email,"displayName":input.display_name.trim(),"role":"candidate","mfaEnabled":false},"token":token}))).into_response())
+    Ok((
+        [(
+            header::SET_COOKIE,
+            session::cookie(&state.config, &token, state.config.session_ttl),
+        )],
+        examcore::ok(json!({
+            "user": {
+                "id": uid,
+                "email": email,
+                "displayName": input.display_name.trim(),
+                "role": "candidate",
+                "mfaEnabled": false
+            }
+        })),
+    )
+        .into_response())
 }
 
 pub fn router() -> Router<AppState> {
@@ -512,13 +571,15 @@ pub fn router() -> Router<AppState> {
         )
         .route("/invites/{token}", get(lookup_invite))
         .route("/invites/accept", post(accept))
+        .route("/auth/invites/{token}", get(lookup_invite))
+        .route("/auth/invites/accept", post(accept))
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use axum::{extract::State, http::header};
+    use axum::{body::to_bytes, extract::State, http::header};
     use kernel::{
         config::Config,
         email::LogSender,
@@ -632,18 +693,58 @@ mod tests {
             }),
         )
         .await;
-        assert!(result.is_ok());
+        let result = result.expect("dry run response");
+        assert_eq!(result.0["data"]["dryRun"], true);
+        assert_eq!(result.0["data"]["errors"], json!([]));
         let count: i64 =
             sqlx::query_scalar("select count(*) from users where email='preview@example.org'")
                 .fetch_one(&db)
                 .await
                 .expect("candidate count");
         assert_eq!(count, 0);
-        assert!(
+        let denied =
             examcore::load_exam_for_examiner(&db, &viewer(other, "other@example.org").0, exam)
                 .await
-                .is_err()
-        );
+                .expect_err("foreign examiner must not see the exam");
+        assert_eq!(denied.into_response().status(), StatusCode::NOT_FOUND);
+
+        let bad_import = import(
+            State(state(db.clone())),
+            meta(),
+            Path(exam),
+            viewer(owner, "owner2@example.org"),
+            JsonBody(ImportInput {
+                candidates: vec![
+                    CandidateImportRow {
+                        email: "valid@example.org".into(),
+                        display_name: "Valid".into(),
+                        extra_minutes: None,
+                    },
+                    CandidateImportRow {
+                        email: "VALID@example.org".into(),
+                        display_name: "Duplicate".into(),
+                        extra_minutes: None,
+                    },
+                    CandidateImportRow {
+                        email: "owner2@example.org".into(),
+                        display_name: "Owner".into(),
+                        extra_minutes: None,
+                    },
+                ],
+                invite: false,
+                dry_run: false,
+            }),
+        )
+        .await
+        .expect("row errors are returned as import results");
+        assert_eq!(bad_import.0["data"]["errors"][0]["row"], 2);
+        assert_eq!(bad_import.0["data"]["errors"][1]["row"], 3);
+        let valid_count: i64 =
+            sqlx::query_scalar("select count(*) from users where email='valid@example.org'")
+                .fetch_one(&db)
+                .await
+                .expect("valid row count");
+        assert_eq!(valid_count, 0);
     }
 
     #[sqlx::test(migrations = "../../migrations")]
@@ -664,6 +765,12 @@ mod tests {
         .await
         .expect("accept");
         assert!(response.headers().contains_key(header::SET_COOKIE));
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("accept response body");
+        let body: Value = serde_json::from_slice(&body).expect("accept response JSON");
+        assert!(body["data"]["token"].is_null());
+        assert_eq!(body["data"]["user"]["email"], "invitee@example.org");
         assert!(
             accept(
                 State(state.clone()),

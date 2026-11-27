@@ -21,13 +21,17 @@ export function InviteForm({ token }: { token: string }) {
 
   useEffect(() => {
     let live = true;
-    api<Invite>(`/invites/${encodeURIComponent(token)}`)
+    api<Invite>(`/auth/invites/${encodeURIComponent(token)}`)
       .then((data) => { if (live) { setInvite(data); setDisplayName(data.displayName); } })
       .catch((cause: unknown) => {
         if (!live) return;
-        setError(cause instanceof ApiError && cause.status !== 0
-          ? "This invitation has expired or was already used. Ask your examiner for a new invite."
-          : "We couldn't reach the service. Check your connection and try again.");
+        if (cause instanceof ApiError && cause.status === 404) {
+          setError("This invitation has expired or was already used. Ask your examiner for a new invite.");
+        } else if (cause instanceof ApiError && cause.status !== 0) {
+          setError(cause.message);
+        } else {
+          setError("We couldn't reach the service. Check your connection and try again.");
+        }
       })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
@@ -39,7 +43,7 @@ export function InviteForm({ token }: { token: string }) {
     setPending(true);
     setError("");
     try {
-      await api("/invites/accept", { body: { token, password, displayName } });
+      await api("/auth/invites/accept", { body: { token, password, displayName } });
       router.replace("/app");
     } catch (cause) {
       setError(cause instanceof ApiError

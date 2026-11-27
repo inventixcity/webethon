@@ -29,6 +29,33 @@ fn invalid(path: &str) -> AppError {
     )
     .with_details(json!([{"path":path,"message":"Invalid value."}]))
 }
+fn valid_provisioned_email(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    if local.is_empty()
+        || local.len() > 64
+        || local.starts_with('.')
+        || local.ends_with('.')
+        || local.contains("..")
+        || !local
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b".!#$%&'*+-/=?^_`{|}~".contains(&b))
+        || domain.len() > 253
+        || !domain.contains('.')
+    {
+        return false;
+    }
+    domain.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && label.as_bytes()[0].is_ascii_alphanumeric()
+            && label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    })
+}
 pub(crate) async fn list(
     State(state): State<AppState>,
     AdminViewer(_): AdminViewer,
@@ -97,34 +124,77 @@ pub(crate) struct RoleInput {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CreateInput { email: String, display_name: String, role: String }
+pub(crate) struct CreateInput {
+    email: String,
+    display_name: String,
+    role: String,
+}
 
 pub(crate) async fn create(
-    State(state): State<AppState>, meta: RequestMeta, AdminViewer(viewer): AdminViewer,
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    AdminViewer(viewer): AdminViewer,
     JsonBody(input): JsonBody<CreateInput>,
 ) -> AppResult<Json<Value>> {
-    let email=input.email.trim().to_ascii_lowercase();
-    let display=input.display_name.trim();
-    let role=if input.role=="candidate" {"user"} else {input.role.as_str()};
-    if email.len()>254 || email.matches('@').count()!=1 || email.chars().any(char::is_control)
-        || !email.split_once('@').is_some_and(|(a,b)|!a.is_empty()&&b.contains('.')&& !b.starts_with('.')&&!b.ends_with('.')) {
+    let email = input.email.trim().to_ascii_lowercase();
+    let display = input.display_name.trim();
+    let role = if input.role == "candidate" {
+        "user"
+    } else {
+        input.role.as_str()
+    };
+    if email.len() > 254 || !valid_provisioned_email(&email) {
         return Err(invalid("email"));
     }
-    if !(1..=120).contains(&display.chars().count()) || display.chars().any(char::is_control) { return Err(invalid("displayName")); }
-    if !["user","examiner"].contains(&role) { return Err(invalid("role")); }
-    security::enforce_rate_limit(&state.db,&format!("admin:users:create:ip:{}",meta.ip),limits::API_WRITE_PER_SUBJECT).await?;
-    security::enforce_rate_limit(&state.db,&format!("admin:users:create:user:{}",viewer.id),limits::API_WRITE_PER_SUBJECT).await?;
-    let (token,hash)=kernel::crypto::new_token();
-    let mut tx=state.db.begin().await?;
-    admin_security::require_step_up(&mut tx,&state,&viewer).await?;
+    if !(1..=120).contains(&display.chars().count()) || display.chars().any(char::is_control) {
+        return Err(invalid("displayName"));
+    }
+    if !["user", "examiner"].contains(&role) {
+        return Err(invalid("role"));
+    }
+    security::enforce_rate_limit(
+        &state.db,
+        &format!("admin:users:create:ip:{}", meta.ip),
+        limits::API_WRITE_PER_SUBJECT,
+    )
+    .await?;
+    security::enforce_rate_limit(
+        &state.db,
+        &format!("admin:users:create:user:{}", viewer.id),
+        limits::API_WRITE_PER_SUBJECT,
+    )
+    .await?;
+    let (token, hash) = kernel::crypto::new_token();
+    let mut tx = state.db.begin().await?;
+    admin_security::require_step_up(&mut tx, &state, &viewer).await?;
     let id:Uuid=sqlx::query_scalar("insert into users(email,display_name,role) values($1,$2,$3) on conflict(email) do nothing returning id").bind(&email).bind(display).bind(role).fetch_optional(&mut *tx).await?.ok_or_else(||AppError::new(ErrorCode::Conflict,"An account with this email already exists."))?;
     sqlx::query("insert into account_invites(token_hash,user_id,invited_by,expires_at) values($1,$2,$3,now()+interval '7 days')").bind(hash.as_slice()).bind(id).bind(viewer.id).execute(&mut *tx).await?;
-    let link=format!("{}/invite/{}",state.config.app_origin,token);
-    audit::audit_before_after(&mut tx,&meta,&viewer,"admin.user.create",("user",&id.to_string()),json!({}),json!({"id":id,"email":email,"role":role})).await?;
+    let link = format!("{}/invite/{}", state.config.app_origin, token);
+    audit::audit_before_after(
+        &mut tx,
+        &meta,
+        &viewer,
+        "admin.user.create",
+        ("user", &id.to_string()),
+        json!({}),
+        json!({"id":id,"email":email,"role":role}),
+    )
+    .await?;
     tx.commit().await?;
-    let msg=kernel::email::Email{to:email.clone(),subject:"You are invited to Inventix Invigil".into(),html:format!("<p>Your Invigil account is ready.</p><p><a href=\"{link}\">Set your password</a></p>"),text:format!("Set your Invigil password: {link}")};
-    if let Err(error)=state.email.send(&msg).await { tracing::warn!(error=%error,"admin invite email delivery failed"); }
-    Ok(Json(json!({"data":{"id":id,"email":email,"displayName":display,"role":if role=="user"{"candidate"}else{role},"inviteLink":link}})))
+    let msg = kernel::email::Email {
+        to: email.clone(),
+        subject: "You are invited to Inventix Invigil".into(),
+        html: format!(
+            "<p>Your Invigil account is ready.</p><p><a href=\"{link}\">Set your password</a></p>"
+        ),
+        text: format!("Set your Invigil password: {link}"),
+    };
+    if let Err(error) = state.email.send(&msg).await {
+        tracing::warn!(error=%error,"admin invite email delivery failed");
+    }
+    Ok(Json(
+        json!({"data":{"id":id,"email":email,"displayName":display,"role":if role=="user"{"candidate"}else{role},"inviteLink":link}}),
+    ))
 }
 pub(crate) async fn role(
     State(state): State<AppState>,
@@ -136,7 +206,11 @@ pub(crate) async fn role(
     if !["user", "candidate", "examiner", "admin"].contains(&input.role.as_str()) {
         return Err(invalid("role"));
     }
-    let role = if input.role == "candidate" { "user".to_owned() } else { input.role };
+    let role = if input.role == "candidate" {
+        "user".to_owned()
+    } else {
+        input.role
+    };
     mutate(state, meta, viewer, id, "role", Some(role)).await
 }
 macro_rules! action {
@@ -190,7 +264,7 @@ async fn mutate(
         ));
     }
     if action == "role"
-        && role.as_deref() == Some("user")
+        && role.as_deref().is_some_and(|value| value != "admin")
         && before["email"]
             .as_str()
             .is_some_and(|e| state.config.admin_emails.contains(&e.to_ascii_lowercase()))
@@ -200,12 +274,21 @@ async fn mutate(
             "This administrator is configured by the server.",
         ));
     }
-    if action == "role" && role.as_deref().is_some_and(|r| r != "admin") && before["role"] == "admin" {
+    if action == "role"
+        && role.as_deref().is_some_and(|r| r != "admin")
+        && before["role"] == "admin"
+    {
         sqlx::query("select pg_advisory_xact_lock(hashtext('invigil-admin-role-change'))")
-            .execute(&mut *tx).await?;
+            .execute(&mut *tx)
+            .await?;
         let remaining:i64=sqlx::query_scalar("select count(*) from users where role='admin' and status='active' and deleted_at is null and id<>$1")
             .bind(id).fetch_one(&mut *tx).await?;
-        if remaining==0 { return Err(AppError::new(ErrorCode::Conflict,"The last active administrator cannot be demoted.")); }
+        if remaining == 0 {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "The last active administrator cannot be demoted.",
+            ));
+        }
     }
     match action {
         "suspend" => {
@@ -345,6 +428,14 @@ mod tests {
     use kernel::{config::Config, email::LogSender};
     use std::sync::Arc;
     use tower::ServiceExt;
+
+    #[test]
+    fn provisioned_email_validation_rejects_malformed_domains() {
+        for email in ["a..b@example.test", ".a@example.test", "a@-bad.example", "a@example..test", "a @example.test"] {
+            assert!(!valid_provisioned_email(email), "{email}");
+        }
+        assert!(valid_provisioned_email("name+tag@invigil.app"));
+    }
     async fn request(
         state: &AppState,
         token: &str,
@@ -374,6 +465,8 @@ mod tests {
         .fetch_one(&db)
         .await
         .unwrap();
+        sqlx::query("insert into users(email,display_name,role) values('examiner-visible@example.test','Examiner Visible','examiner'),('candidate-visible@example.test','Candidate Visible','user')")
+            .execute(&db).await.unwrap();
         let (token, hash) = kernel::crypto::new_token();
         sqlx::query("insert into sessions(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour')").bind(id).bind(hash.as_slice()).execute(&db).await.unwrap();
         let mut config = Config::from_env().unwrap();
@@ -388,7 +481,7 @@ mod tests {
         };
         for (path, expected) in [
             ("/users?role=admin".to_owned(), true),
-            ("/users?role=user".to_owned(), false),
+            ("/users?role=user".to_owned(), true),
         ] {
             let response = request(&state, &token, "GET", &path, "").await;
             let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
@@ -397,9 +490,14 @@ mod tests {
             let body: Value = serde_json::from_slice(&bytes).unwrap();
             let rows = body["data"].as_array().unwrap();
             assert_eq!(!rows.is_empty(), expected);
-            if expected {
+            if path.ends_with("admin") {
                 assert_eq!(rows[0]["role"], "admin");
                 assert_eq!(rows[0]["storedRole"], "user");
+            } else {
+                assert!(
+                    rows.iter()
+                        .all(|row| row["role"] == "candidate" && row["storedRole"] == "user")
+                );
             }
         }
         let response = request(&state, &token, "GET", &format!("/users/{id}"), "").await;
@@ -425,6 +523,24 @@ mod tests {
                 .status(),
             StatusCode::NOT_FOUND
         );
+        for (role, expected_role, stored_role) in [
+            ("examiner", "examiner", "examiner"),
+            ("candidate", "candidate", "user"),
+            ("user", "candidate", "user"),
+        ] {
+            let response = request(&state, &token, "GET", &format!("/users?role={role}"), "").await;
+            let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
+                .await
+                .unwrap();
+            let body: Value = serde_json::from_slice(&bytes).unwrap();
+            assert!(
+                body["data"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|row| row["role"] == expected_role && row["storedRole"] == stored_role)
+            );
+        }
     }
     #[sqlx::test(migrations = "../../migrations")]
     async fn users_routes_require_admin_and_mutations_require_stepup(db: sqlx::PgPool) {
@@ -560,6 +676,24 @@ mod tests {
             .status(),
             StatusCode::NO_CONTENT
         );
+        let response = request(&state, &token, "POST", "/users", r#"{"email":"new-candidate@example.test","displayName":"New Candidate","role":"candidate"}"#).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), 1_000_000)
+            .await
+            .unwrap();
+        let created: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(created["data"]["role"], "candidate");
+        assert!(
+            created["data"]["inviteLink"]
+                .as_str()
+                .is_some_and(|link| link.contains("/invite/"))
+        );
+        let stored: Option<String> =
+            sqlx::query_scalar("select role from users where email='new-candidate@example.test'")
+                .fetch_optional(&db)
+                .await
+                .unwrap();
+        assert_eq!(stored.as_deref(), Some("user"));
         assert_eq!(
             request(
                 &state,
@@ -634,5 +768,3 @@ mod tests {
         );
     }
 }
-
-

@@ -129,6 +129,9 @@ export type Enrollment = {
   createdAt: string;
 };
 
+/** POST /exams/{id}/enrollments response: import result plus one-time invite links (owner only). */
+export type EnrollResult = ImportResult & { inviteLinks: Array<{ email: string; url: string }> };
+
 export type CandidateImportRow = { email: string; displayName: string; extraMinutes?: number };
 
 // ------------------------------------------------------------------ candidate views
@@ -335,6 +338,8 @@ export type IntegrityReport = {
   indicators: Array<{ key: string; label: string; weight: number; count: number; explanation: string }>;
   events: AttemptEvent[];
   outages: Outage[];
+  /** Always shown: "Indicators support human review. They are not evidence of misconduct." */
+  disclaimer: string;
 };
 
 /** 5.3: a server-verified connectivity gap (from heartbeats). */

@@ -2,13 +2,16 @@ import { ApiError, api } from "@/lib/api/client";
 import type { AnswerResponse, HeartbeatResult, JournalEntry, JournalSyncResult, Lease, SaveAnswerInput, SaveAnswerResult } from "@/lib/exam/types";
 import { JOURNAL_SEQ_BASE, acknowledgeEntries, appendEntry, getMeta, leaseElapsed, listEntries, nextClientSeq, setLease } from "@/lib/exam/journal";
 import { attemptHeaders } from "@/lib/exam/device";
-import { observeServerTime } from "@/lib/exam/clock";
+import { observeServerTime, serverNowMs } from "@/lib/exam/clock";
+import { isNetworkOnline } from "@/lib/exam/network";
 
 export type SavedValue = { response: AnswerResponse; flagged: boolean; typing?: SaveAnswerInput["typing"] };
 export type SyncCallbacks = { onState?: (state: "saved" | "saving" | "queued" | "offline" | "error") => void; onDeviceActive?: (active: boolean) => void; onClosed?: () => void };
 const attemptPath = (id: string, suffix: string) => `/attempts/${encodeURIComponent(id)}/${suffix}` as const;
+const transient = (error: unknown) => error instanceof ApiError && (error.status === 0 || error.status === 429 || error.status >= 500);
 
 export async function heartbeat(attemptId: string, pending: number, lastAnnouncementAt: string | null): Promise<HeartbeatResult> {
+  if (!isNetworkOnline()) throw new ApiError({ status: 0, code: "UNAVAILABLE", message: "The connection is offline." });
   const data = await api<HeartbeatResult>(attemptPath(attemptId, "heartbeat"), { body: { online: navigator.onLine, pending, lastAnnouncementAt }, headers: attemptHeaders() });
   observeServerTime(data.serverNow);
   await setLease(attemptId, data.lease);
@@ -33,6 +36,7 @@ export function syncJournal(attemptId: string, callbacks: SyncCallbacks = {}): P
       for (;;) {
         const batch = await listEntries(attemptId, 200);
         if (!batch.length) return total;
+        if (!isNetworkOnline()) throw new ApiError({ status: 0, code: "UNAVAILABLE", message: "The connection is offline. Answers remain saved on this device." });
         callbacks.onState?.("saving");
         const result = await api<JournalSyncResult>(attemptPath(attemptId, "journal"), { body: { entries: batch }, headers: attemptHeaders() });
         // The server head proves earlier entries were committed even if their HTTP response was lost.
@@ -51,10 +55,20 @@ export function syncJournal(attemptId: string, callbacks: SyncCallbacks = {}): P
 
 export async function saveOnline(attemptId: string, itemId: string, value: SavedValue, _callbacks: SyncCallbacks = {}, seq?: number): Promise<SaveAnswerResult> {
   const clientSeq = seq ?? await nextClientSeq(attemptId);
-  return api<SaveAnswerResult>(attemptPath(attemptId, `answers/${encodeURIComponent(itemId)}`), { method: "PUT", body: { ...value, clientSeq }, headers: attemptHeaders() });
+  for (let attempt = 0; ; attempt++) {
+    try { return await api<SaveAnswerResult>(attemptPath(attemptId, `answers/${encodeURIComponent(itemId)}`), { method: "PUT", body: { ...value, clientSeq }, headers: attemptHeaders() }); }
+    catch (error) {
+      // Durable edits recover through journal replay. Without a journal, retry the same idempotent
+      // sequence with backoff, then surface failure so submission cannot silently lose the answer.
+      if (seq !== undefined || !transient(error) || attempt >= 5) throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(15_000, 1000 * 2 ** attempt)));
+    }
+  }
 }
 
-export async function queueOffline(attemptId: string, itemId: string, value: SavedValue, lease: Lease): Promise<JournalEntry> {
+export async function queueOffline(attemptId: string, itemId: string, value: SavedValue, lease: Lease, capturedAt?: number): Promise<JournalEntry> {
+  // Capture at the edit, before IndexedDB scheduling or the network debounce can cross expiry.
+  if (capturedAt !== undefined) return appendEntry(attemptId, itemId, value.response, value.flagged, lease, Math.max(0, capturedAt - lease.issuedAt));
   let meta = await getMeta(attemptId);
   if (!meta.lease) { await setLease(attemptId, lease); meta = await getMeta(attemptId); }
   return appendEntry(attemptId, itemId, value.response, value.flagged, meta.lease ?? lease, await leaseElapsed(meta));
@@ -69,6 +83,7 @@ export class AttemptSaveQueue {
   private pending = new Map<string, { timer: ReturnType<typeof setTimeout>; run: (send?: boolean) => Promise<void> }>();
   private tasks = new Set<Promise<void>>();
   private failures = new Map<string, unknown>();
+  private retries = new Map<string, () => Promise<void>>();
   private tail: Promise<void> = Promise.resolve();
   private stopped = false;
   private revisions = new Map<string, number>();
@@ -86,7 +101,7 @@ export class AttemptSaveQueue {
     const report = (state: Parameters<typeof this.options.onState>[1]) => { if (this.revisions.get(itemId) === revision) this.options.onState(itemId, state); };
     report("saving");
     const lease = this.options.lease();
-    const prepared = this.options.journalEnabled && lease ? queueOffline(this.id, itemId, snapshot, lease) : Promise.resolve(null);
+    const prepared = this.options.journalEnabled && lease ? queueOffline(this.id, itemId, snapshot, lease, Math.floor(serverNowMs())) : Promise.resolve(null);
     void prepared.catch(() => {});
     const old = this.pending.get(itemId);
     if (old) { clearTimeout(old.timer); void old.run(false).catch(() => {}); }
@@ -96,27 +111,27 @@ export class AttemptSaveQueue {
       const task = this.tail.then(async () => {
         const entry = await prepared;
         if (!send && entry) return;
-        if (!navigator.onLine || this.options.offline?.()) {
+        if (!isNetworkOnline() || this.options.offline?.()) {
           if (!entry) throw new Error("Answer could not be saved while offline.");
           report("queued"); return;
         }
         try {
           const result = await saveOnline(this.id, itemId, snapshot, {}, entry ? JOURNAL_SEQ_BASE + entry.seq : undefined);
-          if (!entry && !result.accepted) throw new Error("The server rejected a stale answer sequence. Reload before continuing.");
+          if (!result.accepted && (!entry || result.clientSeq !== JOURNAL_SEQ_BASE + entry.seq)) throw new Error("The server rejected a stale answer sequence. Reload before continuing.");
           // A heartbeat can replay this exact durable entry before its PUT, making accepted=false.
           if (entry) await syncJournal(this.id, callbacks);
           report("saved");
         } catch (error) {
           reportConflict(error, callbacks);
-          if (entry && error instanceof ApiError && (error.status === 0 || (error.status === 409 && (error.details as { reason?: string })?.reason === "closed"))) {
+          if (entry && error instanceof ApiError && (transient(error) || (error.status === 409 && (error.details as { reason?: string })?.reason === "closed"))) {
             // At expiry PUT rejects correctly; the journal still admits work written before expiry.
-            if (error.status !== 0) await syncJournal(this.id, callbacks);
-            report(error.status === 0 ? "queued" : "saved"); return;
+            if (!transient(error)) await syncJournal(this.id, callbacks);
+            report(transient(error) ? "queued" : "saved"); return;
           }
           throw error;
         }
-      }).then(() => { this.failures.delete(itemId); }, (error: unknown) => {
-        this.failures.set(itemId, error); report("error"); throw error;
+      }).then(() => { this.failures.delete(itemId); this.retries.delete(itemId); }, (error: unknown) => {
+        this.failures.set(itemId, error); this.retries.set(itemId, () => run()); report("error"); throw error;
       });
       this.tail = task.catch(() => {});
       this.tasks.add(task);
@@ -129,8 +144,9 @@ export class AttemptSaveQueue {
 
   async flush(): Promise<void> {
     const pending = [...this.pending.values()];
+    const retries = [...this.retries.values()];
     pending.forEach(({ timer }) => clearTimeout(timer));
-    await Promise.allSettled(pending.map(({ run }) => run()));
+    await Promise.allSettled([...retries.map((run) => run()), ...pending.map(({ run }) => run())]);
     await Promise.allSettled([...this.tasks]);
     if (this.failures.size) throw this.failures.values().next().value;
   }

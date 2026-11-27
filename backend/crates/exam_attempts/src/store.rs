@@ -7,9 +7,17 @@ use uuid::Uuid;
 /// The sole answer writer. Callers validate responses and hold the attempt row lock.
 /// Equal or older sequences are ignored, including retries of the same request.
 #[allow(clippy::too_many_arguments)]
-pub async fn upsert_answer(conn: &mut PgConnection, attempt_id: Uuid, item_id: Uuid,
-    response: &Value, flagged: bool, seq: i64, source: &str,
-    written_at: OffsetDateTime, typing: &Value) -> AppResult<bool> {
+pub async fn upsert_answer(
+    conn: &mut PgConnection,
+    attempt_id: Uuid,
+    item_id: Uuid,
+    response: &Value,
+    flagged: bool,
+    seq: i64,
+    source: &str,
+    written_at: OffsetDateTime,
+    typing: &Value,
+) -> AppResult<bool> {
     let row: Option<Uuid> = sqlx::query_scalar(
         "insert into answers(attempt_id,item_id,response,flagged,client_seq,source,written_at,typing)
          values($1,$2,$3,$4,$5,$6,$7,$8)

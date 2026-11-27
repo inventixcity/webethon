@@ -251,7 +251,9 @@ async fn create_announcement(
         },
     )
     .await?;
-    let row: (Uuid,String,time::OffsetDateTime)=sqlx::query_as("insert into announcements(exam_id,author_id,body) values($1,$2,$3) returning id,body,created_at").bind(exam_id).bind(viewer.id).bind(input.body.trim()).fetch_one(&state.db).await?;
+    let mut tx = state.db.begin().await?;
+    let row: (Uuid,String,time::OffsetDateTime)=sqlx::query_as("insert into announcements(exam_id,author_id,body) values($1,$2,$3) returning id,body,created_at").bind(exam_id).bind(viewer.id).bind(input.body.trim()).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
     kernel::security::audit(
         &state.db,
         &meta,
@@ -400,6 +402,10 @@ async fn integrity(
     if canaries > 0 {
         indicators.push(json!({"key":"canary_hit","label":"A canary word appeared in a written answer","weight":5,"count":canaries,"explanation":"This indicator supports human review and is not evidence of misconduct."}));
     }
+    let typing_flags = typing_answer_count(&state.db, id).await?;
+    if typing_flags > 0 {
+        indicators.push(json!({"key":"typing_anomaly","label":"Typing counts differed from the written response","weight":2,"count":typing_flags,"explanation":"Count-only typing telemetry supports human review. It is not evidence of misconduct."}));
+    }
     Ok(ResponseJson(
         json!({"data":{"attemptId":id,"reviewPriority":priority,"indicators":indicators,"events":events,"outages":outages,"disclaimer":"Indicators support human review. They are not evidence of misconduct."}}),
     ))
@@ -466,11 +472,10 @@ pub async fn recompute_priority(
     attempt_id: Uuid,
 ) -> kernel::AppResult<()> {
     let row: Option<(i64, i64, i64, i64, i64)> = sqlx::query_as(
-        "select least(6, coalesce(sum(case when kind in ('focus_lost','visibility_hidden') and duration_ms > 10000 then 1 else 0 end),0)), least(4, count(*) filter (where kind='fullscreen_exit')), count(*) filter (where kind='paste' and coalesce((detail->>'pastedChars')::bigint,0)>=200), count(*) filter (where kind='canary_hit'), count(*) filter (where kind='device_takeover') from attempt_events where attempt_id=$1"
+        "select least(6, coalesce(sum(case when kind in ('focus_lost','visibility_hidden') and duration_ms > 10000 then 1 else 0 end),0)), least(4, count(*) filter (where kind='fullscreen_exit')), count(*) filter (where kind='paste' and case when detail->>'pastedChars' ~ '^[0-9]{1,9}$' then (detail->>'pastedChars')::bigint >= 200 else false end), count(*) filter (where kind='canary_hit'), count(*) filter (where kind='device_takeover') from attempt_events where attempt_id=$1"
     ).bind(attempt_id).fetch_optional(&mut *conn).await?;
     let (focus, fullscreen, paste, canary, takeover) = row.unwrap_or((0, 0, 0, 0, 0));
-    let typing: i64 = sqlx::query_scalar("select count(*) from answers a join exam_items i on i.id=a.item_id where a.attempt_id=$1 and i.kind='written' and jsonb_typeof(a.response->'text')='string' and length(a.response->>'text')>=150 and (coalesce((a.typing->>'pastedChars')::float8,0)>0.6*length(a.response->>'text') or coalesce((a.typing->>'keystrokes')::float8,0)<0.3*length(a.response->>'text'))")
-        .bind(attempt_id).fetch_one(&mut *conn).await?;
+    let typing = typing_answer_count_conn(conn, attempt_id).await?;
     let answer_canary = canary_answer_count_conn(conn, attempt_id).await?;
     let score =
         focus + fullscreen + paste * 2 + (canary + answer_canary) * 5 + takeover + typing * 2;
@@ -501,6 +506,20 @@ async fn canary_answer_count_conn(conn: &mut PgConnection, attempt_id: Uuid) -> 
     let answers: Vec<String> = sqlx::query_scalar("select response->>'text' from answers a join exam_items i on i.id=a.item_id where a.attempt_id=$1 and i.kind='written' and response ? 'text'")
         .bind(attempt_id).fetch_all(&mut *conn).await?;
     Ok(answers.iter().filter(|text| canary_hit(text, word)).count() as i64)
+}
+
+async fn typing_answer_count(db: &PgPool, attempt_id: Uuid) -> AppResult<i64> {
+    let mut conn = db.acquire().await?;
+    typing_answer_count_conn(&mut conn, attempt_id).await
+}
+
+async fn typing_answer_count_conn(conn: &mut PgConnection, attempt_id: Uuid) -> AppResult<i64> {
+    let answers: Vec<(String, Value)> = sqlx::query_as("select a.response->>'text',a.typing from answers a join exam_items i on i.id=a.item_id where a.attempt_id=$1 and i.kind='written' and jsonb_typeof(a.response->'text')='string'")
+        .bind(attempt_id).fetch_all(&mut *conn).await?;
+    Ok(answers
+        .iter()
+        .filter(|(text, telemetry)| typing_flag(text.chars().count(), telemetry))
+        .count() as i64)
 }
 
 fn duration_label(milliseconds: i64) -> String {
@@ -630,5 +649,63 @@ mod tests {
         request.extensions_mut().insert(candidate);
         let response = router().with_state(state).oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn monitor_includes_real_attempts_and_excludes_sandbox(db: PgPool) {
+        use axum::{
+            body::{Body, to_bytes},
+            http::{Request, StatusCode},
+        };
+        use kernel::{email::LogSender, viewer::Role};
+        use std::sync::Arc;
+        use tower::ServiceExt;
+        let owner: Uuid = sqlx::query_scalar("insert into users(email,role) values('monitor-owner@example.test','examiner') returning id")
+            .fetch_one(&db).await.unwrap();
+        let candidate: Uuid = sqlx::query_scalar(
+            "insert into users(email) values('monitor-candidate@example.test') returning id",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        let exam: Uuid = sqlx::query_scalar("insert into exams(owner_id,title,status,starts_at,ends_at,duration_minutes,total_marks) values($1,'Monitor test','published',now()-interval '1 hour',now()+interval '1 hour',60,10) returning id")
+            .bind(owner).fetch_one(&db).await.unwrap();
+        sqlx::query("insert into enrollments(exam_id,candidate_id,enrolled_by) values($1,$2,$3)")
+            .bind(exam)
+            .bind(candidate)
+            .bind(owner)
+            .execute(&db)
+            .await
+            .unwrap();
+        for sandbox in [false, true] {
+            sqlx::query("insert into attempts(exam_id,candidate_id,sandbox,deadline_at,seed,item_order,journal_genesis) values($1,$2,$3,now()+interval '1 hour',1,'{}',decode(repeat('00',32),'hex'))")
+                .bind(exam).bind(candidate).bind(sandbox).execute(&db).await.unwrap();
+        }
+        let state = AppState {
+            db,
+            config: Arc::new(kernel::config::Config::from_env().unwrap()),
+            http: reqwest::Client::new(),
+            email: Arc::new(LogSender),
+            hashing: Arc::new(tokio::sync::Semaphore::new(1)),
+        };
+        let viewer = Viewer {
+            id: owner,
+            session_id: Uuid::new_v4(),
+            email: "monitor-owner@example.test".into(),
+            display_name: "Owner".into(),
+            role: Role::Examiner,
+            via_cookie: false,
+        };
+        let mut request = Request::get(format!("/exams/{exam}/monitor"))
+            .body(Body::empty())
+            .unwrap();
+        request.extensions_mut().insert(viewer);
+        let response = router().with_state(state).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["data"]["rows"].as_array().map(Vec::len), Some(1));
+        assert_eq!(value["data"]["rows"][0]["sandbox"], false);
+        assert_eq!(value["data"]["inProgress"], 1);
     }
 }

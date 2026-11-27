@@ -96,7 +96,7 @@ export async function cacheAttempt(attemptId: string, payload: AttemptPayload): 
   await mutateMeta(attemptId, (meta) => ({ ...meta, payload }));
 }
 
-/** Reload fallback: performance.now resets, so use wall-clock delta from receipt, capped to lease lifetime. */
+/** Reload fallback uses wall-clock delta. Never clamp a late edit back to the signed deadline. */
 export async function leaseElapsed(meta: JournalMeta): Promise<number> {
   if (!meta.lease || meta.leaseReceivedAt === null || meta.receivedAtWall === null) return 0;
   // Comparing performance.now values cannot identify a reload: the new page may have been open
@@ -150,7 +150,7 @@ export async function appendEntry(attemptId: string, itemId: string, response: J
 
 export async function listEntries(attemptId: string, limit = 200): Promise<JournalEntry[]> {
   return transact(attemptId, [ENTRY_STORE], "readonly", (tx, done) => {
-    const req = tx.objectStore(ENTRY_STORE).getAll(IDBKeyRange.bound([attemptId, 0], [attemptId, Number.MAX_SAFE_INTEGER]), limit);
+    const req = tx.objectStore(ENTRY_STORE).getAll(IDBKeyRange.bound([attemptId, 0], [attemptId, Number.MAX_SAFE_INTEGER]), Math.min(limit, 0xffffffff));
     req.onsuccess = () => done((req.result as Array<JournalEntry & { attemptId: string }>).map(({ attemptId: _id, ...entry }) => { void _id; return entry; }));
   });
 }

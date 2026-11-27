@@ -1,48 +1,117 @@
 "use client";
 
-import { Activity, WifiOff, Wifi } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { NetworkQuality } from "./model";
+import { Activity, CloudOff, FileWarning } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { REJECT_REASON, pad2, type JournalRejectReason } from "./model";
 
-const QUALITY_LABEL: Record<NetworkQuality, string> = {
-  good: "Connection good",
-  unstable: "Connection unstable",
-  offline: "Offline",
-};
+export type ConnectionMode = "online" | "unstable" | "offline";
 
-/** Small quality pill for the top bar. Text and icon, so colour is never the only signal. */
-export function NetworkIndicator({ quality }: { quality: NetworkQuality }) {
-  const Icon = quality === "offline" ? WifiOff : quality === "unstable" ? Activity : Wifi;
-  return (
-    <p
-      role="status"
-      aria-live="polite"
-      data-quality={quality}
-      className={cn(
-        "flex min-w-0 items-center gap-2 border px-2.5 py-1.5 font-mono text-[11px] tracking-[0.1em] uppercase",
-        quality === "offline" ? "border-ink bg-ink text-paper" : "border-(--ws-line) text-ink-soft",
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" aria-hidden />
-      <span className="truncate">{QUALITY_LABEL[quality]}</span>
-    </p>
-  );
-}
+/**
+ * Full-width banners for an unstable or lost connection (4.1, 5.3). The copy is literal about what happens:
+ * where answers go, that they sync by themselves, and that the clock keeps running, because the server clock
+ * is the only clock and is never paused automatically.
+ */
+export function ConnectionBanner({
+  mode,
+  journalEnabled,
+  simulated,
+  onReconnect,
+}: {
+  mode: ConnectionMode;
+  journalEnabled: boolean;
+  /** Sandbox demo: offline was simulated from the workspace, not a real drop. */
+  simulated: boolean;
+  onReconnect: () => void;
+}) {
+  if (mode === "online") return null;
 
-/** Full-width banners for offline and unstable connections. Answers keep saving either way. */
-export function NetworkBanners({ quality }: { quality: NetworkQuality }) {
-  if (quality === "good") return null;
-  if (quality === "offline") {
+  if (mode === "unstable") {
     return (
-      <div role="status" className="border-b border-ink bg-ink px-4 py-3 font-sans text-sm text-paper sm:px-6">
-        You&apos;re offline. Keep answering — your answers are saved on this device and will sync when you
-        reconnect. Your time is not paused.
+      <div role="status" className="border-b border-(--ws-line) bg-paper-raised">
+        <div className="ws-bar flex items-start gap-3 py-3">
+          <Activity className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p className="font-sans text-sm text-ink">
+            <strong className="font-semibold">Your connection is unstable.</strong> Answers are saved on this device
+            first and retried automatically. <strong className="font-semibold">Your time is not paused.</strong>
+          </p>
+        </div>
       </div>
     );
   }
+
   return (
-    <div role="status" className="border-b border-(--ws-line) bg-paper-raised px-4 py-3 font-sans text-sm text-ink sm:px-6">
-      Your connection is unstable. Answers are saved and retried automatically. Your time is not paused.
+    <div role="status" className="border-b border-ink bg-ink text-paper">
+      <div className="ws-bar flex flex-wrap items-start gap-x-3 gap-y-2 py-3">
+        <CloudOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <p className="min-w-0 flex-1 font-sans text-sm">
+          {simulated && <span className="mr-2 font-mono text-[11px] tracking-[0.12em] uppercase">Demo ·</span>}
+          {journalEnabled ? (
+            <>
+              <strong className="font-semibold">You&apos;re offline. Keep answering.</strong> Every answer is stored on
+              this device and syncs by itself when the connection returns.{" "}
+              <strong className="font-semibold">Your time is not paused.</strong>
+            </>
+          ) : (
+            <>
+              <strong className="font-semibold">You&apos;re offline.</strong> This exam does not allow offline answers,
+              so changes made now are not saved until you reconnect. Answers saved before the drop are safe.{" "}
+              <strong className="font-semibold">Your time is not paused.</strong>
+            </>
+          )}
+        </p>
+        {simulated && (
+          <Button type="button" size="sm" variant="inverse" onClick={onReconnect}>
+            Reconnect
+          </Button>
+        )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * Shown when the server refused offline journal entries (5.3). It names each reason in plain words and says
+ * what still counts, so a candidate is never left guessing whether their work is lost.
+ */
+export function JournalRejectedNotice({
+  reasons,
+  questions,
+  onDismiss,
+}: {
+  reasons: JournalRejectReason[];
+  /** 0-based positions of the affected questions, when the engine reports them. */
+  questions: number[];
+  onDismiss: () => void;
+}) {
+  if (reasons.length === 0) return null;
+  return (
+    <section role="alert" aria-labelledby="ws-rejected-title" className="border-b border-ink bg-paper-raised">
+      <div className="ws-bar grid gap-2 py-4">
+        <h2 id="ws-rejected-title" className="flex items-center gap-2 font-sans text-base font-semibold">
+          <FileWarning className="size-4 shrink-0" aria-hidden />
+          Some answers made offline were not accepted
+        </h2>
+        <ul className="grid gap-1 font-sans text-sm text-ink-soft">
+          {reasons.map((reason) => (
+            <li key={reason}>
+              <span className="font-mono text-[11px] tracking-[0.1em] text-ink uppercase">{reason}</span> · An answer
+              was refused because it {REJECT_REASON[reason]}.
+            </li>
+          ))}
+        </ul>
+        <p className="font-sans text-sm text-ink-soft">
+          {questions.length > 0
+            ? `Affected: question ${questions.map((index) => pad2(index + 1)).join(", ")}. `
+            : ""}
+          Everything else the server already holds is safe and counts. If time remains, answer the affected questions
+          again now; online saves are not affected.
+        </p>
+        <div>
+          <Button type="button" size="sm" variant="secondary" onClick={onDismiss}>
+            I understand
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }

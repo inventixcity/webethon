@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV_FILE="$ROOT/.env.production"
@@ -36,53 +36,45 @@ for key in AI_API_KEY AI_BASE_URL AI_MODEL; do
   ENV+=("$env_name=secretref:$secret")
 done
 if az containerapp show "${RG[@]}" --name invigil-api >/dev/null 2>&1; then
- az containerapp update "${RG[@]}" --name invigil-api --image "$REGISTRY.azurecr.io/invigil-api:$SHA" --secrets "${SECRETS[@]}" --set-env-vars "${ENV[@]}" --min-replicas 1 --max-replicas 3 --cpu .5 --memory 1Gi --output none
+ az containerapp secret set "${RG[@]}" --name invigil-api --secrets "${SECRETS[@]}" --output none
+ az containerapp update "${RG[@]}" --name invigil-api --image "$REGISTRY.azurecr.io/invigil-api:$SHA" --set-env-vars "${ENV[@]}" --min-replicas 1 --max-replicas 3 --cpu 0.5 --memory 1.0Gi --output none
 else
- az containerapp create "${RG[@]}" --name invigil-api --environment invigil-env --image "$REGISTRY.azurecr.io/invigil-api:$SHA" --registry-server "$REGISTRY.azurecr.io" --registry-username "$(az acr credential show "${RG[@]}" --name "$REGISTRY" --query username -o tsv)" --registry-password "$(az acr credential show "${RG[@]}" --name "$REGISTRY" --query 'passwords[0].value' -o tsv)" --ingress external --target-port 8080 --secrets "${SECRETS[@]}" --env-vars "${ENV[@]}" --min-replicas 1 --max-replicas 3 --cpu .5 --memory 1Gi --output none
+ az containerapp create "${RG[@]}" --name invigil-api --environment invigil-env --image "$REGISTRY.azurecr.io/invigil-api:$SHA" --registry-server "$REGISTRY.azurecr.io" --registry-username "$(az acr credential show "${RG[@]}" --name "$REGISTRY" --query username -o tsv)" --registry-password "$(az acr credential show "${RG[@]}" --name "$REGISTRY" --query 'passwords[0].value' -o tsv)" --ingress external --target-port 8080 --secrets "${SECRETS[@]}" --env-vars "${ENV[@]}" --min-replicas 1 --max-replicas 3 --cpu 0.5 --memory 1.0Gi --output none
 fi
 APP_JSON="$(mktemp)"
 PATCH_JSON="$(mktemp)"
 trap 'rm -f "$APP_JSON" "$PATCH_JSON"' EXIT
 az containerapp show "${RG[@]}" --name invigil-api --output json >"$APP_JSON"
-python3 - "$APP_JSON" "$PATCH_JSON" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as source:
-    app = json.load(source)
-properties = app["properties"]
-containers = properties["template"]["containers"]
-container = next(item for item in containers if item["name"] == "invigil-api")
-container["probes"] = [
-    {
-        "type": "Readiness",
-        "httpGet": {"path": "/readyz", "port": 8080},
-        "initialDelaySeconds": 10,
-        "periodSeconds": 10,
-        "timeoutSeconds": 5,
-        "failureThreshold": 3,
-    },
-    {
-        "type": "Liveness",
-        "httpGet": {"path": "/healthz", "port": 8080},
-        "initialDelaySeconds": 5,
-        "periodSeconds": 15,
-        "timeoutSeconds": 3,
-        "failureThreshold": 3,
-    },
-]
-with open(sys.argv[2], "w", encoding="utf-8") as target:
-    json.dump(
-        {
-            "location": app["location"],
-            "properties": {
-                "configuration": properties["configuration"],
-                "template": properties["template"],
-            },
-        },
-        target,
-    )
-PY
+node - "$APP_JSON" "$PATCH_JSON" <<'NODE'
+const fs = require('node:fs');
+const app = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const properties = app.properties;
+const container = properties.template.containers.find(({ name }) => name === 'invigil-api');
+if (!container) throw new Error('invigil-api container is missing from the Container App');
+container.probes = [
+  {
+    type: 'Readiness',
+    httpGet: { path: '/readyz', port: 8080 },
+    initialDelaySeconds: 10,
+    periodSeconds: 10,
+    timeoutSeconds: 5,
+    failureThreshold: 3,
+  },
+  {
+    type: 'Liveness',
+    httpGet: { path: '/healthz', port: 8080 },
+    initialDelaySeconds: 5,
+    periodSeconds: 15,
+    timeoutSeconds: 3,
+    failureThreshold: 3,
+  },
+];
+fs.writeFileSync(process.argv[3], JSON.stringify({
+  location: app.location,
+  // Template only: show never returns secret values, so echoing configuration back could clear them.
+  properties: { template: properties.template },
+}));
+NODE
 APP_ID="$(az containerapp show "${RG[@]}" --name invigil-api --query id -o tsv)"
 az rest --method patch --uri "https://management.azure.com${APP_ID}?api-version=2024-03-01" --body "@$PATCH_JSON" --output none
 az containerapp show "${RG[@]}" --name invigil-api --query properties.configuration.ingress.fqdn -o tsv

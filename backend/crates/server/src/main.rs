@@ -21,7 +21,6 @@ async fn main() {
 }
 async fn run() -> anyhow::Result<()> {
     validate_exam_secrets()?;
-    examcore::init_keys();
     let config = Arc::new(Config::from_env()?);
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,tower_http=info"));
@@ -36,6 +35,8 @@ async fn run() -> anyhow::Result<()> {
             .pretty()
             .init();
     }
+    // After tracing is up, so a missing development key is logged instead of silently replaced.
+    examcore::init_keys();
     let command = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "serve".to_owned());
@@ -299,14 +300,302 @@ async fn seed_demo_accounts(db: &sqlx::PgPool, config: &Arc<Config>) -> anyhow::
     for (email, name, role) in &people {
         sqlx::query("insert into users(email,display_name,role,password_hash,email_verified_at) values($1,$2,$3,$4,now()) on conflict(email) do nothing").bind(email).bind(name).bind(role).bind(&hash).execute(&mut *tx).await?;
     }
+    seed_demo_exams(&mut tx, &people).await?;
     tx.commit().await?;
     println!("{:<32} {:<24} {}", "Email", "Name", "Password");
     for (email, name, _) in people {
         println!("{email:<32} {name:<24} Invigil#Demo2026");
     }
-    println!(
-        "Demo accounts are seeded. Exam and attempt fixtures are not part of this command yet."
+    Ok(())
+}
+
+async fn seed_demo_exams(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    people: &[(&str, &str, &str)],
+) -> anyhow::Result<()> {
+    let owner: sqlx::types::Uuid =
+        sqlx::query_scalar("select id from users where email='examiner@invigil.app'")
+            .fetch_one(&mut **tx)
+            .await?;
+    let inputs: Vec<exam_questions::QuestionInput> =
+        serde_json::from_str(exam_questions::SEED_QUESTIONS)?;
+    anyhow::ensure!(
+        inputs.len() == 30,
+        "expected exactly 30 bundled seed questions"
     );
+    let mut question_ids = Vec::with_capacity(inputs.len());
+    for question in &inputs {
+        question_ids.push(
+            exam_questions::insert_question(&mut **tx, owner, question)
+                .await?
+                .id,
+        );
+    }
+
+    let now = time::OffsetDateTime::now_utc();
+    let a_ids = question_ids[..10].to_vec();
+    let b_ids = question_ids[10..20].to_vec();
+    let c_ids = [0usize, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        .into_iter()
+        .map(|index| question_ids[index])
+        .collect::<Vec<_>>();
+    let d_ids = question_ids[20..30].to_vec();
+    let total = |ids: &[sqlx::types::Uuid]| -> f64 {
+        ids.iter()
+            .filter_map(|id| question_ids.iter().position(|candidate| candidate == id))
+            .map(|index| inputs[index].marks)
+            .sum()
+    };
+    let exam_a = create_seed_exam(
+        tx,
+        owner,
+        "Data Structures Midterm",
+        now - time::Duration::minutes(30),
+        now + time::Duration::hours(6),
+        45,
+        &a_ids,
+        total(&a_ids),
+    )
+    .await?;
+    exam_authoring::publish_tx(tx, exam_a).await?;
+    let tomorrow = now.date() + time::Duration::days(1);
+    let b_start =
+        time::PrimitiveDateTime::new(tomorrow, time::Time::from_hms(5, 0, 0)?).assume_utc();
+    let exam_b = create_seed_exam(
+        tx,
+        owner,
+        "Web Security Quiz",
+        b_start,
+        b_start + time::Duration::hours(2),
+        20,
+        &b_ids,
+        total(&b_ids),
+    )
+    .await?;
+    exam_authoring::publish_tx(tx, exam_b).await?;
+
+    let c_start = now - time::Duration::hours(27);
+    let c_end = now - time::Duration::hours(25);
+    let exam_c = create_seed_exam(
+        tx,
+        owner,
+        "Databases Final",
+        c_start,
+        c_end,
+        90,
+        &c_ids,
+        total(&c_ids),
+    )
+    .await?;
+    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 order by eq.position")
+        .bind(exam_c).execute(&mut **tx).await?;
+    sqlx::query("update exams set status='completed',published_at=$2,completed_at=$3,updated_at=$3 where id=$1")
+        .bind(exam_c).bind(c_start).bind(now).execute(&mut **tx).await?;
+
+    let exam_d = create_seed_exam(
+        tx,
+        owner,
+        "Algorithms Practice",
+        now + time::Duration::days(7),
+        now + time::Duration::days(8),
+        60,
+        &d_ids,
+        total(&d_ids),
+    )
+    .await?;
+    let candidates: Vec<exam_enroll::CandidateImportRow> = people
+        .iter()
+        .filter(|(_, _, role)| *role == "user")
+        .map(|(email, name, _)| exam_enroll::CandidateImportRow {
+            email: (*email).into(),
+            display_name: (*name).into(),
+            extra_minutes: None,
+        })
+        .collect();
+    exam_enroll::enroll_tx(tx, exam_a, &candidates, owner).await?;
+    exam_enroll::enroll_tx(tx, exam_b, &candidates, owner).await?;
+    exam_enroll::enroll_tx(tx, exam_c, &candidates, owner).await?;
+
+    let candidates: Vec<(sqlx::types::Uuid, String)> = sqlx::query_as("select en.candidate_id,u.email::text from enrollments en join users u on u.id=en.candidate_id where en.exam_id=$1 order by u.email")
+        .bind(exam_c).fetch_all(&mut **tx).await?;
+    let items: Vec<(sqlx::types::Uuid, String, serde_json::Value, serde_json::Value, f64)> = sqlx::query_as("select id,kind,options,correct,marks::float8 from exam_items where exam_id=$1 and not sandbox order by position")
+        .bind(exam_c).fetch_all(&mut **tx).await?;
+    for (index, (candidate, _email)) in candidates
+        .iter()
+        .filter(|(_, email)| {
+            email.starts_with("candidate") && email.as_str() != "candidate@invigil.app"
+        })
+        .take(20)
+        .enumerate()
+    {
+        seed_attempt(tx, exam_c, *candidate, owner, &items, index, index < 2).await?;
+    }
+    let featured: sqlx::types::Uuid =
+        sqlx::query_scalar("select id from users where email='candidate@invigil.app'")
+            .fetch_one(&mut **tx)
+            .await?;
+    seed_attempt(tx, exam_c, featured, owner, &items, 24, false).await?;
+    publish_seed_results(tx, exam_c).await?;
+    let _ = exam_d;
+    Ok(())
+}
+
+async fn create_seed_exam(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    owner: sqlx::types::Uuid,
+    title: &str,
+    starts: time::OffsetDateTime,
+    ends: time::OffsetDateTime,
+    duration: i32,
+    questions: &[sqlx::types::Uuid],
+    total: f64,
+) -> anyhow::Result<sqlx::types::Uuid> {
+    let input = exam_authoring::ExamInput {
+        title: title.into(),
+        instructions: "Read each question carefully. Your answers are saved automatically.".into(),
+        starts_at: starts,
+        ends_at: ends,
+        duration_minutes: duration,
+        total_marks: total,
+        pass_marks: total * 0.6,
+        settings: exam_authoring::ExamSettings::default(),
+    };
+    let id = exam_authoring::create_exam_tx(tx, owner, &input).await?;
+    let assigned = questions
+        .iter()
+        .map(|question_id| exam_authoring::AssignItem {
+            question_id: *question_id,
+            marks: None,
+        })
+        .collect::<Vec<_>>();
+    exam_authoring::assign_tx(tx, id, &assigned, owner, false).await?;
+    Ok(id)
+}
+
+async fn seed_attempt(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    exam: sqlx::types::Uuid,
+    candidate: sqlx::types::Uuid,
+    grader: sqlx::types::Uuid,
+    items: &[(
+        sqlx::types::Uuid,
+        String,
+        serde_json::Value,
+        serde_json::Value,
+        f64,
+    )],
+    profile: usize,
+    identical_wrong: bool,
+) -> anyhow::Result<()> {
+    let item_order: Vec<sqlx::types::Uuid> = items.iter().map(|item| item.0).collect();
+    let genesis = kernel::crypto::new_token().1.to_vec();
+    let attempt: sqlx::types::Uuid = sqlx::query_scalar("insert into attempts(exam_id,candidate_id,status,finalized_by,started_at,deadline_at,seed,item_order,journal_genesis) values($1,$2,'in_progress',null,now()-interval '1 day',now()-interval '1 day',$3,$4,$5) returning id")
+        .bind(exam).bind(candidate).bind(profile as i64 + 10).bind(&item_order).bind(genesis)
+        .fetch_one(&mut **tx).await?;
+    let strength = if profile == 24 {
+        100
+    } else {
+        [90, 60, 30][profile % 3]
+    };
+    let mut rng = profile as u64 + 1;
+    for (position, (item_id, kind, options, correct, marks)) in items.iter().enumerate() {
+        let (response, manual_marks, feedback) = if kind == "written" {
+            let factor = if profile == 24 {
+                0.96
+            } else {
+                [0.88, 0.62, 0.32][profile % 3]
+            };
+            (
+                serde_json::json!({"text":"The relational design separates entities and uses keys to preserve integrity. Indexes accelerate lookups while adding storage and write costs."}),
+                Some((marks * factor * 4.0).round() / 4.0),
+                "Good explanation; consider the tradeoffs and constraints.",
+            )
+        } else {
+            rng = rng
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let should_correct = profile == 24 || (!identical_wrong && (rng % 100) < strength);
+            let correct_ids = correct
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+                .collect::<Vec<_>>();
+            let choice = if should_correct {
+                correct_ids.clone()
+            } else {
+                let options = options
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|option| option.get("id").and_then(serde_json::Value::as_str))
+                    .collect::<Vec<_>>();
+                vec![
+                    options
+                        .into_iter()
+                        .find(|option| !correct_ids.contains(option))
+                        .unwrap_or("a"),
+                ]
+            };
+            (serde_json::json!({"selected":choice}), None, "")
+        };
+        sqlx::query("insert into answers(attempt_id,item_id,response,client_seq,manual_marks,feedback,graded_by,graded_at) values($1,$2,$3,$4,$5,$6,$7,case when $5::float8 is null then null else now() end)")
+            .bind(attempt).bind(item_id).bind(response).bind(position as i64).bind(manual_marks).bind(feedback).bind(grader).execute(&mut **tx).await?;
+    }
+    if identical_wrong || profile % 4 == 0 {
+        sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'focus_lost','notice',$2),($1,'paste','warning',$2)")
+            .bind(attempt).bind(serde_json::json!({"count":1})).execute(&mut **tx).await?;
+    }
+    exam_attempts::finalize(&mut **tx, attempt, "examiner").await?;
+    Ok(())
+}
+
+async fn publish_seed_results(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    exam: sqlx::types::Uuid,
+) -> anyhow::Result<()> {
+    sqlx::query("update exams set results_published_at=now() where id=$1")
+        .bind(exam)
+        .execute(&mut **tx)
+        .await?;
+    let rows: Vec<(sqlx::types::Uuid, f64, String)> = sqlx::query_as("select a.id,a.total_score::float8,u.display_name from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status<>'in_progress'")
+        .bind(exam).fetch_all(&mut **tx).await?;
+    let (title, pass, total): (String, f64, f64) = sqlx::query_as(
+        "select title,pass_marks::float8,total_marks::float8 from exams where id=$1",
+    )
+    .bind(exam)
+    .fetch_one(&mut **tx)
+    .await?;
+    for (attempt, score, name) in rows {
+        let words = name.split_whitespace().collect::<Vec<_>>();
+        let first = words
+            .first()
+            .and_then(|word| word.chars().next())
+            .unwrap_or('X');
+        let last = words
+            .last()
+            .and_then(|word| word.chars().next())
+            .unwrap_or('X');
+        let last_end = words
+            .last()
+            .and_then(|word| word.chars().last())
+            .unwrap_or('X');
+        let token = kernel::crypto::new_token().0;
+        let random = kernel::crypto::sha256(token.as_bytes());
+        const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        let compact: String = random[..12]
+            .iter()
+            .map(|byte| ALPHABET[usize::from(byte & 31)] as char)
+            .collect();
+        let code = format!("{}-{}-{}", &compact[..4], &compact[4..8], &compact[8..12]);
+        let issued = time::OffsetDateTime::now_utc();
+        let statement = serde_json::json!({"certificateId":code,"examTitle":title,"candidate":format!("{first}. {last}****{last_end}"),"percent":examcore::round2(score/total*100.0),"passed":score>=pass,"issuedAt":issued,"issuer":"Inventix Invigil"});
+        let hash = kernel::crypto::sha256(examcore::canonical_json(&statement).as_bytes());
+        let (signature, key_id) = examcore::signer::sign(&hash);
+        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id,issued_at) values($1,$2,$3,$4,$5,$6,$7)")
+            .bind(attempt).bind(code).bind(statement).bind(hash.to_vec()).bind(signature.to_vec()).bind(key_id).bind(issued)
+            .execute(&mut **tx).await?;
+    }
     Ok(())
 }
 
@@ -316,23 +605,26 @@ fn validate_exam_secrets() -> anyhow::Result<()> {
     }
     let lease = std::env::var("EXAM_LEASE_KEY").unwrap_or_default();
     anyhow::ensure!(
-        lease.len() >= 32,
+        valid_lease_key(&lease),
         "EXAM_LEASE_KEY is required in production and must be at least 32 characters"
     );
     let signing = std::env::var("RESULT_SIGNING_KEY").unwrap_or_default();
-    use base64::Engine;
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(signing)
-        .map_err(|_| {
-            anyhow::anyhow!(
-                "RESULT_SIGNING_KEY is required in production and must be valid base64 of 32 bytes"
-            )
-        })?;
     anyhow::ensure!(
-        decoded.len() == 32,
+        valid_result_signing_key(&signing),
         "RESULT_SIGNING_KEY is required in production and must be valid base64 of 32 bytes"
     );
     Ok(())
+}
+
+fn valid_lease_key(key: &str) -> bool {
+    key.len() >= 32
+}
+
+fn valid_result_signing_key(key: &str) -> bool {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(key.trim())
+        .is_ok_and(|decoded| decoded.len() == 32)
 }
 
 const EMAIL_TIMEOUT: Duration = Duration::from_secs(15);
@@ -421,5 +713,19 @@ mod hashing_tests {
     #[test]
     fn hashing_is_bounded() {
         assert_eq!(super::hashing_semaphore().available_permits(), 2);
+    }
+
+    #[test]
+    fn production_key_validation_enforces_required_sizes() {
+        use base64::Engine;
+
+        assert!(!super::valid_lease_key("short"));
+        assert!(super::valid_lease_key(&"x".repeat(32)));
+
+        let valid = base64::engine::general_purpose::STANDARD.encode([7_u8; 32]);
+        let wrong_size = base64::engine::general_purpose::STANDARD.encode([7_u8; 31]);
+        assert!(super::valid_result_signing_key(&valid));
+        assert!(!super::valid_result_signing_key("not base64!"));
+        assert!(!super::valid_result_signing_key(&wrong_size));
     }
 }

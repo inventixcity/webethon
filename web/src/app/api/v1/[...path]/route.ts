@@ -23,6 +23,8 @@ const REQUEST_HEADERS = [
   // Stripe signs the raw webhook body with this header; the body is forwarded byte for byte, so it still verifies.
   "stripe-signature",
   "user-agent",
+  // The exam device lock (save, journal, heartbeat, takeover). Without it every attempt write is rejected.
+  "x-attempt-device",
   "x-request-id",
 ];
 

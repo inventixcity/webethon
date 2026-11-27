@@ -15,7 +15,7 @@ import { observeServerTime, serverNowMs } from "@/lib/exam/clock";
 import { attemptHeaders } from "@/lib/exam/device";
 import { cacheAttempt, getMeta, initializeJournal, leaseElapsed, listEntries, pendingCount, setLease } from "@/lib/exam/journal";
 import { AttemptSaveQueue, heartbeat, syncJournal, type SavedValue } from "@/lib/exam/sync";
-import { useHeartbeatQuality } from "@/lib/exam/network";
+import { isNetworkOnline, useHeartbeatQuality } from "@/lib/exam/network";
 
 type AnswerState = "saved" | "saving" | "queued" | "offline" | "error";
 export type AttemptAnswer = { response: AnswerResponse; flagged: boolean; state: AnswerState };
@@ -23,7 +23,7 @@ export type AttemptAnswer = { response: AnswerResponse; flagged: boolean; state:
 export function restoreAnswers(payload: AttemptPayload, entries: Awaited<ReturnType<typeof listEntries>>): Record<string, AttemptAnswer> {
   const answers: Record<string, AttemptAnswer> = {};
   payload.answers.forEach((answer) => { answers[answer.itemId] = { response: answer.response, flagged: answer.flagged, state: "saved" }; });
-  for (const entry of entries) answers[entry.itemId] = { response: entry.response, flagged: entry.flagged, state: "queued" };
+  for (const entry of entries) if (entry.seq > payload.journal.seq) answers[entry.itemId] = { response: entry.response, flagged: entry.flagged, state: "queued" };
   return answers;
 }
 
@@ -48,7 +48,18 @@ export function useAttempt(attemptId: string) {
   const mounted = useRef(false);
   const { status: network, record } = useHeartbeatQuality();
   const deadlineAt = payload?.deadlineAt ?? null;
-  const refreshPending = useCallback(async () => { const count = await pendingCount(attemptId); if (mounted.current) setPending(count); }, [attemptId]);
+  const refreshPending = useCallback(async () => {
+    const entries = await listEntries(attemptId, Number.MAX_SAFE_INTEGER);
+    if (!mounted.current) return;
+    setPending(entries.length);
+    const pendingItems = new Set(entries.map((entry) => entry.itemId));
+    let changed = false;
+    const next = { ...values.current };
+    for (const [id, answer] of Object.entries(next)) {
+      if ((answer.state === "queued" || answer.state === "offline") && !pendingItems.has(id)) { next[id] = { ...answer, state: "saved" }; changed = true; }
+    }
+    if (changed) { values.current = next; setAnswers(next); }
+  }, [attemptId]);
   const updateAnswer = useCallback((id: string, answer: AttemptAnswer) => {
     values.current = { ...values.current, [id]: answer };
     if (mounted.current) setAnswers(values.current);
@@ -95,8 +106,8 @@ export function useAttempt(attemptId: string) {
         queue.current = new AttemptSaveQueue(attemptId, {
           journalEnabled: result.journal.enabled, lease: () => payloadRef.current?.lease ?? null,
           offline: () => recovering.current,
-          onState: (itemId, state) => { const value = values.current[itemId]; if (value) updateAnswer(itemId, { ...value, state }); void refreshPending(); },
-          onDeviceActive: (value) => { if (mounted.current) setDeviceActive(value); },
+          onState: (itemId, state) => { if (!active) return; const value = values.current[itemId]; if (value) updateAnswer(itemId, { ...value, state }); void refreshPending(); },
+          onDeviceActive: (value) => { if (active) setDeviceActive(value); },
           onClosed: () => { /* A rejected late PUT can still be recovered through journal grace. */ },
         });
         setPayload(result); setAnswers(restored); setDeviceActive(result.deviceActive);
@@ -123,11 +134,12 @@ export function useAttempt(attemptId: string) {
         setDeviceActive(data.deviceActive);
         const current = payloadRef.current;
         if (current) { const next = { ...current, deadlineAt: data.deadlineAt, status: data.status, lease: data.lease }; payloadRef.current = next; setPayload(next); await cacheAttempt(attemptId, next); }
+        if (data.status === "in_progress" && Date.parse(data.deadlineAt) > serverNowMs()) { submitted.current = false; setClosed(false); }
         if (data.announcements.length) {
           lastAnnouncement.current = data.announcements.at(-1)?.createdAt ?? lastAnnouncement.current;
           setAnnouncements((old) => [...new Map([...old, ...data.announcements].map((item) => [item.id, item])).values()]);
         }
-        if (data.deviceActive && navigator.onLine) {
+        if (data.deviceActive && isNetworkOnline()) {
           await queue.current?.flush();
           await syncJournal(attemptId, { onDeviceActive: setDeviceActive });
           if (submission.current === null && Date.parse(data.deadlineAt) <= serverNowMs() && !submitted.current) await submit();
@@ -139,7 +151,7 @@ export function useAttempt(attemptId: string) {
         if (cause instanceof ApiError && cause.status === 409 && (cause.details as { reason?: string })?.reason === "device") setDeviceActive(false);
         failures += 1; recovering.current = failures >= 2; record(null);
       }
-      if (!cancelled) timeout = setTimeout(run, failures || !navigator.onLine ? 5000 : 15000);
+      if (!cancelled) timeout = setTimeout(run, failures || !isNetworkOnline() ? 5000 : 15000);
     };
     timeout = setTimeout(run, 0);
     const reconnect = () => { clearTimeout(timeout); if (!cancelled) timeout = setTimeout(run, 0); };
@@ -179,6 +191,8 @@ export function useAttempt(attemptId: string) {
 
   const takeover = useCallback(async () => {
     await api(`/attempts/${encodeURIComponent(attemptId)}/takeover`, { body: {}, headers: attemptHeaders() });
+    const data = await heartbeat(attemptId, await pendingCount(attemptId), lastAnnouncement.current);
+    if (payloadRef.current) { const next = { ...payloadRef.current, lease: data.lease, deadlineAt: data.deadlineAt }; payloadRef.current = next; setPayload(next); }
     setDeviceActive(true);
   }, [attemptId]);
   const states = Object.values(answers).map((answer) => answer.state);

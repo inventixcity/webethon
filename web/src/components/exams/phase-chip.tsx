@@ -1,22 +1,21 @@
+import { Badge } from "@/components/ui/badge";
 import type { ExamPhase } from "@/lib/exam/types";
-import { cn } from "@/lib/utils";
 import { PHASE_LABEL } from "./format";
 
-/** The exam phase as a square mono chip. Ongoing is solid ink with the one vermilion mark. */
+const TONE = {
+  draft: "dashed",
+  scheduled: "outline",
+  ongoing: "solid",
+  closed: "outline",
+  completed: "muted",
+  archived: "muted",
+} as const;
+
+/** The exam phase as a square mono chip. Ongoing is solid ink with a live vermilion mark. */
 export function PhaseChip({ phase, className }: { phase: ExamPhase; className?: string }) {
-  const ongoing = phase === "ongoing";
   return (
-    <span
-      className={cn(
-        "inline-flex h-7 items-center gap-2 px-2.5 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase",
-        ongoing && "bg-ink text-paper",
-        phase === "draft" && "border border-dashed border-ink-muted text-ink-soft",
-        !ongoing && phase !== "draft" && "border border-ink text-ink",
-        className,
-      )}
-    >
-      {ongoing ? <span aria-hidden="true" className="size-1.5 bg-vermilion" /> : null}
+    <Badge tone={TONE[phase]} dot={phase === "ongoing" ? "live" : phase === "scheduled" || phase === "closed"} srLabel="Phase" className={className}>
       {PHASE_LABEL[phase]}
-    </span>
+    </Badge>
   );
 }

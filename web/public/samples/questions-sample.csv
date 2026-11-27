@@ -1,0 +1,7 @@
+topic,difficulty,kind,stem,optionA,optionB,optionC,optionD,correct,marks,negativeMarks,multiRule,rubric,maxWords,explanation
+Data Structures,2,single,Which data structure gives O(1) average-time lookup by key?,Linked list,Hash table,Binary heap,Stack,B,2,0.5,,,,Hash tables map keys to buckets in constant average time.
+Algorithms,3,single,What is the worst-case time complexity of quicksort?,O(n log n),O(n),O(n^2),O(log n),C,2,0.5,,,,A consistently poor pivot gives quadratic time.
+Databases,3,multi,Which of these are ACID properties?,Atomicity,Consistency,Isolation,Availability,"A,B,C",3,0,partial,,,Availability belongs to CAP; ACID is atomicity, consistency, isolation and durability.
+Computer Networks,2,single,Which protocol resolves a hostname to an IP address?,DHCP,DNS,ARP,ICMP,B,2,0,,,,DNS translates names to addresses.
+Web Security,4,multi,"Which measures mitigate cross-site request forgery (CSRF)?",SameSite cookies,Origin header checks,Storing passwords with bcrypt,Anti-CSRF tokens,"A,B,D",3,1,partial_penalty,,,Password hashing protects stored credentials but does nothing against CSRF.
+Algorithms,4,written,"Explain why Dijkstra's algorithm fails with negative edge weights, and name an algorithm that handles them.",,,,,,6,0,,"2 marks: greedy finalisation assumption explained; 2 marks: concrete counter-example or reasoning; 2 marks: names Bellman-Ford (or Johnson's) and its negative-cycle detection.",200,
