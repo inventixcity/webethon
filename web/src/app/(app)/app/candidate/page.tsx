@@ -11,8 +11,8 @@ export default async function CandidateHomePage() {
   if (user.role !== "candidate") redirect("/app");
 
   return (
-    <main className="mx-auto w-full max-w-5xl min-w-0 px-5 py-10 md:px-8 md:py-16">
+    <div className="min-w-0">
       <CandidateDashboard />
-    </main>
+    </div>
   );
 }

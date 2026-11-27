@@ -1,12 +1,13 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { WaveText } from "@/components/effects/wave-text";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Art, hasArt } from "@/components/ui/art";
 import { cn } from "@/lib/utils";
 
 export type Crumb = { label: string; href?: string };
 
-/** Wide, quiet banner images in public/images. Each one is shown only when its file exists. */
+/** Wide, quiet images in public/images. Each one is shown only when its file exists. */
 export type PageBanner = "bg-candidate" | "bg-examiner" | "bg-admin" | "bg-results";
 
 type PageHeaderProps = {
@@ -19,13 +20,14 @@ type PageHeaderProps = {
   description?: ReactNode;
   /** Primary actions. They sit on the right from md up, and under the text on phones. */
   actions?: ReactNode;
-  /** Trail back to the parent pages. The last crumb is the current page and has no link. */
+  /** @deprecated The app shell's top bar shows the trail now. Accepted so existing calls still compile, and not rendered. */
   breadcrumb?: Crumb[];
-  /** Extra content under the description: a meta row, a timeline. */
+  /** Extra content under the header, such as a meta row. */
   children?: ReactNode;
-  /** h1 for a page, h2 for a section inside a page that already has its own h1 (the exam tabs). */
+  /** h1 for a page, h2 for a section inside a page that already has its own h1. */
   level?: 1 | 2;
-  /** A low-opacity banner image behind the title, on the right. Nothing renders when the file is absent. */
+  /** A small editorial image on the right of the header. Nothing renders when the file is absent. Never behind the text. */
+  /** A halftone figure on the right of the header, drawn from the image in public/images. Decorative. Never behind the text. */
   banner?: PageBanner;
   id?: string;
   className?: string;
@@ -86,23 +88,58 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
   );
 }
 
-/*
- * Compacts WaveText's full-screen hero into a header band. The overrides are !important because wave-text.css is
- * unlayered, and it would otherwise win over Tailwind utilities.
- */
-const WAVE_CLASS = cn(
-  "!min-h-0",
-  "[&_.wave-text-body]:!pt-8 [&_.wave-text-body]:!pb-6 md:[&_.wave-text-body]:!pt-10",
-  "[&_.wave-text-headline]:!mb-0 [&_.wave-text-headline]:!text-[clamp(2.5rem,6vw,4.5rem)] [&_.wave-text-headline]:!leading-[0.95]",
-  "[&_.wave-text-support]:!mt-0 [&_.wave-text-support]:!ml-0 [&_.wave-text-support]:!w-full",
-  "[&_.wave-text-support_p]:!max-w-[62ch]",
-  "[&_.wave-text-content]:!p-5 md:[&_.wave-text-content]:!p-8",
-);
+// One period of the wave is 300 units. The track is 1200 units wide, so the animation moves it one container width
+// (-50% of its own width) and the loop joins up exactly.
+const WAVE_PATH = "M0,6 C75,2 225,10 300,6 S525,2 600,6 S825,10 900,6 S1125,2 1200,6";
 
 /**
- * The header every screen opens with: a numbered mono eyebrow, a large tight headline, one line of description and
- * the primary actions. A level 1 string title renders as a WaveText band, which keeps the headline as a real h1 and
- * hides its water copy from assistive technology. Level 2 is the smaller plain variant for a section inside a page
+ * The thin animated hairline under a page title. It is an SVG track moved with the Web Animations API, so only
+ * transform animates. It pauses when it scrolls out of view or the tab is hidden, and under reduced motion it stays
+ * as a still curve. It is decorative, so it is hidden from assistive technology.
+ */
+function WaveRule() {
+  const track = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    const element = track.current;
+    if (!element || typeof element.animate !== "function") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const animation = element.animate(
+      [{ transform: "translateX(0)" }, { transform: "translateX(-50%)" }],
+      { duration: 12000, iterations: Infinity, easing: "linear" },
+    );
+    let visible = true;
+    const sync = () => {
+      if (document.hidden) animation.pause();
+      else if (visible) animation.play();
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible && !document.hidden) animation.play();
+      else animation.pause();
+    });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+      animation.cancel();
+    };
+  }, []);
+
+  return (
+    <div aria-hidden="true" className="relative h-3 w-full overflow-hidden text-vermilion">
+      <svg ref={track} viewBox="0 0 1200 12" preserveAspectRatio="none" className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none">
+        <path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * The header every screen opens with: a numbered mono eyebrow, a tight headline, one line of description and the
+ * primary actions, with a thin wave rule under the title. Level 2 is the plain variant for a section inside a page
  * that already has its own h1.
  */
 export function PageHeader({
@@ -111,64 +148,19 @@ export function PageHeader({
   title,
   description,
   actions,
-  breadcrumb,
   children,
   level = 1,
   banner,
   id,
   className,
 }: PageHeaderProps) {
-  const crumbs = breadcrumb && breadcrumb.length > 0 ? <Breadcrumb items={breadcrumb} /> : null;
   const showBanner = banner !== undefined && hasArt(banner);
-  const bannerLayer = showBanner ? (
-    <Art
-      name={banner}
-      alt=""
-      position="object-right"
-      sizes="100vw"
-      className="pointer-events-none absolute inset-0 -z-10 opacity-30 dark:opacity-20"
-    />
-  ) : null;
-
-  if (level === 1 && typeof title === "string" && (description === undefined || typeof description === "string")) {
-    return (
-      <header className={cn("grid gap-6", showBanner && "relative isolate overflow-hidden", className)}>
-        {bannerLayer}
-        {crumbs}
-        <WaveText
-          headingAs="h1"
-          eyebrow={index ? `${index} / ${eyebrow}` : eyebrow}
-          edition=""
-          headline={title}
-          description={description ?? ""}
-          actionLabel=""
-          caption=""
-          waveHeight={0.3}
-          speed={0.6}
-          amplitude={36}
-          interactive={false}
-          className={WAVE_CLASS}
-        />
-        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
-        {children}
-      </header>
-    );
-  }
-
   const Heading = level === 1 ? "h1" : "h2";
+
   return (
-    <header
-      className={cn(
-        "grid gap-6",
-        showBanner && "relative isolate overflow-hidden",
-        level === 1 ? "border-b border-ink pt-10 pb-8 md:pt-14 md:pb-10" : "border-b border-rule pt-10 pb-6",
-        className,
-      )}
-    >
-      {bannerLayer}
-      {crumbs}
-      <div className="grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
-        <div className={cn("grid min-w-0 gap-4", actions ? "md:col-span-8" : "md:col-span-12")}>
+    <header className={cn("grid gap-5", level === 1 ? "border-b border-ink pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
+        <div className="grid min-w-0 flex-[1_1_18rem] gap-3">
           <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
             {eyebrow}
           </Eyebrow>
@@ -177,18 +169,25 @@ export function PageHeader({
             className={cn(
               "font-medium tracking-[-0.03em] break-words",
               level === 1
-                ? "text-[clamp(2.5rem,6vw,4.5rem)] leading-[0.95]"
-                : "text-[clamp(1.875rem,4vw,2.75rem)] leading-none",
+                ? "text-[clamp(2rem,1.2rem+2.6vw,3rem)] leading-[1]"
+                : "text-[clamp(1.5rem,1rem+1.6vw,2rem)] leading-[1.05]",
             )}
           >
             {title}
           </Heading>
-          {description ? <p className="max-w-[62ch] text-base text-ink-soft">{description}</p> : null}
+          {description ? <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">{description}</p> : null}
         </div>
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-3 md:col-span-4 md:justify-end">{actions}</div>
+        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+        {showBanner && banner ? (
+          <figure aria-hidden="true" className="hidden w-72 shrink-0 md:block lg:w-80">
+            <Art name={banner} alt="" sizes="320px" className="aspect-[4/3] w-full border border-ink" />
+            <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
+              FIG. {index ?? "01"} / {eyebrow}
+            </figcaption>
+          </figure>
         ) : null}
       </div>
+      {level === 1 ? <WaveRule /> : null}
       {children}
     </header>
   );
