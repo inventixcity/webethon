@@ -20,6 +20,7 @@ const NAV = [
 
 export function SiteNav() {
   const pathname = usePathname();
+  const onHome = pathname === "/";
   const [compact, setCompact] = useState(false);
   const [active, setActive] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -52,7 +53,7 @@ export function SiteNav() {
           <span className="truncate">Inventix Invigil</span>
         </Link>
         <nav aria-label="Page sections" className="hidden h-full items-center gap-5 lg:flex">
-          {NAV.map((item) => <SectionLink key={item.href} href={item.href} aria-current={active === item.href ? "location" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", active === item.href && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>{item.label}</SectionLink>)}
+          {NAV.map((item) => !onHome ? <Link key={item.href} href={`/${item.href}`} className="relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink">{item.label}</Link> : <SectionLink key={item.href} href={item.href} aria-current={active === item.href ? "location" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", active === item.href && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>{item.label}</SectionLink>)}
           <Link href="/verify" className="inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink">Verify</Link>
           <Link href="/contact" aria-current={pathname === "/contact" ? "page" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", pathname === "/contact" && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>Contact</Link>
         </nav>
@@ -63,7 +64,7 @@ export function SiteNav() {
         </div>
       </div>
       {menuOpen && <nav id="site-mobile-nav" aria-label="Mobile page sections" className="absolute inset-x-0 top-full grid border-b border-ink bg-paper px-5 pb-4 md:px-8 lg:hidden">
-        {NAV.map((item) => <SectionLink key={item.href} href={item.href} onClick={closeMenu} aria-current={active === item.href ? "location" : undefined} className={cn("min-h-11 border-t border-rule py-3 text-ink-soft", active === item.href && "border-l-2 border-l-cobalt pl-3 font-bold text-ink")}>{item.label}</SectionLink>)}
+        {NAV.map((item) => !onHome ? <Link key={item.href} href={`/${item.href}`} onClick={closeMenu} className="min-h-11 border-t border-rule py-3 text-ink-soft">{item.label}</Link> : <SectionLink key={item.href} href={item.href} onClick={closeMenu} aria-current={active === item.href ? "location" : undefined} className={cn("min-h-11 border-t border-rule py-3 text-ink-soft", active === item.href && "border-l-2 border-l-cobalt pl-3 font-bold text-ink")}>{item.label}</SectionLink>)}
         <Link href="/verify" onClick={closeMenu} className="min-h-11 border-t border-rule py-3">Verify</Link>
         <Link href="/contact" onClick={closeMenu} aria-current={pathname === "/contact" ? "page" : undefined} className={cn("min-h-11 border-t border-rule py-3", pathname === "/contact" && "border-l-2 border-l-cobalt pl-3 font-bold")}>Contact</Link>
         <Link href="/login" onClick={closeMenu} className="min-h-11 border-t border-rule py-3 font-bold">Sign in</Link>
