@@ -88,51 +88,43 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
   );
 }
 
-// One period of the wave is 300 units. The track is 1200 units wide, so the animation moves it one container width
-// (-50% of its own width) and the loop joins up exactly.
-const WAVE_PATH = "M0,6 C75,2 225,10 300,6 S525,2 600,6 S825,10 900,6 S1125,2 1200,6";
-
 /**
- * The thin animated hairline under a page title. It is an SVG track moved with the Web Animations API, so only
- * transform animates. It pauses when it scrolls out of view or the tab is hidden, and under reduced motion it stays
- * as a still curve. It is decorative, so it is hidden from assistive technology.
+ * The accent hairline under a page title. A cobalt rule with an amber layer that rises and falls over it, and a
+ * short cobalt spark travelling along it. Only opacity and transform animate. It pauses when it scrolls out of view
+ * or the tab is hidden. Under reduced motion the CSS animations are stopped, and it stays as a still cobalt rule with
+ * the amber layer at rest. It is decorative, so it is hidden from assistive technology.
  */
-function WaveRule() {
-  const track = useRef<SVGSVGElement>(null);
+export function AccentRule() {
+  const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const element = track.current;
-    if (!element || typeof element.animate !== "function") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const animation = element.animate(
-      [{ transform: "translateX(0)" }, { transform: "translateX(-50%)" }],
-      { duration: 12000, iterations: Infinity, easing: "linear" },
-    );
-    let visible = true;
+    const element = root.current;
+    if (!element || typeof element.getAnimations !== "function") return;
     const sync = () => {
-      if (document.hidden) animation.pause();
-      else if (visible) animation.play();
+      for (const animation of element.getAnimations({ subtree: true })) {
+        if (document.hidden) animation.pause();
+        else animation.play();
+      }
     };
     const observer = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting;
-      if (visible && !document.hidden) animation.play();
-      else animation.pause();
+      for (const animation of element.getAnimations({ subtree: true })) {
+        if (entry.isIntersecting && !document.hidden) animation.play();
+        else animation.pause();
+      }
     });
     observer.observe(element);
     document.addEventListener("visibilitychange", sync);
     return () => {
       observer.disconnect();
       document.removeEventListener("visibilitychange", sync);
-      animation.cancel();
     };
   }, []);
 
   return (
-    <div aria-hidden="true" className="relative h-3 w-full overflow-hidden text-vermilion">
-      <svg ref={track} viewBox="0 0 1200 12" preserveAspectRatio="none" className="absolute inset-y-0 left-0 h-full w-[200%] max-w-none">
-        <path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-      </svg>
+    <div ref={root} aria-hidden="true" className="relative h-[2px] w-full overflow-hidden bg-rule">
+      <span className="absolute inset-0 bg-cobalt" />
+      <span className="absolute inset-0 bg-amber animate-hairline-tone" />
+      <span className="absolute inset-y-0 left-0 w-1/5 bg-cobalt animate-hairline-spark" />
     </div>
   );
 }
@@ -158,7 +150,7 @@ export function PageHeader({
   const Heading = level === 1 ? "h1" : "h2";
 
   return (
-    <header className={cn("grid gap-5", level === 1 ? "border-b border-ink pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
+    <header className={cn("grid gap-5", level === 1 ? "pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
       <div className="flex flex-wrap items-start gap-x-8 gap-y-5">
         <div className="grid min-w-0 flex-[1_1_18rem] gap-3">
           <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
@@ -187,7 +179,7 @@ export function PageHeader({
           </figure>
         ) : null}
       </div>
-      {level === 1 ? <WaveRule /> : null}
+      {level === 1 ? <AccentRule /> : null}
       {children}
     </header>
   );

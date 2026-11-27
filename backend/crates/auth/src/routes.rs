@@ -730,7 +730,7 @@ async fn demo(State(state): State<AppState>, meta: RequestMeta) -> AppResult<Res
     response
 }
 /// Accounts are provisioned (admins create examiners, examiners enroll candidates, both send invites), so
-/// self-signup, email-code verification for signup and one-click demo sign-in are off unless
+/// self-signup, emailed password resets, email-code verification and one-click demo sign-in are off unless
 /// `ALLOW_SELF_SIGNUP=true`. OAuth is not offered.
 pub fn router() -> Router<AppState> {
     let router = Router::new()
@@ -738,15 +738,17 @@ pub fn router() -> Router<AppState> {
         .route("/signout", post(signout))
         .route("/signout-all", post(signout_all))
         .route("/session", get(current))
-        .route("/password/forgot", post(forgot))
-        .route("/password/verify-code", post(verify_reset))
-        .route("/password/reset", post(reset_password))
         .route("/password/change", post(change_password))
         .route("/sessions", get(sessions))
         .route("/sessions/{id}", axum::routing::delete(delete_session))
         .merge(crate::mfa::router());
+    // Password resets are institution-driven (an admin or examiner re-sends an access link), so no
+    // reset email is ever sent unless ALLOW_SELF_SIGNUP=true re-enables the self-service flows.
     if std::env::var("ALLOW_SELF_SIGNUP").is_ok_and(|v| v == "true") {
         router
+            .route("/password/forgot", post(forgot))
+            .route("/password/verify-code", post(verify_reset))
+            .route("/password/reset", post(reset_password))
             .route("/signup", post(signup))
             .route("/verify-email", post(verify_email))
             .route("/resend-code", post(resend))

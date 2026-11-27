@@ -1,15 +1,19 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BarChart } from "@/components/charts";
+import { HoldButton } from "@/components/effects/hold-button";
 import { useToast } from "@/components/feedback/toaster";
+import { DifficultySquares, KindChip } from "@/components/questions/parts";
 import { Button } from "@/components/ui/button";
+import { Meter } from "@/components/ui/meter";
 import { messageFor } from "@/lib/errors/describe";
-import type { ExamReview, QuestionKind } from "@/lib/exam/types";
+import type { ExamReview } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
+import { SectionIntro } from "./section-intro";
 import { createSandboxAttempt, publishExam } from "./actions";
 import { ConfirmDialog } from "./confirm-dialog";
 import { formatWindow, notifyExamChanged, STATUS_LABEL } from "./format";
@@ -17,7 +21,6 @@ import { PhaseChip } from "./phase-chip";
 import { EmptyState, ErrorState, LoadingState } from "./states";
 import { useExam, useResource } from "./use-resource";
 
-const KIND_LABEL: Record<QuestionKind, string> = { single: "Single choice", multi: "Multiple choice", written: "Written" };
 
 /** The Review tab: a readiness checklist, mark totals, topic and difficulty mix, a full paper preview, and publish. */
 export function ReviewPanel({ examId }: { examId: string }) {
@@ -28,6 +31,8 @@ export function ReviewPanel({ examId }: { examId: string }) {
   const [confirming, setConfirming] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  // Remounts the hold button after a cancelled confirmation, so it can be held again.
+  const [holdKey, setHoldKey] = useState(0);
 
   if (examLoading && !exam) return <LoadingState label="Loading review" rows={4} />;
   if (!exam) return <ErrorState error={examError} onRetry={reloadExam} />;
@@ -63,6 +68,11 @@ export function ReviewPanel({ examId }: { examId: string }) {
 
   return (
     <div className="grid gap-16 py-10">
+      <SectionIntro
+        eyebrow="Review / 05"
+        title="Review and publish"
+        summary="Check the paper against the rules before you freeze it. Publishing locks questions and marks."
+      />
       <section aria-labelledby="review-status" className="grid gap-6 md:grid-cols-12">
         <div className="grid content-start gap-4 md:col-span-7">
           <h2 id="review-status" className="font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -79,9 +89,17 @@ export function ReviewPanel({ examId }: { examId: string }) {
             Preview as candidate
           </Button>
           {isDraft ? (
-            <Button disabled={!canPublish} onClick={() => setConfirming(true)}>
-              Publish paper
-            </Button>
+            canPublish ? (
+              <HoldButton
+                key={holdKey}
+                label="Hold to publish"
+                doneLabel="Confirm publishing"
+                className="h-12 min-w-0 w-full sm:w-auto sm:min-w-64"
+                onConfirm={() => setConfirming(true)}
+              />
+            ) : (
+              <Button disabled>Publish paper</Button>
+            )
           ) : null}
         </div>
       </section>
@@ -161,9 +179,12 @@ export function ReviewPanel({ examId }: { examId: string }) {
                 <span className="font-mono text-sm text-ink-muted tabular-nums">{String(index + 1).padStart(2, "0")}</span>
                 <div className="grid min-w-0 gap-4">
                   <p className="text-base leading-relaxed break-words">{item.question.stem}</p>
-                  <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-                    {item.marks} marks / {KIND_LABEL[item.question.kind]} / {item.question.topic} / D{item.question.difficulty}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
+                    <span className="tabular-nums">{item.marks} marks</span>
+                    <span>{item.question.topic}</span>
+                    <DifficultySquares value={item.question.difficulty} />
+                    <KindChip kind={item.question.kind} />
+                  </div>
                   {item.question.kind === "written" ? (
                     <p className="text-sm text-ink-soft">
                       <span className="font-mono text-[11px] tracking-[0.12em] uppercase">Rubric: </span>
@@ -196,7 +217,10 @@ export function ReviewPanel({ examId }: { examId: string }) {
         title="Publish and freeze this paper?"
         confirmLabel="Publish paper"
         pending={publishing}
-        onCancel={() => setConfirming(false)}
+        onCancel={() => {
+          setConfirming(false);
+          setHoldKey((value) => value + 1);
+        }}
         onConfirm={publish}
       >
         <p>Once published, the questions, marks and candidate rules are frozen. Candidates see this exact paper when the window opens.</p>
@@ -216,10 +240,10 @@ function CheckRow({ check }: { check: ExamReview["checks"][number] }) {
         aria-hidden="true"
         className={cn(
           "mt-0.5 grid size-6 place-items-center border",
-          check.ok ? "border-ink bg-ink text-paper" : "border-ink text-ink",
+          check.ok ? "border-cobalt bg-cobalt text-paper" : note ? "border-ink-muted text-ink-muted" : "border-amber",
         )}
       >
-        {check.ok ? <Check className="size-4" strokeWidth={3} /> : <X className="size-4" strokeWidth={3} />}
+        <Tick draw={check.ok} />
       </span>
       <div className="grid gap-1">
         <p className="font-mono text-[11px] tracking-[0.12em] uppercase">
@@ -232,28 +256,48 @@ function CheckRow({ check }: { check: ExamReview["checks"][number] }) {
   );
 }
 
+/**
+ * A tick that draws itself in when its check passes, and stays a plain square otherwise. A failed check shows an
+ * amber square, which is the Fix marker. The stroke is drawn with pathLength, so only the stroke moves.
+ */
+function Tick({ draw }: { draw: boolean }) {
+  const reduced = useReducedMotion() ?? false;
+  if (!draw) return <span className="size-2 bg-amber" />;
+  return (
+    <svg viewBox="0 0 16 16" className="size-4">
+      <motion.path
+        d="M3 8.5 L6.5 12 L13 4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.4}
+        strokeLinecap="square"
+        pathLength={1}
+        initial={reduced ? { pathLength: 1 } : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: reduced ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+      />
+    </svg>
+  );
+}
+
 function MarksBar({ assigned, total }: { assigned: number; total: number }) {
-  const percent = total > 0 ? Math.min(100, Math.max(0, (assigned / total) * 100)) : 0;
   const exact = Math.round(assigned * 100) === Math.round(total * 100);
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-4 font-mono text-[11px] tracking-[0.12em] uppercase">
-        <span>
+        <span className="tabular-nums">
           {assigned} of {total} marks assigned
         </span>
-        <span className="text-ink-muted">{exact ? "Matches exam total" : "Does not match exam total"}</span>
+        <span className={exact ? "text-cobalt-deep" : "text-amber-deep"}>{exact ? "Matches exam total" : "Does not match exam total"}</span>
       </div>
-      <div
-        role="progressbar"
-        aria-label="Marks assigned"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={Math.min(assigned, total)}
-        aria-valuetext={`${assigned} of ${total} marks`}
-        className="h-2 w-full bg-paper-sunk"
-      >
-        <div className="h-full bg-ink transition-[width] duration-(--duration-base) ease-(--ease-enter) motion-reduce:transition-none" style={{ width: `${percent}%` }} />
-      </div>
+      <Meter
+        value={Math.min(assigned, total)}
+        max={Math.max(total, 1)}
+        tone={exact ? "info" : "caution"}
+        size="md"
+        label="Marks assigned"
+        valueText={`${assigned} of ${total} marks`}
+      />
     </div>
   );
 }

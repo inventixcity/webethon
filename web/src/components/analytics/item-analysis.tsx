@@ -34,7 +34,47 @@ function discriminationText(value: number | null): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
-/** Per-item table with flags and an expandable distractor analysis. */
+/** Facility as a square bar from the left edge. Lower facility (harder) is the same ink, the number carries it. */
+function FacilityBar({ value }: { value: number | null }) {
+  if (value === null) return <span className="font-mono text-xs text-ink-muted">—</span>;
+  const pct = Math.min(100, Math.max(0, value * 100));
+  return (
+    <span className="grid min-w-24 gap-1 justify-items-end">
+      <span className="font-mono text-xs tabular-nums">{formatPercent(pct)}</span>
+      <span aria-hidden="true" className="relative block h-1.5 w-full bg-paper-sunk">
+        <span className="absolute inset-0 origin-left bg-cobalt transition-transform duration-(--duration-slow) ease-(--ease-enter)" style={{ transform: `scaleX(${pct / 100})` }} />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Discrimination on a centre axis: positive values grow right in ink, negative values grow left in amber, because
+ * a negative item needs a look.
+ */
+function DiscriminationBar({ value }: { value: number | null }) {
+  if (value === null || !Number.isFinite(value)) return <span className="font-mono text-xs text-ink-muted">—</span>;
+  const clamped = Math.max(-1, Math.min(1, value));
+  const negative = clamped < 0;
+  // Each half of the axis is 50% wide. The fill is that half scaled from the axis outward, so only transform moves.
+  return (
+    <span className="grid min-w-24 gap-1 justify-items-end">
+      <span className="font-mono text-xs tabular-nums">{discriminationText(value)}</span>
+      <span aria-hidden="true" className="relative block h-1.5 w-full bg-paper-sunk">
+        <span className="absolute top-0 bottom-0 left-1/2 w-px bg-ink-muted" />
+        <span
+          className={cn(
+            "absolute top-0 bottom-0 w-1/2 transition-transform duration-(--duration-slow) ease-(--ease-enter)",
+            negative ? "right-1/2 origin-right bg-amber" : "left-1/2 origin-left bg-cobalt",
+          )}
+          style={{ transform: `scaleX(${Math.abs(clamped)})` }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/** Per-item table with inline mini bars, flags and an expandable distractor analysis. */
 export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const idBase = useId();
@@ -44,8 +84,8 @@ export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
   }
 
   return (
-    <div className="overflow-x-auto border border-rule">
-      <table className="w-full min-w-[820px] text-left text-sm">
+    <div className="overflow-x-auto border border-ink">
+      <table className="w-full min-w-[860px] text-left text-sm">
         <caption className="sr-only">Item analysis: facility, discrimination, skipped rate and flags for each question</caption>
         <thead className="bg-paper-sunk">
           <tr className="font-mono text-[11px] tracking-[0.12em] uppercase">
@@ -66,18 +106,20 @@ export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
             const panelId = `${idBase}-${item.itemId}`;
             return (
               <Fragment key={item.itemId}>
-                <tr className="border-t border-rule align-top">
-                  <th scope="row" className="px-3 py-3 font-mono font-normal">{item.position}</th>
+                <tr className="border-t border-rule align-top transition-colors duration-(--duration-fast) hover:bg-paper-raised">
+                  <th scope="row" className="px-3 py-3 font-mono font-normal tabular-nums">{item.position}</th>
                   <td className="px-3 py-3">
                     <span className="block font-sans">{preview(item.stem)}</span>
                     <span className="font-mono text-[11px] text-ink-muted">
                       {item.topic} · {item.attempts} {item.attempts === 1 ? "attempt" : "attempts"}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-right font-mono tabular-nums">
-                    {item.facility === null ? "—" : formatPercent(item.facility * 100)}
+                  <td className="px-3 py-3 text-right">
+                    <FacilityBar value={item.facility} />
                   </td>
-                  <td className="px-3 py-3 text-right font-mono tabular-nums">{discriminationText(item.discrimination)}</td>
+                  <td className="px-3 py-3 text-right">
+                    <DiscriminationBar value={item.discrimination} />
+                  </td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums">{formatPercent(item.skipRate * 100)}</td>
                   <td className="px-3 py-3">
                     {item.flags.length === 0 ? (
@@ -155,8 +197,11 @@ function DistractorList({ item }: { item: ItemAnalytics }) {
                   {option.picks} picks · {formatPercent(share)}
                 </span>
               </div>
-              <div aria-hidden="true" className="h-2 bg-paper-sunk">
-                <div className={option.correct ? "h-full bg-ink" : "h-full bg-ink/40"} style={{ width: `${share}%` }} />
+              <div aria-hidden="true" className="relative h-2 bg-paper-sunk">
+                <div
+                  className={cn("absolute inset-0 origin-left transition-transform duration-(--duration-slow) ease-(--ease-enter)", option.correct ? "bg-cobalt" : "bg-amber")}
+                  style={{ transform: `scaleX(${share / 100})` }}
+                />
               </div>
             </li>
           );

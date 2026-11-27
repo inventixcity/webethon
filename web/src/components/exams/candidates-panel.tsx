@@ -2,7 +2,9 @@
 
 import { useId, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { ConfirmDialog } from "./confirm-dialog";
+import { TokenInput } from "@/components/effects/token-input";
 import { useToast } from "@/components/feedback/toaster";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -12,6 +14,7 @@ import { api } from "@/lib/api/client";
 import { messageFor } from "@/lib/errors/describe";
 import type { CandidateImportRow, Enrollment, ImportResult, ImportRowError } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
+import { SectionIntro } from "./section-intro";
 import { notifyExamChanged } from "./format";
 import { EmptyState, ErrorState, LoadingState } from "./states";
 import { useResource } from "./use-resource";
@@ -44,6 +47,11 @@ export function CandidatesPanel({ examId }: { examId: string }) {
       <p role="status" className="sr-only">
         {announce}
       </p>
+      <SectionIntro
+        eyebrow="Candidates / 04"
+        title="Candidates"
+        summary="Who sits this exam. Add candidates by email, CSV or one at a time, then enrol them together."
+      />
 
       <section aria-labelledby="enrolled-heading" className="grid gap-6">
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink pb-4">
@@ -72,6 +80,7 @@ export function CandidatesPanel({ examId }: { examId: string }) {
         <h2 id="add-heading" className="border-b border-ink pb-4 font-mono text-[11px] tracking-[0.14em] uppercase">
           02 / Add candidates
         </h2>
+        <QuickEmails enrolled={data ?? []} onAdd={queue} />
         <div className="grid gap-12 lg:grid-cols-2">
           <ManualForm enrolled={data ?? []} onAdd={queue} />
           <CsvForm onAdd={queue} queuedCount={pending.length} />
@@ -244,11 +253,19 @@ function EnrollmentRow({
         <span className="block text-ink-muted break-all">{row.email}</span>
       </th>
       <td className="py-4 pr-4">
-        <span className={cn("inline-flex h-7 items-center px-2 font-mono text-[11px] tracking-[0.12em] uppercase", revoked ? "border border-dashed border-ink-muted text-ink-muted" : "border border-ink")}>
-          {revoked ? "Revoked" : "Enrolled"}
-        </span>
+        {revoked ? (
+          <Badge tone="muted">Revoked</Badge>
+        ) : (
+          <Badge tone="outline" dot>
+            Enrolled
+          </Badge>
+        )}
       </td>
-      <td className="py-4 pr-4 text-ink-soft">{accountLabel}</td>
+      <td className="py-4 pr-4">
+        <Badge tone={row.activated ? "info" : row.invited ? "dashed" : "muted"} dot={row.activated ? "live" : undefined}>
+          {accountLabel}
+        </Badge>
+      </td>
       <td className="py-4 pr-4">
         <div className="grid gap-2">
           <div className="flex items-center gap-2">
@@ -296,6 +313,71 @@ function EnrollmentRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+/** A display name from an address: "maya.lin@school.example" reads as "Maya Lin". The examiner can edit it afterwards. */
+function nameFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const words = local
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return (words || email).slice(0, 120);
+}
+
+/**
+ * Quick add by email. Type an address and press Enter or comma to make a token, then add them all to the list.
+ * Addresses already enrolled are skipped, and duplicates collapse into one row.
+ */
+function QuickEmails({ enrolled, onAdd }: { enrolled: Enrollment[]; onAdd: (rows: PendingRow[]) => void }) {
+  const idPrefix = useId();
+  const [tokens, setTokens] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const known = new Set(enrolled.filter((row) => row.status === "enrolled").map((row) => row.email.toLowerCase()));
+
+  function addAll() {
+    setError(null);
+    setNote(null);
+    const cleaned = tokens.map((token) => token.trim().toLowerCase());
+    const bad = cleaned.filter((email) => email.length > 254 || !EMAIL_SHAPE.test(email));
+    if (bad.length > 0) {
+      setError(`Not an email address: ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? " and more" : ""}.`);
+      return;
+    }
+    const unique = [...new Set(cleaned)];
+    const fresh = unique.filter((email) => !known.has(email));
+    if (fresh.length === 0) {
+      setError("Nothing new to add. Those candidates are already enrolled or the list is empty.");
+      return;
+    }
+    onAdd(fresh.map((email) => ({ email, displayName: nameFromEmail(email), origin: "manual" as const })));
+    const skipped = unique.length - fresh.length;
+    setNote(skipped > 0 ? `${skipped} already enrolled, skipped.` : null);
+    setTokens([]);
+  }
+
+  return (
+    <div className="grid gap-5 border-t border-rule pt-8">
+      <div id={`${idPrefix}-hint`} className="grid gap-1">
+        <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Quick add by email</h3>
+        <p className="text-sm text-ink-soft">Type or paste an address, then press Enter or comma. Names are filled in from the address.</p>
+      </div>
+      <TokenInput
+        label="Candidate emails"
+        value={tokens}
+        onChange={setTokens}
+        placeholder="maya.lin@example.com, then Enter"
+      />
+      <div className="flex flex-wrap items-center gap-4">
+        <Button variant="secondary" disabled={tokens.length === 0} onClick={addAll}>
+          Add {tokens.length > 0 ? tokens.length : ""} to list
+        </Button>
+        {note ? <p role="status" className="text-sm text-ink-soft">{note}</p> : null}
+      </div>
+      {error ? <p role="alert" className="text-sm text-vermilion-deep">{error}</p> : null}
+    </div>
   );
 }
 

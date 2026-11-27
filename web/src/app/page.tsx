@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LandingOwl } from "@/components/app-shell/landing-owl";
-import { WaveText } from "@/components/effects/wave-text";
+import { SectionLink } from "@/components/app-shell/section-link";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Ticker } from "@/components/motion/ticker";
 import { Art, artSrc, hasArt } from "@/components/ui/art";
 import { Button } from "@/components/ui/button";
 import { DriftField } from "@/components/ui/empty-state";
+import { AccentRule } from "@/components/ui/page-header";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
@@ -132,7 +133,7 @@ const NAV = [
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-      <span aria-hidden="true" className="size-1.5 bg-ink" />
+      <span aria-hidden="true" className="size-1.5 bg-cobalt" />
       {children}
     </p>
   );
@@ -162,8 +163,8 @@ function Figure({
       <Art
         name={name}
         alt={alt}
-        sizes="(min-width: 768px) 42vw, 100vw"
-        className={cn("w-full border border-ink", ratio)}
+        sizes="(min-width: 768px) 40vw, 100vw"
+        className={cn("grain w-full border border-ink", ratio)}
         fallback={<DriftField className="size-full" />}
       />
       <figcaption className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
@@ -181,17 +182,23 @@ export default function LandingPage() {
     <div className="min-h-dvh min-w-0 bg-paper text-ink">
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-ink bg-paper px-5 font-mono text-[11px] tracking-[0.14em] uppercase md:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-3">
-          <span className="grid size-7 shrink-0 place-items-center bg-ink text-xs font-bold text-paper">
+          <span className="grid size-7 shrink-0 place-items-center bg-fill text-xs font-bold text-on-fill">
             {siteConfig.mark}
           </span>
           <span className="truncate">Inventix Invigil</span>
         </Link>
         <nav aria-label="Page sections" className="hidden items-center gap-6 lg:flex">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href} className="opacity-70 transition-opacity hover:opacity-100">
-              {item.label}
-            </a>
-          ))}
+          {NAV.map((item) =>
+            item.href.startsWith("#") ? (
+              <SectionLink key={item.href} href={item.href} className="opacity-70 transition-opacity hover:opacity-100">
+                {item.label}
+              </SectionLink>
+            ) : (
+              <Link key={item.href} href={item.href} className="opacity-70 transition-opacity hover:opacity-100">
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
         <div className="flex items-center gap-4">
           <ThemeToggle className="hidden uppercase opacity-70 transition-opacity hover:opacity-100 sm:flex" />
@@ -202,40 +209,55 @@ export default function LandingPage() {
       </header>
 
       <main>
-        <WaveText
-          eyebrow="Inventix Invigil"
-          edition="Secure online examinations"
-          headline={"Exams that\nhold up."}
-          description="Authoring, live invigilation, grading and publication in one system. It keeps working when the connection doesn't, and it never asks for your camera."
-          actionLabel="Sign in"
-          actionHref="/login"
-          caption="Move the pointer through the water to make a ripple."
-          waveHeight={0.46}
-          speed={0.9}
-          amplitude={120}
-          direction="left"
-        />
-
-        <figure className="grid gap-3 px-5 pb-16 md:px-8 md:pb-24">
-          <Art
-            name="hero"
-            darkName="hero-dark"
-            alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
-            priority
-            sizes="100vw"
-            className="aspect-[4/3] w-full border border-ink md:aspect-[21/9]"
-            position="object-right"
-            fallback={<DriftField className="size-full" />}
-          />
-          <figcaption className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-            <span className="text-ink tabular-nums">FIG. 00</span>
-            <span>Answer paper, ink and light</span>
-          </figcaption>
-        </figure>
+        <section
+          aria-labelledby="hero-heading"
+          className="grid gap-12 px-5 pt-12 pb-16 md:grid-cols-12 md:items-center md:gap-8 md:px-8 md:pt-16 md:pb-20"
+        >
+          <div className="grid content-start gap-7 md:col-span-7">
+            <Eyebrow>Inventix Invigil / Secure online examinations</Eyebrow>
+            <h1
+              id="hero-heading"
+              className="text-[clamp(3.25rem,9vw,7.5rem)] leading-[0.9] font-medium tracking-[-0.05em]"
+            >
+              Exams that
+              <br />
+              hold up.
+            </h1>
+            <AccentRule />
+            <p className="max-w-[52ch] text-lg leading-relaxed text-ink-soft">
+              Authoring, live invigilation, grading and publication in one system. It keeps working when the connection
+              doesn&apos;t, and it never asks for your camera.
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button asChild size="lg">
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild variant="secondary" size="lg">
+                <Link href="/verify">Verify a result</Link>
+              </Button>
+            </div>
+          </div>
+          <figure className="grid gap-3 md:col-span-5">
+            <Art
+              name="hero"
+              darkName="hero-dark"
+              alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
+              priority
+              sizes="(min-width: 768px) 40vw, 100vw"
+              className="grain aspect-[4/5] max-h-[60vh] w-full border border-ink"
+              position="object-right"
+              fallback={<DriftField className="size-full" />}
+            />
+            <figcaption className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+              <span className="text-ink tabular-nums">FIG. 00</span>
+              <span>Answer paper, ink and light</span>
+            </figcaption>
+          </figure>
+        </section>
 
         <Ticker
           items={["Failure-resilient", "AI-era integrity", "Server time only", "Verifiable results"]}
-          className="bg-ink py-3 text-paper"
+          className="bg-fill py-3 text-on-fill"
         />
 
         <section aria-labelledby="owl-heading" className="grid gap-10 px-5 py-16 md:grid-cols-12 md:px-8 md:py-24">
@@ -249,7 +271,7 @@ export default function LandingPage() {
               your institution has agreed to. Nothing reads your face.
             </p>
           </div>
-          <LandingOwl className="relative h-[52dvh] min-h-80 overflow-hidden border border-rule md:col-span-7 md:h-[68dvh]" />
+          <LandingOwl className="relative h-[52dvh] min-h-80 overflow-hidden border border-rule md:col-span-7 md:h-[60dvh]" />
         </section>
 
         <section
@@ -303,7 +325,6 @@ export default function LandingPage() {
               alt="An unplugged network cable lying in a curve beside a neat stack of index cards"
               num="01"
               caption="Calm. Nothing is broken."
-              ratio="aspect-square"
               className="md:col-span-5"
             />
           </div>
@@ -327,10 +348,9 @@ export default function LandingPage() {
               alt="A magnifying glass over pale ink hatching, with one hidden dot pattern showing through"
               num="02"
               caption="Faint marks, found on review"
-              ratio="aspect-square"
-              className="md:col-span-5 md:order-first"
+              className="md:col-span-5 md:col-start-1"
             />
-            <div className="grid gap-6 md:col-span-7">
+            <div className="grid gap-6 md:col-span-6 md:col-start-7">
               <div>
                 <Eyebrow>03 / AI-era integrity</Eyebrow>
               </div>
@@ -367,16 +387,15 @@ export default function LandingPage() {
               alt="A grid of square cards, most with a dim status dot and a few marked for attention"
               num="03"
               caption="The room, live"
-              ratio="aspect-[16/10]"
-              className="md:col-span-7"
+              className="md:col-span-5 md:col-start-1"
             />
-            <div className="grid content-start gap-4 md:col-span-5">
+            <div className="grid content-start gap-4 md:col-span-5 md:col-start-8">
               <h3 className="text-2xl font-medium tracking-[-0.02em]">{LIVE[0].title}</h3>
               <p className="text-base leading-relaxed text-ink-soft">{LIVE[0].text}</p>
             </div>
           </div>
           <div className="grid gap-12 md:grid-cols-12 md:items-center md:gap-10">
-            <div className="grid content-start gap-4 md:col-span-5">
+            <div className="grid content-start gap-4 md:col-span-5 md:col-start-1">
               <h3 className="text-2xl font-medium tracking-[-0.02em]">{LIVE[1].title}</h3>
               <p className="text-base leading-relaxed text-ink-soft">{LIVE[1].text}</p>
             </div>
@@ -385,8 +404,7 @@ export default function LandingPage() {
               alt="Printed bar charts and a histogram in solid ink, with one cobalt and one amber bar"
               num="04"
               caption="Marks, counted and checked"
-              ratio="aspect-[16/10]"
-              className="md:col-span-7"
+              className="md:col-span-5 md:col-start-8"
             />
           </div>
         </section>

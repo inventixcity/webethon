@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { Art, hasArt } from "@/components/ui/art";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { useToast } from "@/components/feedback/toaster";
 import { messageFor } from "@/lib/errors/describe";
@@ -65,18 +66,27 @@ export function ExamHeader({ examId }: { examId: string }) {
     <PageHeader
       index="03"
       eyebrow="Exam"
-      banner="bg-examiner"
       title={exam.title}
       breadcrumb={[{ label: "Exams", href: "/app/examiner/exams" }, { label: STATUS_LABEL[exam.status] }]}
       actions={
-        <>
-          <Button variant="secondary" size="sm" loading={busy === "preview"} disabled={busy !== null && busy !== "preview"} onClick={preview}>
-            Preview as candidate
-          </Button>
-          <Button variant="secondary" size="sm" loading={busy === "duplicate"} disabled={busy !== null && busy !== "duplicate"} onClick={duplicate}>
-            Duplicate
-          </Button>
-        </>
+        <div className="grid justify-items-end gap-4">
+          {hasArt("bg-examiner") ? (
+            <Art
+              name="bg-examiner"
+              alt=""
+              sizes="240px"
+              className="hidden aspect-[4/3] w-60 border border-rule bg-paper-sunk [filter:brightness(0.82)_contrast(1.05)] sm:block"
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" size="sm" loading={busy === "preview"} disabled={busy !== null && busy !== "preview"} onClick={preview}>
+              Preview as candidate
+            </Button>
+            <Button variant="secondary" size="sm" loading={busy === "duplicate"} disabled={busy !== null && busy !== "duplicate"} onClick={duplicate}>
+              Duplicate
+            </Button>
+          </div>
+        </div>
       }
     >
       <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[11px] tracking-[0.12em] uppercase">

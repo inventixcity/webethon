@@ -5,13 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { api } from "@/lib/api/client";
 import { describeError } from "@/lib/errors";
-import type { Page, Question, QuestionKind } from "@/lib/exam/types";
+import type { Page, Question } from "@/lib/exam/types";
 import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { cn } from "@/lib/utils";
-import { KIND_LABEL, KINDS, formatObserved, formatUpdated } from "./model";
+import { KIND_LABEL, KINDS, formatMarks, formatObserved, formatUpdated } from "./model";
 import { boxInputClass, DifficultySquares, KindChip, MonoLabel, selectClass } from "./parts";
 
 type TopicCount = { topic: string; count: number };
@@ -32,7 +32,11 @@ function buildQuery(filters: Filters, cursor: string | null): string {
   return `/questions?${params.toString()}`;
 }
 
-/** The question bank: filters, cursor pagination, and row actions. The server does all the filtering. */
+/**
+ * The question bank as a dense two-pane screen. The left pane holds the filters and the list. The right pane is a
+ * live preview of the selected question, with the answer key, because the examiner is the only reader here.
+ * The server does all the filtering.
+ */
 export function QuestionBank() {
   const toast = useToast();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -44,6 +48,7 @@ export function QuestionBank() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Question | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Only the newest request may write results. A slow older response must not overwrite a newer filter.
   const latest = useRef(0);
 
@@ -63,6 +68,7 @@ export function QuestionBank() {
       if (request !== latest.current) return;
       setItems(page.items);
       setNextCursor(page.nextCursor);
+      setSelectedId((current) => (current && page.items.some((item) => item.id === current) ? current : (page.items[0]?.id ?? null)));
       setStatus("ready");
     } catch (error) {
       if (request !== latest.current) return;
@@ -123,6 +129,7 @@ export function QuestionBank() {
   }
 
   const hasFilters = Boolean(filters.topic || filters.difficulty || filters.kind || filters.q);
+  const selected = items.find((item) => item.id === selectedId) ?? items[0] ?? null;
 
   function clearFilters() {
     setSearchText("");
@@ -130,129 +137,140 @@ export function QuestionBank() {
   }
 
   return (
-    <div className="grid gap-10">
-      <form
-        role="search"
-        aria-label="Filter questions"
-        onSubmit={(event) => event.preventDefault()}
-        className="grid gap-5 border-y border-rule py-6 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]"
-      >
-        <label className="grid gap-2">
-          <MonoLabel>Search</MonoLabel>
-          <input
-            type="search"
-            value={searchText}
-            maxLength={100}
-            placeholder="Stem or topic"
-            onChange={(event) => setSearchText(event.target.value)}
-            className={boxInputClass}
-          />
-        </label>
-        <label className="grid gap-2">
-          <MonoLabel>Topic</MonoLabel>
-          <select
-            className={selectClass}
-            value={filters.topic}
-            onChange={(event) => setFilters((current) => ({ ...current, topic: event.target.value }))}
-          >
-            <option value="">All topics</option>
-            {topics.map((item) => (
-              <option key={item.topic} value={item.topic}>
-                {item.topic} ({item.count})
-              </option>
-            ))}
-            {filters.topic && !topics.some((item) => item.topic === filters.topic) && (
-              <option value={filters.topic}>{filters.topic}</option>
-            )}
-          </select>
-        </label>
-        <label className="grid gap-2">
-          <MonoLabel>Difficulty</MonoLabel>
-          <select
-            className={selectClass}
-            value={filters.difficulty}
-            onChange={(event) => setFilters((current) => ({ ...current, difficulty: event.target.value }))}
-          >
-            <option value="">Any difficulty</option>
-            {[1, 2, 3, 4, 5].map((level) => (
-              <option key={level} value={String(level)}>
-                {level} of 5
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-2">
-          <MonoLabel>Kind</MonoLabel>
-          <select
-            className={selectClass}
-            value={filters.kind}
-            onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}
-          >
-            <option value="">Any kind</option>
-            {KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {KIND_LABEL[kind]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </form>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] lg:gap-10">
+      <div className="grid min-w-0 content-start gap-6">
+        <form
+          role="search"
+          aria-label="Filter questions"
+          onSubmit={(event) => event.preventDefault()}
+          className="grid gap-4 border-y border-ink py-5 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]"
+        >
+          <label className="grid gap-2">
+            <MonoLabel>Search</MonoLabel>
+            <input
+              type="search"
+              value={searchText}
+              maxLength={100}
+              placeholder="Stem or topic"
+              onChange={(event) => setSearchText(event.target.value)}
+              className={boxInputClass}
+            />
+          </label>
+          <label className="grid gap-2">
+            <MonoLabel>Topic</MonoLabel>
+            <select
+              className={selectClass}
+              value={filters.topic}
+              onChange={(event) => setFilters((current) => ({ ...current, topic: event.target.value }))}
+            >
+              <option value="">All topics</option>
+              {topics.map((item) => (
+                <option key={item.topic} value={item.topic}>
+                  {item.topic} ({item.count})
+                </option>
+              ))}
+              {filters.topic && !topics.some((item) => item.topic === filters.topic) && (
+                <option value={filters.topic}>{filters.topic}</option>
+              )}
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <MonoLabel>Difficulty</MonoLabel>
+            <select
+              className={selectClass}
+              value={filters.difficulty}
+              onChange={(event) => setFilters((current) => ({ ...current, difficulty: event.target.value }))}
+            >
+              <option value="">Any difficulty</option>
+              {[1, 2, 3, 4, 5].map((level) => (
+                <option key={level} value={String(level)}>
+                  {level} of 5
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <MonoLabel>Kind</MonoLabel>
+            <select
+              className={selectClass}
+              value={filters.kind}
+              onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}
+            >
+              <option value="">Any kind</option>
+              {KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {KIND_LABEL[kind]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <p role="status" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-          {status === "loading" ? (
-            <BrailleSpinner label="Loading questions" className="text-ink-soft" />
-          ) : status === "error" ? (
-            "Questions did not load"
-          ) : (
-            `${items.length} shown${nextCursor ? ", more available" : ""}`
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p role="status" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
+            {status === "loading" ? (
+              <BrailleSpinner label="Loading questions" className="text-ink-soft" />
+            ) : status === "error" ? (
+              "Questions did not load"
+            ) : (
+              `${items.length} shown${nextCursor ? ", more available" : ""}`
+            )}
+          </p>
+          {hasFilters && (
+            <Button variant="link" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
           )}
-        </p>
-        {hasFilters && (
-          <Button variant="link" size="sm" onClick={clearFilters}>
-            Clear filters
-          </Button>
+        </div>
+
+        {status === "error" && (
+          <div role="alert" className="grid gap-4 border border-vermilion-deep p-6">
+            <p className="text-xl font-medium tracking-[-0.02em]">We couldn&apos;t load the question bank.</p>
+            <div>
+              <Button variant="secondary" onClick={() => void load(filters)}>
+                Try again
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {status === "loading" && items.length === 0 && (
+          <div aria-busy="true" aria-label="Loading questions" className="grid gap-2">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="h-20 animate-pulse border border-rule bg-paper-raised motion-reduce:animate-none" />
+            ))}
+          </div>
+        )}
+
+        {status === "ready" && items.length === 0 && <EmptyState hasFilters={hasFilters} onClear={clearFilters} />}
+
+        {items.length > 0 && (
+          <ul aria-busy={status === "loading" || undefined} className="border-b border-rule">
+            {items.map((question, index) => (
+              <QuestionRow
+                key={question.id}
+                index={index}
+                question={question}
+                selected={selected?.id === question.id}
+                onSelect={() => setSelectedId(question.id)}
+                onDelete={() => setPendingDelete(question)}
+              />
+            ))}
+          </ul>
+        )}
+
+        {nextCursor && (
+          <div className="flex justify-center">
+            <Button variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>
+              Load more
+            </Button>
+          </div>
         )}
       </div>
 
-      {status === "error" && (
-        <div role="alert" className="grid gap-4 border border-vermilion-deep p-6">
-          <p className="text-xl font-medium tracking-[-0.02em]">We couldn&apos;t load the question bank.</p>
-          <div>
-            <Button variant="secondary" onClick={() => void load(filters)}>
-              Try again
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {status === "loading" && items.length === 0 && (
-        <div aria-busy="true" aria-label="Loading questions" className="grid gap-3">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="h-28 animate-pulse border border-rule bg-paper-raised motion-reduce:animate-none" />
-          ))}
-        </div>
-      )}
-
-      {status === "ready" && items.length === 0 && (
-        <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
-      )}
-
-      {items.length > 0 && (
-        <ul aria-busy={status === "loading" || undefined} className="divide-y divide-rule border-t border-rule">
-          {items.map((question) => (
-            <QuestionRow key={question.id} question={question} onDelete={() => setPendingDelete(question)} />
-          ))}
-        </ul>
-      )}
-
-      {nextCursor && (
-        <div className="flex justify-center">
-          <Button variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>
-            Load more
-          </Button>
-        </div>
-      )}
+      <aside aria-label="Question preview" className="grid content-start gap-4 lg:sticky lg:top-6">
+        {selected ? <BankPreview question={selected} /> : <p className="border border-rule p-5 text-sm text-ink-muted">Select a question to preview it.</p>}
+      </aside>
 
       <DeleteDialog
         question={pendingDelete}
@@ -264,26 +282,59 @@ export function QuestionBank() {
   );
 }
 
-function QuestionRow({ question, onDelete }: { question: Question; onDelete: () => void }) {
-  const stem = question.stem.length > 240 ? `${question.stem.slice(0, 240)}…` : question.stem;
+/** Observed facility as a mini bar: the share of marks real candidates earned on this question. */
+function ObservedBar({ value }: { value: number | null }) {
+  if (value === null) return <span className="font-mono text-[11px] text-ink-muted">No data</span>;
+  const pct = Math.min(100, Math.max(0, value * 100));
+  return (
+    <span className="inline-flex items-center gap-2 font-mono text-[11px] text-ink-soft tabular-nums">
+      <span aria-hidden="true" className="relative block h-1.5 w-16 bg-paper-sunk">
+        <span className="absolute inset-0 origin-left bg-cobalt transition-transform duration-(--duration-slow) ease-(--ease-enter)" style={{ transform: `scaleX(${pct / 100})` }} />
+      </span>
+      {Math.round(pct)}%
+    </span>
+  );
+}
+
+function QuestionRow({
+  index,
+  question,
+  selected,
+  onSelect,
+  onDelete,
+}: {
+  index: number;
+  question: Question;
+  selected: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  const stem = question.stem.length > 180 ? `${question.stem.slice(0, 180)}…` : question.stem;
   const href = `/app/examiner/questions/${question.id}`;
 
   return (
-    <li className="grid gap-4 py-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-8">
-      <div className="grid min-w-0 gap-3">
+    <li
+      className={cn(
+        "grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-3 border-t border-rule py-4 transition-colors duration-(--duration-fast)",
+        selected ? "bg-paper-raised" : "hover:bg-paper-raised/60",
+      )}
+    >
+      <span className="pt-1 font-mono text-[11px] text-ink-muted tabular-nums">{String(index + 1).padStart(2, "0")}</span>
+      <div className="grid min-w-0 gap-2">
         <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{question.topic}</p>
-        <Link
-          href={href}
-          className="line-clamp-2 font-sans text-lg leading-snug text-ink transition-colors duration-(--duration-fast) hover:text-vermilion-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={selected}
+          className="line-clamp-2 cursor-pointer text-left font-sans text-base leading-snug text-ink transition-colors duration-(--duration-fast) hover:text-vermilion-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
         >
           {stem}
-        </Link>
-        <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 font-mono text-[11px] tracking-[0.08em] uppercase">
+        </button>
+        <dl className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[11px] tracking-[0.06em] uppercase">
           <div className="flex items-center gap-2">
             <dt className="sr-only">Difficulty</dt>
-            <dd className="flex items-center gap-2">
+            <dd>
               <DifficultySquares value={question.difficulty} />
-              <span className="text-ink-muted">{question.difficulty}/5</span>
             </dd>
           </div>
           <div>
@@ -294,16 +345,17 @@ function QuestionRow({ question, onDelete }: { question: Question; onDelete: () 
           </div>
           <div className="text-ink-soft">
             <dt className="sr-only">Marks</dt>
-            <dd>
-              {question.marks} {question.marks === 1 ? "mark" : "marks"}
-              {question.negativeMarks > 0 && <span className="text-ink-muted"> / −{question.negativeMarks}</span>}
+            <dd className="tabular-nums">
+              {formatMarks(question.marks)} {question.marks === 1 ? "mark" : "marks"}
             </dd>
           </div>
-          <div className="text-ink-soft">
-            <dt className="sr-only">Observed</dt>
-            <dd>{formatObserved(question)}</dd>
+          <div>
+            <dt className="sr-only">Observed facility</dt>
+            <dd title={formatObserved(question)}>
+              <ObservedBar value={question.observedFacility} />
+            </dd>
           </div>
-          <div className="text-ink-muted">
+          <div className="text-ink-muted normal-case">
             <dt className="inline">Updated </dt>
             <dd className="inline">
               <time dateTime={question.updatedAt}>{formatUpdated(question.updatedAt)}</time>
@@ -311,8 +363,8 @@ function QuestionRow({ question, onDelete }: { question: Question; onDelete: () 
           </div>
         </dl>
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-        <Button asChild variant="secondary" size="sm">
+      <div className="flex flex-col items-end gap-1">
+        <Button asChild variant="ghost" size="sm">
           <Link href={href} aria-label={`Edit question: ${stem.slice(0, 60)}`}>
             Edit
           </Link>
@@ -328,6 +380,71 @@ function QuestionRow({ question, onDelete }: { question: Question; onDelete: () 
         </Button>
       </div>
     </li>
+  );
+}
+
+/** The live candidate-style view of the selected question. Options show their key, because examiners read this screen. */
+function BankPreview({ question }: { question: Question }) {
+  const written = question.kind === "written";
+  return (
+    <section aria-labelledby="bank-preview-heading" className="grid gap-5 border border-ink bg-paper-raised p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="bank-preview-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">
+          <span className="text-cobalt-deep tabular-nums">Preview</span>
+          <span aria-hidden="true" className="text-ink-muted"> / </span>
+          v{question.version}
+        </h2>
+        <KindChip kind={question.kind} />
+      </div>
+      <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{question.topic}</p>
+      <p className="font-sans text-lg leading-relaxed whitespace-pre-line text-ink">{question.stem}</p>
+
+      {written ? (
+        <div className="grid gap-2">
+          <div aria-hidden="true" className="flex h-24 items-start border border-ink bg-paper p-3 font-sans text-sm text-ink-muted">
+            Answer area{question.maxWords ? `, ${question.maxWords} words` : ""}
+          </div>
+          {question.rubric && <p className="text-sm text-ink-soft">Rubric: {question.rubric}</p>}
+        </div>
+      ) : (
+        <ul className="grid gap-2" aria-label="Options">
+          {question.options.map((option) => {
+            const isKey = question.correct.includes(option.id);
+            return (
+              <li
+                key={option.id}
+                className={cn("flex items-start gap-3 border p-3 text-base", isKey ? "border-ink bg-paper" : "border-rule bg-paper")}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn("mt-1 size-3.5 shrink-0 border border-ink", isKey && "bg-ink")}
+                />
+                <span className="min-w-0 break-words">{option.text}</span>
+                {isKey && <span className="ml-auto shrink-0 font-mono text-[10px] tracking-[0.12em] uppercase">Key</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <dl className="grid grid-cols-2 gap-x-5 gap-y-4 border-t border-rule pt-4">
+        <div className="grid gap-1">
+          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Difficulty</dt>
+          <dd>
+            <DifficultySquares value={question.difficulty} />
+          </dd>
+        </div>
+        <div className="grid gap-1">
+          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Marks</dt>
+          <dd className="text-2xl font-medium tabular-nums">{formatMarks(question.marks)}</dd>
+        </div>
+        <div className="col-span-2 grid gap-1">
+          <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Observed facility</dt>
+          <dd className="font-sans text-sm text-ink-soft">{formatObserved(question)}</dd>
+        </div>
+      </dl>
+      {question.explanation && <p className="border-l-2 border-ink pl-3 text-sm text-ink-soft">{question.explanation}</p>}
+    </section>
   );
 }
 

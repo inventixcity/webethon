@@ -28,12 +28,12 @@ export function MagneticCta({
       data-theme={tone === "vermilion" ? "light" : undefined}
       onClick={() => router.push(href)}
       className={cn(
-        "inline-flex h-14 items-center justify-center gap-3 px-8 font-mono text-[12px] tracking-[0.14em] uppercase transition-colors duration-(--duration-base) ease-(--ease-enter) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+        "inline-flex h-14 items-center justify-center gap-3 px-8 font-mono text-[12px] tracking-[0.14em] uppercase transition-colors duration-(--duration-base) ease-(--ease-enter) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         // The base is paper and the fill layer is ink, with a difference-blended label. Each tone overrides both,
         // so the label stays paper-coloured on a solid fill.
         tone === "ink"
-          ? "border-ink bg-ink [&>span:first-child]:bg-vermilion-deep [&>span:nth-child(2)]:mix-blend-normal [&>span:nth-child(2)]:text-paper"
-          : "border-vermilion-deep bg-vermilion-deep [&>span:first-child]:bg-ink [&>span:nth-child(2)]:mix-blend-normal [&>span:nth-child(2)]:text-paper",
+          ? "border-fill bg-fill text-on-fill [&>span:first-child]:bg-vermilion-deep [&>span:nth-child(2)]:mix-blend-normal [&>span:nth-child(2)]:text-on-fill"
+          : "border-vermilion-deep bg-vermilion-deep [&>span:first-child]:bg-fill [&>span:nth-child(2)]:mix-blend-normal [&>span:nth-child(2)]:text-on-fill",
         className,
       )}
     >

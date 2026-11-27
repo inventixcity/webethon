@@ -37,13 +37,37 @@
   --rule: rgb(18 17 14 / 0.16);
   /* Behind a modal: dims the page without inverting it in dark mode. */
   --scrim: rgb(18 17 14 / 0.42);
+  /* Semantic fills. Light mode: ink fills with paper text. */
+  --fill: #12110e;
+  --on-fill: #f3eee3;
+  --surface-1: #fbf8f1;
+  --surface-2: #f3eee3;
+  --surface-3: #e9e2d3;
+  --hover-fill: #e9e2d3;
+  --wipe-vermilion: #b92d13;
+  --wipe-cobalt: #2b4fd8;
+  --on-amber: #12110e;
+  --focus: #2b4fd8;
+  --chip-border: #2b4fd8;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --paper: #12110e;
-  --paper-raised: #1c1a16;
-  --paper-sunk: #0b0a08;
+  /* Shades of black for every surface. Ivory is for text only. */
+  --paper: #0d0c0a;
+  --paper-raised: #15140f;
+  --paper-sunk: #080706;
+  --surface-1: #15140f;
+  --surface-2: #1c1a16;
+  --surface-3: #24221d;
+  --hover-fill: #24221d;
+  --fill: #2c2a24;
+  --on-fill: #f3eee3;
+  --wipe-vermilion: #b92d13;
+  --wipe-cobalt: #3a5be0;
+  --on-amber: #0d0c0a;
+  --focus: #7c97ff;
+  --chip-border: #7c97ff;
   --ink: #f3eee3;
   --ink-soft: #cfc9bb;
   --ink-muted: #9b9587;
@@ -54,8 +78,8 @@
   --cobalt-deep: #a9bbff;
   --amber: #f0a85a;
   --amber-deep: #f7c48a;
-  --rule: rgb(243 238 227 / 0.16);
-  --scrim: rgb(0 0 0 / 0.62);
+  --rule: rgb(243 238 227 / 0.12);
+  --scrim: rgb(0 0 0 / 0.72);
 }
 
 /* Redeclared on every scope, so a themed panel recalculates these from its own colours. */
@@ -101,6 +125,17 @@
   --color-amber-deep: var(--amber-deep);
   --color-rule: var(--rule);
   --color-scrim: var(--scrim);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-hover: var(--hover-fill);
+  --color-fill: var(--fill);
+  --color-on-fill: var(--on-fill);
+  --color-wipe-vermilion: var(--wipe-vermilion);
+  --color-wipe-cobalt: var(--wipe-cobalt);
+  --color-on-amber: var(--on-amber);
+  --color-focus: var(--focus);
+  --color-chip-border: var(--chip-border);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -155,6 +190,9 @@
   --animate-sheet-in: sheet-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-march: march 8s linear infinite;
   --animate-breathe: breathe 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-hairline-tone: hairline-tone 14s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+  --animate-hairline-spark: hairline-spark 9s linear infinite;
+  --animate-sheen: sheen 4.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 
   @keyframes ticker {
     to {
@@ -222,6 +260,36 @@
     }
   }
 
+  /* The accent hairline under page headers: cobalt rests, amber rises over it and falls back. */
+  @keyframes hairline-tone {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* A short cobalt spark that travels the hairline. */
+  @keyframes hairline-spark {
+    from {
+      transform: translate3d(-15%, 0, 0);
+    }
+    to {
+      transform: translate3d(115%, 0, 0);
+    }
+  }
+
+  /* A light band that crosses a progress fill, so a meter reads as live. */
+  @keyframes sheen {
+    from {
+      transform: translate3d(-120%, 0, 0);
+    }
+    to {
+      transform: translate3d(320%, 0, 0);
+    }
+  }
+
   @keyframes shake {
     20%,
     60% {
@@ -280,9 +348,19 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--vermilion);
+    outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
+
+}
+
+/*
+ * In dark mode, ink used as a fill is the graphite shade, not ivory, and its text stays ivory. Unlayered on purpose:
+ * utilities sit in a later cascade layer than base, so a base rule would lose to bg-ink. Text-only ink is unchanged.
+ */
+[data-theme="dark"] .bg-ink {
+  background-color: var(--fill);
+  color: var(--on-fill);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -320,4 +398,29 @@
     --duration-base: 0ms;
     --duration-slow: 0ms;
   }
+}
+
+/* Slight paper grain for editorial frames. Static, and the same in both modes. */
+.grain {
+  position: relative;
+}
+
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+[data-theme="dark"] .grain::after {
+  mix-blend-mode: screen;
+  opacity: 0.1;
+}
+
+/* Sections with an id are jump targets, so they land below the sticky landing header. */
+section[id] {
+  scroll-margin-top: 4rem;
 }

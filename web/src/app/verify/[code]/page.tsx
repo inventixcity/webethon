@@ -8,6 +8,7 @@ export default async function CertificateVerificationPage({ params }: { params: 
   const { code } = await params;
   return (
     <CertificateCheck
+      key={code}
       code={code}
       background={
         hasArt("verify-bg") ? <Art name="verify-bg" alt="" sizes="100vw" className="size-full" /> : null

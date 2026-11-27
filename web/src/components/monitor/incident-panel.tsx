@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { api } from "@/lib/api/client";
+import { cn } from "@/lib/utils";
 import type { IntegrityReport, Outage } from "@/lib/exam/types";
 import { FieldError } from "@/components/feedback/field-error";
 import { useToast } from "@/components/feedback/toaster";
@@ -16,6 +18,8 @@ import { BrailleSpinner } from "@/components/loaders/text-loaders";
 
 export const INDICATOR_NOTICE = "Indicators support human review. They are not evidence of misconduct.";
 const TIMELINE_LIMIT = 200;
+/** Timeline ticks: warnings take amber (caution), notices cobalt (information), the rest stay neutral. */
+const SEVERITY_FILL: Record<string, string> = { warning: "bg-amber", notice: "bg-cobalt", info: "bg-ink-muted" };
 
 type CreditDraft = { outage: Outage; seconds: number; reason: string };
 
@@ -46,6 +50,7 @@ export function IncidentPanel({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const draftRef = useRef<CreditDraft | null>(null);
+  const reduced = useReducedMotion() ?? false;
 
   useEffect(() => {
     draftRef.current = draft;
@@ -117,10 +122,13 @@ export function IncidentPanel({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-ink/60" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section
+      <motion.section
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        initial={reduced ? false : { x: "100%" }}
+        animate={{ x: 0 }}
+        transition={reduced ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className="grid h-full w-full max-w-2xl content-start gap-8 overflow-y-auto border-l border-ink bg-paper p-5 text-ink md:p-8"
       >
         <header className="grid gap-3 border-b border-ink pb-5">
@@ -233,20 +241,27 @@ export function IncidentPanel({
                 <p className="border border-rule p-4 text-sm text-ink-muted">No events recorded.</p>
               ) : (
                 <>
-                  <ol className="divide-y divide-rule border-y border-rule">
+                  <ol aria-label="Event timeline" className="relative ml-2 grid gap-5 border-l border-rule py-1 pl-6">
                     {events.slice(0, TIMELINE_LIMIT).map((event) => (
-                      <li key={event.id} className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 py-3 text-sm">
-                        <time dateTime={event.recordedAt} className="font-mono text-[11px] text-ink-muted">
-                          {formatDateTime(event.recordedAt)}
-                        </time>
-                        <p className="font-mono text-xs tracking-[0.04em]">
-                          {event.kind}
-                          <span className="ml-2 text-ink-muted uppercase">{event.severity}</span>
-                        </p>
+                      <li key={event.id} className="relative grid gap-1 text-sm">
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute top-1.5 -left-[29px] size-2.5 border border-paper",
+                            SEVERITY_FILL[event.severity] ?? "bg-ink-muted",
+                          )}
+                        />
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                          <time dateTime={event.recordedAt} className="font-mono text-[11px] text-ink-muted tabular-nums">
+                            {formatDateTime(event.recordedAt)}
+                          </time>
+                          <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-ink-soft">
+                            {event.severity}
+                          </span>
+                        </div>
+                        <p className="font-mono text-xs tracking-[0.04em]">{event.kind}</p>
                         {event.durationMs !== null && (
-                          <p className="col-start-2 font-mono text-[11px] text-ink-soft">
-                            Lasted {formatSeconds(event.durationMs / 1000)}
-                          </p>
+                          <p className="font-mono text-[11px] text-ink-soft">Lasted {formatSeconds(event.durationMs / 1000)}</p>
                         )}
                       </li>
                     ))}
@@ -261,7 +276,7 @@ export function IncidentPanel({
             </section>
           </>
         )}
-      </section>
+      </motion.section>
 
       <ConfirmDialog
         open={draft !== null}

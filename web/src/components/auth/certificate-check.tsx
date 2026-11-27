@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { type RadarStatus, RadarScene } from "@/components/ascii/scenes/radar";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 /** The radar has six contacts. Each one follows every second character of the 12 character code. */
 const CONTACTS = 6;
 const CODE_CHARS = 12;
+/** How long the radar keeps scanning after the last keystroke. */
+const TYPING_PAUSE_MS = 700;
 
 /** Keeps the code in the XXXX-XXXX-XXXX shape, upper case, with no characters that look alike. */
 function mask(value: string) {
@@ -38,18 +40,50 @@ function statusLine(clean: string, loading: boolean, result: VerificationResult 
   return clean.length < CODE_CHARS ? `Reading the code, ${clean.length} of ${CODE_CHARS}` : "Ready to check";
 }
 
-const linkStyle = "underline underline-offset-4 hover:text-vermilion-deep";
+/**
+ * The issue date. The API sends an ISO string, or the time crate's tuple [year, ordinal day, hour, minute, second,
+ * nanoseconds, ...] for some rows. Both are read here, so a row never shows "Invalid Date".
+ */
+function issuedLabel(value: unknown): string {
+  if (Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number") {
+    const [year, ordinal, hour = 0, minute = 0, second = 0] = value as number[];
+    const date = new Date(Date.UTC(year ?? 1970, 0, ordinal ?? 1, hour, minute, second));
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString();
+  }
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  }
+  return "";
+}
+
+const label = "font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase";
+
+/*
+ * The result band is a fixed colour panel. data-theme="light" keeps its text pairs the same in both modes:
+ * ivory on cobalt and vermilion, ink on amber.
+ */
+const bandStyle = {
+  valid: "bg-cobalt text-paper",
+  revoked: "bg-amber text-ink",
+  invalid: "bg-vermilion text-paper",
+  checking: "bg-paper-sunk text-ink",
+} as const;
 
 /**
- * The public certificate check. The radar is the visual while a code is typed or checked. It locks on a valid
- * certificate, and shows a no-match burst for an invalid or revoked one. The result card is shown in full.
+ * The public certificate check, laid out for one laptop screen. The code and its result sit on the left, and the
+ * radar is the hero on the right. It scans while the code is typed or checked, locks on a valid certificate, and
+ * shows a no-match burst for an invalid or revoked one. On phones the radar is a band above the form.
  */
 export function CertificateCheck({ code, background }: { code?: string; background?: ReactNode }) {
+  const router = useRouter();
   const [radar] = useState(() => new RadarScene());
   const [value, setValue] = useState(mask(code ?? ""));
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(code));
+  const [typing, setTyping] = useState(false);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const clean = value.replaceAll("-", "");
 
@@ -71,50 +105,67 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
     };
   }, [code]);
 
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, []);
+
   // The radar follows the typed digits as they arrive.
   useEffect(() => {
     radar.setCode(radarCode(clean));
   }, [radar, clean]);
 
-  // Scanning while the code is fetched, then locked for a valid certificate and no match otherwise.
-  const radarState: RadarStatus = loading ? "checking" : result?.valid ? "locked" : result ? "wrong" : "listening";
+  // Scanning while typing or fetching, locked on a valid certificate, and a no-match burst otherwise.
+  const radarState: RadarStatus = loading || typing ? "checking" : result?.valid ? "locked" : result ? "wrong" : "listening";
   useEffect(() => {
     radar.setStatus(radarState);
   }, [radar, radarState]);
 
-  function onChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function onChange(event: ChangeEvent<HTMLInputElement>) {
     setValue(mask(event.target.value));
-    // Typing returns the radar to its idle sweep until the code is checked.
-    radar.setStatus("listening");
+    setTyping(true);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => setTyping(false), TYPING_PAUSE_MS);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (clean.length !== CODE_CHARS) return;
-    window.location.assign(`/verify/${encodeURIComponent(value)}`);
+    router.push(`/verify/${encodeURIComponent(value)}`);
   }
 
-  const state = result?.valid ? "VALID CERTIFICATE" : result?.revoked ? "REVOKED CERTIFICATE" : "INVALID CERTIFICATE";
+  const band = loading
+    ? { style: bandStyle.checking, text: "Checking" }
+    : error
+      ? { style: bandStyle.invalid, text: "Could not verify" }
+      : result?.valid
+        ? { style: bandStyle.valid, text: "Valid certificate" }
+        : result?.revoked
+          ? { style: bandStyle.revoked, text: "Revoked certificate" }
+          : result
+            ? { style: bandStyle.invalid, text: "Invalid certificate" }
+            : null;
+
+  const signal = radarState === "checking" ? "Scanning" : radarState === "locked" ? "Locked" : radarState === "wrong" ? "No match" : "Listening";
 
   return (
-    <main className="relative isolate min-h-screen overflow-hidden bg-paper px-5 py-12 text-ink sm:px-10">
-      {background ? <div className="pointer-events-none absolute inset-0 -z-10 opacity-70">{background}</div> : null}
-      <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,6fr)] lg:gap-16">
-        <div>
-          <div className="mb-12 h-0.5 w-16 bg-vermilion" />
-          <p className="font-mono text-xs tracking-[0.12em] text-ink-muted uppercase">Inventix Invigil / Public record</p>
-          <h1 className="mt-4 text-5xl font-semibold tracking-[-0.04em] sm:text-7xl">
-            {code ? "Certificate check." : "Verify a result."}
+    <main className="flex flex-1 flex-col px-5 pt-6 pb-12 sm:px-10 lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden lg:px-12 lg:py-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-10 lg:grid lg:h-full lg:grid-cols-12 lg:gap-12">
+        <section aria-labelledby="verify-title" className="flex flex-col justify-center lg:col-span-5 lg:min-h-0">
+          <p className={label}>Verify / Certificate</p>
+          <h1 id="verify-title" className="mt-3 text-5xl leading-[0.95] font-semibold tracking-[-0.03em] lg:text-[3.5rem]">
+            Check a result.
           </h1>
-          {!code && (
-            <p className="mt-6 max-w-xl text-base text-ink-soft">
-              Enter the 12 character certificate code printed on the result statement.
-            </p>
-          )}
+          <p className="mt-3 max-w-md text-base text-ink-soft">
+            {code
+              ? "Showing the signed, masked statement for this code."
+              : "Enter the 12 character certificate code printed on the result statement."}
+          </p>
 
-          <form onSubmit={submit} className="mt-10 flex max-w-xl flex-col gap-4 sm:flex-row sm:items-end">
-            <label className="block flex-1">
-              <span className="font-mono text-xs tracking-[0.12em] uppercase">Certificate code</span>
+          <form onSubmit={submit} className="mt-7 flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="block min-w-0 flex-1">
+              <span className={cn(label, "text-ink")}>Certificate code</span>
               <Input
                 aria-label="Certificate code"
                 autoComplete="off"
@@ -131,85 +182,115 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
             </Button>
           </form>
 
-          <section className="mt-10 border-t border-rule pt-7">
-            <p
-              aria-live="polite"
-              role="status"
-              className={cn(
-                "font-mono text-xs tracking-[0.12em] uppercase",
-                error || result ? "text-vermilion-deep" : "text-ink-muted",
-              )}
-            >
-              {statusLine(clean, loading, result, error)}
-            </p>
-
-            {error && (
-              <div role="alert" className="mt-6">
-                <h2 className="text-2xl font-semibold">Could not verify</h2>
-                <p className="mt-3 text-ink-muted">{error}</p>
-              </div>
+          <div className="mt-3 flex min-h-10 max-w-md flex-wrap items-center justify-between gap-x-6 gap-y-2">
+            {loading || error || result ? null : (
+              <p
+                aria-live="polite"
+                role="status"
+                className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase"
+              >
+                {statusLine(clean, loading, result, error)}
+              </p>
             )}
+            {code ? (
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="secondary" size="sm" onClick={() => router.push("/verify")}>
+                  Check another code
+                </Button>
+              </div>
+            ) : null}
+          </div>
 
-            {result && !loading && (
-              <div className="mt-6">
-                <p className="font-mono text-xs tracking-[0.12em] text-vermilion-deep uppercase">{state}</p>
-                {result.statement && (
-                  <dl className="mt-7 grid gap-5 sm:grid-cols-2">
+          {(loading || error || result) && (
+            <article aria-label="Result" className="mt-4 max-w-xl border border-rule bg-paper-raised">
+              {band ? (
+                <div
+                  data-theme="light"
+                  role="status"
+                  aria-live="polite"
+                  className={cn("px-5 py-2.5 font-mono text-[11px] tracking-[0.14em] uppercase", band.style)}
+                >
+                  {band.text}
+                </div>
+              ) : null}
+
+              <div className="space-y-3.5 p-4 sm:p-5">
+                {error && (
+                  <div role="alert">
+                    <h2 className="text-xl font-semibold">Could not verify</h2>
+                    <p className="mt-2 text-ink-muted">{error}</p>
+                  </div>
+                )}
+
+                {result && !loading && result.statement && (
+                  <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                     <div>
-                      <dt className="font-mono text-xs tracking-[0.12em] text-ink-muted uppercase">Candidate</dt>
-                      <dd className="mt-1 text-xl">{result.statement.candidate}</dd>
+                      <dt className={label}>Candidate</dt>
+                      <dd className="mt-1 text-base">{result.statement.candidate}</dd>
                     </div>
                     <div>
-                      <dt className="font-mono text-xs tracking-[0.12em] text-ink-muted uppercase">Examination</dt>
-                      <dd className="mt-1 text-xl">{result.statement.examTitle}</dd>
-                    </div>
-                    <div>
-                      <dt className="font-mono text-xs tracking-[0.12em] text-ink-muted uppercase">Result</dt>
-                      <dd className="mt-1 text-xl">
+                      <dt className={label}>Result</dt>
+                      <dd className="mt-1 text-base">
                         {result.statement.percent}% · {result.statement.passed ? "Passed" : "Not passed"}
                       </dd>
                     </div>
+                    <div className="sm:col-span-2">
+                      <dt className={label}>Examination</dt>
+                      <dd className="mt-1 text-base">{result.statement.examTitle}</dd>
+                    </div>
                     <div>
-                      <dt className="font-mono text-xs tracking-[0.12em] text-ink-muted uppercase">Issued</dt>
-                      <dd className="mt-1 text-xl">{new Date(result.statement.issuedAt).toLocaleDateString()}</dd>
+                      <dt className={label}>Issued</dt>
+                      <dd className="mt-1 text-base">{issuedLabel(result.statement.issuedAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className={label}>Certificate ID</dt>
+                      <dd className="mt-1 font-mono text-xs break-all">{result.statement.certificateId}</dd>
                     </div>
                   </dl>
                 )}
-                {result.signature && (
-                  <p className="mt-7 font-mono text-xs tracking-[0.1em] uppercase">
+
+                {result && !loading && !result.statement && (
+                  <p className="text-ink-muted">No statement is available for this code.</p>
+                )}
+
+                {result && !loading && result.signature && (
+                  <p className="border-t border-rule pt-3 font-mono text-[11px] tracking-[0.06em] uppercase">
                     Signed with Ed25519 · key {result.signature.keyId}
                     {result.signature.valid ? " · signature valid" : " · signature invalid"}
                   </p>
                 )}
-                <p className="mt-8 max-w-2xl border-t border-rule pt-5 text-sm text-ink-muted">
-                  The signature verifies that the masked statement was issued by Inventix Invigil and has not been
-                  changed. This check does not show email addresses, candidate identifiers, answers, or per-question
-                  marks.
-                </p>
+
+                {result && !loading && (
+                  <p className="border-t border-rule pt-3 text-xs leading-snug text-ink-muted">
+                    The signature verifies that the masked statement was issued by Inventix Invigil and has not been
+                    changed. This check does not show email addresses, candidate identifiers, answers, or per-question
+                    marks.
+                  </p>
+                )}
               </div>
-            )}
-          </section>
+            </article>
+          )}
 
           {!code && (
-            <p className="mt-12 max-w-xl border-t border-rule pt-5 text-sm text-ink-muted">
+            <p className="mt-8 max-w-xl border-t border-rule pt-4 text-sm text-ink-muted">
               Verification checks the signed, masked certificate statement and whether it has been revoked. It does not
               reveal candidate contact details or exam answers.
             </p>
           )}
-          <Link
-            href={code ? "/verify" : "/"}
-            className={cn("mt-10 inline-block font-mono text-xs tracking-[0.12em] uppercase", linkStyle)}
-          >
-            {code ? "Enter another code" : "Inventix Invigil"}
-          </Link>
-        </div>
+        </section>
 
-        <div className="relative min-h-[44dvh] border-rule lg:border-l lg:pl-12">
-          <AsciiCanvas
-            scene={radar}
-            className="absolute inset-0 size-full"
-          />
-        </div>
+        <figure className="order-first flex h-[min(88vw,380px)] flex-col border border-rule bg-paper sm:h-[min(70vw,420px)] lg:order-none lg:h-full lg:min-h-0 lg:col-span-7">
+          <figcaption className="flex items-center justify-between gap-4 border-b border-rule px-4 py-2.5 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+            <span>Signal / Ed25519</span>
+            <span className={radarState === "locked" ? "text-cobalt-deep" : radarState === "wrong" ? "text-vermilion-deep" : undefined}>
+              {signal}
+            </span>
+          </figcaption>
+          <div className="relative min-h-0 flex-1">
+            {background ? <div className="pointer-events-none absolute inset-0 opacity-15 grayscale">{background}</div> : null}
+            <AsciiCanvas scene={radar} maxFont={40} className="absolute inset-0 size-full" />
+          </div>
+        </figure>
       </div>
     </main>
   );

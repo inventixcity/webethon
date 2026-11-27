@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { SidebarTide } from "./sidebar-tide";
+import { LivePulse } from "@/components/ui/live-pulse";
 import { LogOut, Menu, X } from "lucide-react";
 import { useExam } from "@/components/exams/use-resource";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -34,7 +36,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
     <div className="min-h-dvh bg-paper text-ink">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:bg-paper focus:px-4 focus:py-3 focus:outline-2 focus:outline-vermilion"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:bg-paper focus:px-4 focus:py-3 focus:outline-2 focus:outline-focus"
       >
         Skip to content
       </a>
@@ -69,15 +71,16 @@ type FrameProps = { user: ShellUser; home: string; groups: ReturnType<typeof nav
 function SidebarBody({ user, home, groups, onNavigate }: FrameProps & { onNavigate?: () => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-16 shrink-0 items-center border-b border-ink px-5">
-        <Link href={home} onClick={onNavigate} className="flex min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion">
-          <span className="grid size-8 shrink-0 place-items-center bg-ink font-mono text-sm font-bold text-paper">{siteConfig.mark}</span>
+      <div className="relative flex h-24 shrink-0 items-end overflow-hidden border-b border-ink px-5 pb-4">
+        <SidebarTide />
+        <Link href={home} onClick={onNavigate} className="relative flex min-w-0 items-center gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          <span className="grid size-8 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill">{siteConfig.mark}</span>
           <span className="truncate font-mono text-[12px] tracking-[0.14em] uppercase">{siteConfig.name}</span>
         </Link>
       </div>
 
       <div className="shrink-0 px-5 pt-5">
-        <Badge tone="outline">{ROLE_LABEL[user.role] ?? "Account"}</Badge>
+        <Badge tone="chip">{ROLE_LABEL[user.role] ?? "Account"}</Badge>
       </div>
 
       <nav aria-label="Main" className="grid min-h-0 flex-1 content-start gap-7 overflow-y-auto px-3 py-6">
@@ -120,9 +123,9 @@ function NavLink({ item, onNavigate, compact = false }: { item: NavItem; onNavig
       aria-current={active ? "page" : undefined}
       onClick={onNavigate}
       className={cn(
-        "flex items-center gap-3 transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+        "flex items-center gap-3 transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         compact ? "h-10 px-2 text-ink-soft hover:text-ink" : "h-10 px-3 font-mono text-[12px] tracking-[0.08em] uppercase",
-        !compact && (active ? "bg-ink text-paper" : "text-ink-soft hover:bg-paper-sunk hover:text-ink"),
+        !compact && (active ? "relative bg-fill text-on-fill before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-cobalt" : "text-ink-soft hover:bg-hover hover:text-ink"),
       )}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -214,7 +217,7 @@ function Drawer({ open, onClose, children }: { open: boolean; onClose: () => voi
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
-      <button type="button" aria-label="Close menu" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-ink/40" />
+      <button type="button" aria-label="Close menu" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-scrim" />
       <div
         ref={panel}
         role="dialog"
@@ -239,7 +242,7 @@ function TopBar({ crumbs, home, onMenu }: { crumbs: Crumb[]; home: string; onMen
       <Button type="button" variant="secondary" size="icon" aria-label="Open menu" aria-haspopup="dialog" onClick={onMenu} className="size-10 shrink-0 lg:hidden">
         <Menu aria-hidden="true" className="size-5" />
       </Button>
-      <Link href={home} aria-label={siteConfig.name} className="grid size-8 shrink-0 place-items-center bg-ink font-mono text-sm font-bold text-paper lg:hidden">
+      <Link href={home} aria-label={siteConfig.name} className="grid size-8 shrink-0 place-items-center bg-fill font-mono text-sm font-bold text-on-fill lg:hidden">
         {siteConfig.mark}
       </Link>
 
@@ -268,7 +271,37 @@ function TopBar({ crumbs, home, onMenu }: { crumbs: Crumb[]; home: string; onMen
           })}
         </ol>
       </nav>
+      <OnlineStatus />
     </header>
+  );
+}
+
+const subscribeOnline = (onChange: () => void) => {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+};
+
+/** The connection state in the top bar. Cobalt and pulsing when online, vermilion when the browser is offline. */
+function OnlineStatus() {
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+  return (
+    <p role="status" className="hidden shrink-0 items-center gap-2 font-mono text-[11px] tracking-[0.12em] uppercase sm:flex">
+      {online ? (
+        <>
+          <LivePulse />
+          <span className="text-cobalt-deep">Online</span>
+        </>
+      ) : (
+        <>
+          <span aria-hidden="true" className="size-2 bg-vermilion" />
+          <span className="text-vermilion-deep">Offline</span>
+        </>
+      )}
+    </p>
   );
 }
 

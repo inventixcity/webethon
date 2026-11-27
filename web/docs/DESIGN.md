@@ -43,12 +43,51 @@ Tailwind classes: `bg-paper`, `bg-paper-raised`, `bg-paper-sunk`, `bg-ink`, `tex
 
 Three accents, each with one job. Use each sparingly, and only where its meaning is needed.
 
-- **Vermilion is the focal accent.** It is the one mark a view leads with: the focal stat, the focus ring, the page header rule and danger. Keep to one vermilion moment per view.
+- **Vermilion is the focal accent.** It is the one mark a view leads with: the focal stat, the primary call to action and danger. Focus is cobalt. Keep to one vermilion moment per view.
 - **Cobalt is for information and live status.** Use it for info badges, online and sync states, a running exam, and links on hover. Never for danger.
 - **Amber is for caution.** Use it for integrity indicators, warnings, and items that need review (review priority medium and high). Never for errors, which stay vermilion.
 - Dark mode lightens cobalt and amber so their text passes AA on the dark paper. Read the table above for each value.
+- **Cobalt also marks focus** (the focus ring in both modes), the active nav bar, the online state, and the hover wipe of secondary buttons.
+- **Amber also marks progress** (the top layer of the page-header hairline and meter sheen).
 
-`--rule` is a hairline colour: ink at 16% opacity.
+### Accents in motion
+
+Each accent is in motion, slowly and continuously, and every loop holds still under reduced motion and pauses when the tab is hidden or the element is off-screen. Only transform and opacity animate.
+
+- Live pulse dots (`LivePulse`): cobalt, breathing.
+- Page header hairline (`AccentRule`): cobalt, with an amber layer that rises and falls, and a cobalt spark travelling along it.
+- Meter fills (`Meter`): a light sheen crosses a filled bar.
+- Sidebar header (`SidebarTide`): a halftone tide, cobalt crest, the odd amber dot. It recolours on a mode change.
+- Secondary buttons: a cobalt wipe on hover.
+
+`--rule` is a hairline colour: ink at 16% opacity in light mode, ivory at 12% in dark mode.
+
+### Semantic tokens
+
+Use these for fills, not the raw ink or paper tokens. They change meaning by mode.
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--fill` | `#12110E` (ink) | `#2C2A24` (graphite) | Solid fills: primary buttons, active nav, solid badges |
+| `--on-fill` | `#F3EEE3` | `#F3EEE3` | Text on a fill |
+| `--surface-1` | `#FBF8F1` | `#15140F` | Raised panels and chips |
+| `--surface-2` | `#F3EEE3` | `#1C1A16` | Overlays |
+| `--surface-3` | `#E9E2D3` | `#24221D` | Strong sunk areas |
+| `--hover-fill` | `#E9E2D3` | `#24221D` | Ghost and row hover |
+| `--wipe-vermilion` | `#B92D13` | `#B92D13` | Vermilion wipe on a primary button (ivory text, 5.35:1) |
+| `--wipe-cobalt` | `#2B4FD8` | `#3A5BE0` | Cobalt wipe on a secondary button (ivory text, 4.8:1 or better) |
+| `--on-amber` | `#12110E` | `#0D0C0A` | Text on an amber fill |
+| `--focus` | `#2B4FD8` | `#7C97FF` | Focus ring, in both modes |
+
+Tailwind: `bg-fill text-on-fill`, `bg-surface-1`, `bg-hover`, `before:bg-wipe-cobalt`, `outline-focus`, `border-chip-border`.
+
+### Dark mode surfaces
+
+Dark mode is shades of black. The page is `#0D0C0A`, panels step up to `#15140F`, overlays to `#1C1A16`, hover to `#24221D`, and a strong fill is `#2C2A24`. Ivory is for text and hairlines only, never for a panel or fill.
+
+Filled `bg-ink` in dark mode becomes the graphite `--fill`, with `--on-fill` text, so existing call sites stay correct. Text-only `text-ink` stays ivory. The global rule that does this lives in `globals.css`, unlayered, because utilities would otherwise win over base rules.
+
+Contrast: body and muted text meet WCAG AA (4.5:1) on the page and on every surface above.
 
 The cobalt and amber rows use the light values above. Dark mode uses `#7C97FF` / `#A9BBFF` for cobalt and `#F0A85A` / `#F7C48A` for amber.
 
@@ -87,11 +126,11 @@ Every screen must work in both modes. The hex values above are the light mode. D
 
 Use `Button` from `@/components/ui/button`. Do not write button class strings by hand.
 
-- **Variants.** `primary`: ink fill, vermilion wipe on hover. `secondary`: ink outline, ink wipe. `danger`: vermilion fill. `ghost`: text with a `paper-sunk` background on hover. `link`: underlined text. `inverse` and `outline-inverse` are for paper-on-ink panels only.
+- **Variants.** `primary`: `--fill` (ink in light, graphite in dark), vermilion wipe on hover. `secondary`: ink outline, cobalt wipe on hover. `danger`: vermilion fill. `ghost`: text with a `paper-sunk` background on hover. `link`: underlined text. `inverse` and `outline-inverse` are for paper-on-ink panels only.
 - **Legacy names.** `default`, `outline` and `destructive` still render, as aliases of `primary`, `secondary` and `danger`. Migrate them when you touch a call site.
 - **Sizes.** `sm` 40px, `md` 48px (the default), `lg` 56px, and `icon`, a 48px square. Labels are mono, uppercase, 12px.
 - **States.** `loading` keeps the width, shows a square spinner, sets `aria-busy` and stops clicks. `disabled` keeps its size and takes a neutral token look: a panel fill for filled variants, a text-colour step for outline, ghost and link. Labels stay at 4.5:1 or better in both themes, and disabled takes no pointer events. `loading` keeps the variant look. `asChild` gives a link the same styles.
-- **Focus.** A 2px vermilion outline with a 2px offset, on `:focus-visible` only. Vermilion is the one accent, and it reads in both themes.
+- **Focus.** A 2px cobalt outline (`--focus`) with a 2px offset, on `:focus-visible` only. Cobalt reads in both themes.
 - **Hover and press.** A filled button wipes its colour panel across in 300ms. A press moves the button down 1px. Nothing else moves.
 - **Corners.** Square. Never add `rounded-*` to a button.
 

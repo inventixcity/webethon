@@ -13,14 +13,14 @@ import { cn } from "@/lib/utils";
  */
 
 const itemClass =
-  "relative inline-flex h-12 shrink-0 items-center gap-2 px-4 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vermilion";
+  "relative inline-flex h-12 shrink-0 items-center gap-2 px-4 font-mono text-[11px] tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
 
 function Count({ value, active }: { value: number; active: boolean }) {
   return (
     <span
       className={cn(
         "inline-grid h-5 min-w-5 place-items-center px-1 text-[10px] tabular-nums",
-        active ? "bg-ink text-paper" : "border border-rule text-ink-muted",
+        active ? "bg-fill text-on-fill" : "border border-rule text-ink-muted hover:text-ink",
       )}
     >
       {value}
@@ -49,7 +49,7 @@ function useIndicator(activeKey: string | null) {
   const indicator = box ? (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-px origin-left bg-ink transition-transform duration-(--duration-slow) ease-(--ease-enter)"
+      className="pointer-events-none absolute bottom-0 left-0 h-0.5 w-px origin-left bg-cobalt transition-transform duration-(--duration-slow) ease-(--ease-enter)"
       style={{ transform: `translateX(${box.x}px) scaleX(${box.w})` }}
     />
   ) : null;

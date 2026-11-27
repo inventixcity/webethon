@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
  *   dashed  - not yet real (draft, pending)
  *   muted   - finished or inactive (archived, none, revoked)
  *   caution - amber, for integrity indicators, warnings and "needs review" (review priority medium and high)
+ *   chip    - a dark fill with a cobalt border, for a role or a label that needs a quiet accent.
  *   accent  - vermilion, the one focal accent, for danger and failure. Errors stay vermilion.
  */
 const badgeVariants = cva(
@@ -18,13 +19,14 @@ const badgeVariants = cva(
   {
     variants: {
       tone: {
-        solid: "bg-ink text-paper",
+        solid: "bg-fill text-on-fill",
         live: "bg-cobalt text-paper",
         info: "border border-cobalt text-cobalt-deep",
         outline: "border border-ink text-ink",
         dashed: "border border-dashed border-ink-muted text-ink-soft",
         muted: "border border-rule text-ink-soft",
-        caution: "bg-amber text-ink",
+        caution: "bg-amber text-on-amber",
+        chip: "border border-chip-border bg-surface-1 text-ink",
         accent: "bg-vermilion-deep text-paper",
       },
       size: {
@@ -60,7 +62,7 @@ const DOT_CLASS: Record<string, string> = {
   solid: "bg-vermilion",
   live: "bg-paper",
   info: "bg-cobalt",
-  caution: "bg-ink",
+  caution: "bg-on-amber",
   accent: "bg-paper",
 };
 

@@ -114,27 +114,8 @@ export function QuestionImportWizard() {
 
   return (
     <div className="grid gap-12">
-      <ol aria-label="Import steps" className="flex flex-wrap gap-x-8 gap-y-3 border-y border-rule py-4">
-        {[
-          ["choose", "01 Choose file"],
-          ["preview", "02 Validate"],
-          ["done", "03 Import"],
-        ].map(([key, label]) => {
-          const current = key === stage;
-          return (
-            <li
-              key={key}
-              aria-current={current ? "step" : undefined}
-              className={cn(
-                "font-mono text-[11px] tracking-[0.14em] uppercase",
-                current ? "text-vermilion-deep" : "text-ink-muted",
-              )}
-            >
-              {label}
-            </li>
-          );
-        })}
-      </ol>
+      <ImportStepper stage={stage} />
+
 
       {stage === "choose" && (
         <section aria-labelledby="choose-heading" className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
@@ -235,6 +216,60 @@ export function QuestionImportWizard() {
         </section>
       )}
     </div>
+  );
+}
+
+const STEPS: Array<{ stage: Stage; label: string; hint: string }> = [
+  { stage: "choose", label: "Choose file", hint: "CSV or JSON" },
+  { stage: "preview", label: "Validate", hint: "Dry run, nothing written" },
+  { stage: "done", label: "Import", hint: "Written in one go" },
+];
+
+/**
+ * The three steps of the import as a numbered stepper. A hairline runs under the squares, and the cobalt fill draws
+ * across it as the wizard moves on. Finished steps show a tick.
+ */
+function ImportStepper({ stage }: { stage: Stage }) {
+  const active = STEPS.findIndex((step) => step.stage === stage);
+  return (
+    <ol aria-label="Import steps" className="grid gap-4 border-y border-ink py-5 md:grid-cols-3 md:gap-0">
+      {STEPS.map((step, index) => {
+        const current = index === active;
+        const done = index < active;
+        return (
+          <li
+            key={step.stage}
+            aria-current={current ? "step" : undefined}
+            className="relative flex items-center gap-4 md:flex-col md:items-start md:gap-3 md:pr-6"
+          >
+            {index < STEPS.length - 1 ? (
+              <span aria-hidden="true" className="absolute top-3.5 left-14 hidden h-px w-[calc(100%-3.5rem)] bg-rule md:block" />
+            ) : null}
+            <span
+              aria-hidden="true"
+              className={cn(
+                "relative z-10 flex size-7 shrink-0 items-center justify-center border font-mono text-[11px] tabular-nums",
+                current ? "border-ink bg-ink text-paper" : done ? "border-cobalt bg-cobalt text-paper" : "border-ink-muted bg-paper text-ink-muted",
+              )}
+            >
+              {done ? (
+                <svg viewBox="0 0 12 12" className="size-3">
+                  <path d="M2 6.5 L4.8 9 L10 3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                </svg>
+              ) : (
+                String(index + 1).padStart(2, "0")
+              )}
+            </span>
+            <span className="grid gap-0.5">
+              <span className={cn("font-mono text-[11px] tracking-[0.14em] uppercase", current ? "text-ink" : "text-ink-muted")}>
+                Step {index + 1} / {step.label}
+              </span>
+              <span className="text-sm text-ink-soft">{step.hint}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

@@ -28,7 +28,7 @@ const buttonVariants = cva(
     "font-mono text-xs font-medium tracking-[0.12em] uppercase",
     "transition-[color,background-color,border-color,translate,box-shadow] duration-(--duration-base) ease-(--ease-enter)",
     "active:translate-y-px motion-reduce:transition-none motion-reduce:active:translate-y-0",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
     // data-disabled is set only for truly disabled buttons (never while busy). Busy buttons take no pointer events.
     "data-[disabled=true]:pointer-events-none data-[busy=true]:pointer-events-none",
     loading,
@@ -39,21 +39,21 @@ const buttonVariants = cva(
       variant: {
         // Filled variants: disabled is the neutral panel (disabledFilled).
         // Outline and text variants: disabled changes the text colour only, never the fill.
-        primary: `bg-ink text-paper before:bg-vermilion-deep ${wipe} ${disabledFilled}`,
-        secondary: `border border-ink text-ink before:bg-ink hover:text-paper ${wipe} data-[disabled=true]:border-rule data-[disabled=true]:text-ink-soft`,
-        danger: `bg-vermilion-deep text-paper before:bg-ink ${wipe} ${disabledFilled}`,
-        ghost: "text-current underline-offset-4 hover:bg-paper-sunk hover:underline data-[disabled=true]:text-ink-soft",
-        link: "h-auto! overflow-visible! p-0! text-current underline underline-offset-4 hover:text-vermilion-deep data-[disabled=true]:text-ink-soft",
+        primary: `bg-fill text-on-fill before:bg-wipe-vermilion ${wipe} ${disabledFilled}`,
+        secondary: `border border-ink text-ink before:bg-wipe-cobalt hover:text-on-fill ${wipe} data-[disabled=true]:border-rule data-[disabled=true]:text-ink-soft`,
+        danger: `bg-vermilion-deep text-paper before:bg-fill hover:text-on-fill ${wipe} ${disabledFilled}`,
+        ghost: "text-current underline-offset-4 hover:bg-hover hover:underline data-[disabled=true]:text-ink-soft",
+        link: "h-auto! overflow-visible! p-0! text-current underline underline-offset-4 hover:text-cobalt-deep data-[disabled=true]:text-ink-soft",
         // For paper-on-ink panels. Keep these for existing call sites; use the variants above elsewhere.
         inverse: `bg-paper text-ink before:bg-vermilion-deep hover:text-paper ${wipe} ${disabledFilled}`,
         "outline-inverse": `border border-paper/40 text-paper before:bg-paper hover:text-ink ${wipe} data-[disabled=true]:text-paper/60`,
         // Legacy names, kept so existing call sites compile. They render exactly as the new names do.
         // @deprecated use primary.
-        default: `bg-ink text-paper before:bg-vermilion-deep ${wipe} ${disabledFilled}`,
+        default: `bg-fill text-on-fill before:bg-wipe-vermilion ${wipe} ${disabledFilled}`,
         // @deprecated use secondary.
-        outline: `border border-ink text-ink before:bg-ink hover:text-paper ${wipe} data-[disabled=true]:border-rule data-[disabled=true]:text-ink-soft`,
+        outline: `border border-ink text-ink before:bg-wipe-cobalt hover:text-on-fill ${wipe} data-[disabled=true]:border-rule data-[disabled=true]:text-ink-soft`,
         // @deprecated use danger.
-        destructive: `bg-vermilion-deep text-paper before:bg-ink ${wipe} ${disabledFilled}`,
+        destructive: `bg-vermilion-deep text-paper before:bg-fill hover:text-on-fill ${wipe} ${disabledFilled}`,
       },
       size: {
         sm: "h-10 px-4",

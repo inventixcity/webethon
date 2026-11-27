@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { api } from "@/lib/api/client";
 import type { GradingItem } from "@/lib/exam/types";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
+import { Meter } from "@/components/ui/meter";
+import { SectionIntro } from "@/components/exams/section-intro";
 import { formatPercent, messageOf } from "@/components/analytics/format";
 import { GradeCard } from "./grade-card";
 
@@ -15,8 +17,8 @@ type Mode = "pending" | "all";
 const key = (item: GradingItem) => `${item.attemptId}:${item.itemId}`;
 
 /**
- * Blind grading queue. Written answers from finalized attempts, grouped by question. Candidate identity is never
- * loaded here: each script is shown by its label only.
+ * Blind grading, one script at a time. Written answers from finalized attempts, grouped by question. Candidate
+ * identity is never loaded here: each script is shown by its label only.
  */
 export function GradingView({ examId }: { examId: string }) {
   const [all, setAll] = useState<GradingItem[] | null>(null);
@@ -25,8 +27,7 @@ export function GradingView({ examId }: { examId: string }) {
   const [mode, setMode] = useState<Mode>("pending");
   const [questionFilter, setQuestionFilter] = useState("all");
   const [version, setVersion] = useState(0);
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState(0);
   const questionId = useId();
 
   useEffect(() => {
@@ -49,15 +50,6 @@ export function GradingView({ examId }: { examId: string }) {
     };
   }, [examId, version]);
 
-  // After "Save and next", focus the script that moved into the same place in the queue.
-  useEffect(() => {
-    if (focusIndex === null) return;
-    const fields = listRef.current?.querySelectorAll<HTMLInputElement>("[data-grade-marks]");
-    const target = fields && fields.length > 0 ? fields[Math.min(focusIndex, fields.length - 1)] : undefined;
-    target?.focus();
-    setFocusIndex(null);
-  }, [focusIndex, pending, questionFilter, mode]);
-
   const questions = useMemo(() => {
     const seen = new Map<string, { itemId: string; position: number; stem: string; marks: number }>();
     for (const item of all ?? []) {
@@ -72,18 +64,21 @@ export function GradingView({ examId }: { examId: string }) {
   const visible = (source ?? []).filter((item) => questionFilter === "all" || item.itemId === questionFilter);
   const total = all?.length ?? 0;
   const graded = all?.filter((item) => item.gradedAt !== null).length ?? 0;
-  const ratio = total > 0 ? graded / total : 0;
+  const current = visible.length > 0 ? Math.min(index, visible.length - 1) : 0;
+  const item = visible[current];
 
-  function applySaved(saved: GradingItem, next: boolean, index: number) {
-    setAll((current) => current?.map((item) => (key(item) === key(saved) ? saved : item)) ?? current);
-    setPending((current) =>
-      current
+  // Saving moves the examiner on. In the pending queue the saved script leaves the list, so the same index is the next
+  // one; in the full list the index advances.
+  function applySaved(saved: GradingItem, next: boolean) {
+    setAll((list) => list?.map((entry) => (key(entry) === key(saved) ? saved : entry)) ?? list);
+    setPending((list) =>
+      list
         ? saved.gradedAt
-          ? current.filter((item) => key(item) !== key(saved))
-          : current.map((item) => (key(item) === key(saved) ? saved : item))
-        : current,
+          ? list.filter((entry) => key(entry) !== key(saved))
+          : list.map((entry) => (key(entry) === key(saved) ? saved : entry))
+        : list,
     );
-    if (next) setFocusIndex(index);
+    if (next) setIndex((value) => (mode === "all" ? value + 1 : value));
   }
 
   if (all === null && pending === null && error === null) {
@@ -92,26 +87,23 @@ export function GradingView({ examId }: { examId: string }) {
 
   return (
     <div className="grid gap-10 px-4 py-8 md:px-8">
-      <header className="grid gap-5">
-        <div>
-          <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">Grading</p>
-          <h2 className="mt-2 text-3xl leading-none font-semibold tracking-tight md:text-4xl">Written answers</h2>
-          <p className="mt-3 max-w-prose text-sm text-ink-soft">
-            Scripts are blind-graded. Each one is shown by its label, not by the candidate&apos;s name. Grades can be
-            changed until results are published.
-          </p>
-        </div>
+      <SectionIntro
+        eyebrow="Grading / 03"
+        title="Written answers"
+        summary="Scripts are blind-graded. Each one is shown by its label, not by the candidate's name. Grades can be changed until results are published."
+      >
         {all && (
-          <div className="grid gap-2">
-            <p className="font-mono text-xs" aria-live="polite">
-              {graded} of {total} graded ({formatPercent(ratio * 100)})
-            </p>
-            <div role="progressbar" aria-label={`${graded} of ${total} graded`} aria-valuemin={0} aria-valuemax={total} aria-valuenow={graded} className="h-2 max-w-xl bg-paper-sunk">
-              <div className="h-full bg-ink" style={{ width: `${ratio * 100}%` }} />
+          <div className="grid max-w-xl gap-3">
+            <div className="flex items-baseline justify-between gap-4 font-mono text-xs" aria-live="polite">
+              <span>
+                {graded} of {total} graded
+              </span>
+              <span className="text-ink-muted tabular-nums">{formatPercent(total > 0 ? (graded / total) * 100 : 0)}</span>
             </div>
+            <Meter value={graded} max={Math.max(1, total)} tone="info" size="md" label={`${graded} of ${total} graded`} valueText={`${graded} of ${total} graded`} />
           </div>
         )}
-      </header>
+      </SectionIntro>
 
       {error && (
         <div className="grid gap-3 border border-vermilion-deep p-5">
@@ -125,12 +117,28 @@ export function GradingView({ examId }: { examId: string }) {
       )}
 
       {all && (
-        <div className="flex flex-wrap items-end gap-6">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-rule pb-6">
           <div role="group" aria-label="Show" className="flex gap-2">
-            <Button variant="secondary" size="sm" aria-pressed={mode === "pending"} onClick={() => setMode("pending")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-pressed={mode === "pending"}
+              onClick={() => {
+                setMode("pending");
+                setIndex(0);
+              }}
+            >
               Pending ({pending?.length ?? 0})
             </Button>
-            <Button variant="secondary" size="sm" aria-pressed={mode === "all"} onClick={() => setMode("all")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-pressed={mode === "all"}
+              onClick={() => {
+                setMode("all");
+                setIndex(0);
+              }}
+            >
               All ({total})
             </Button>
           </div>
@@ -139,7 +147,10 @@ export function GradingView({ examId }: { examId: string }) {
             <select
               id={questionId}
               value={questionFilter}
-              onChange={(event) => setQuestionFilter(event.target.value)}
+              onChange={(event) => {
+                setQuestionFilter(event.target.value);
+                setIndex(0);
+              }}
               className="h-12 w-full max-w-md border border-rule bg-paper-raised px-3 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
             >
               <option value="all">All questions</option>
@@ -168,11 +179,28 @@ export function GradingView({ examId }: { examId: string }) {
         />
       )}
 
-      {visible.length > 0 && (
-        <div ref={listRef} className="grid gap-6" aria-live="off">
-          {visible.map((item, index) => (
-            <GradeCard key={key(item)} item={item} onSaved={(saved, next) => applySaved(saved, next, index)} />
-          ))}
+      {item && (
+        <div className="grid gap-6">
+          <nav aria-label="Script navigation" className="flex flex-wrap items-center justify-between gap-4">
+            <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase tabular-nums" aria-live="polite">
+              Script {current + 1} of {visible.length}
+              {mode === "pending" ? " in the queue" : ""}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" disabled={current === 0} onClick={() => setIndex(Math.max(0, current - 1))}>
+                Previous
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={current >= visible.length - 1}
+                onClick={() => setIndex(Math.min(visible.length - 1, current + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </nav>
+          <GradeCard key={key(item)} item={item} onSaved={applySaved} />
         </div>
       )}
     </div>

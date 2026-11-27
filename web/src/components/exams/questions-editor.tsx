@@ -11,6 +11,9 @@ import { api, ApiError } from "@/lib/api/client";
 import { messageFor } from "@/lib/errors/describe";
 import type { Exam, Page, Question, QuestionKind } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
+import { SectionIntro } from "./section-intro";
+import { DifficultySquares, KindChip } from "@/components/questions/parts";
+import { Meter } from "@/components/ui/meter";
 import { notifyExamChanged, parseMarks } from "./format";
 import { useExam, useResource } from "./use-resource";
 import { EmptyState, ErrorState, LoadingState } from "./states";
@@ -167,6 +170,11 @@ function PaperEditor({ exam }: { exam: Exam }) {
       <p role="status" className="sr-only">
         {announce}
       </p>
+      <SectionIntro
+        eyebrow="Questions / 01"
+        title="Paper"
+        summary="Choose questions from the bank, put them in order and set the marks. The total must match the exam."
+      />
 
       {!editable ? (
         <div className="grid max-w-prose gap-2 border-l-2 border-ink pl-5">
@@ -198,6 +206,15 @@ function PaperEditor({ exam }: { exam: Exam }) {
               <span className="text-ink-muted"> of {formatMarks(exam.totalMarks)} marks</span>
             </p>
           </div>
+
+          <Meter
+            value={Math.min(total, exam.totalMarks)}
+            max={Math.max(exam.totalMarks, 1)}
+            tone={mismatch ? "caution" : "ink"}
+            label="Marks on the paper against the exam total"
+            valueText={`${formatMarks(total)} of ${formatMarks(exam.totalMarks)} marks`}
+            size="md"
+          />
 
           {mismatch ? (
             <p role="status" className="border-l-2 border-vermilion pl-4 text-sm text-ink">
@@ -284,9 +301,11 @@ function PaperItem({
       <span className="font-mono text-sm tracking-[0.08em] text-ink-muted tabular-nums">{String(position).padStart(2, "0")}</span>
       <div className="grid min-w-0 gap-3">
         <p className="text-base leading-relaxed break-words">{row.question.stem}</p>
-        <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-          {row.question.topic} / D{row.question.difficulty} / {KIND_LABEL[row.question.kind]}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
+          <span>{row.question.topic}</span>
+          <DifficultySquares value={row.question.difficulty} />
+          <KindChip kind={row.question.kind} />
+        </div>
 
         <div className="flex flex-wrap items-end gap-3">
           {editable ? (
@@ -465,9 +484,13 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
               <li key={question.id} className="grid gap-3 border-t border-rule py-4">
                 <p className="line-clamp-2 text-sm leading-relaxed break-words">{question.stem}</p>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-                    {question.topic} / D{question.difficulty} / {formatMarks(question.marks)} marks
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
+                    <span>{question.topic}</span>
+                    <DifficultySquares value={question.difficulty} />
+                    <KindChip kind={question.kind} />
+                    <FacilityMini value={question.observedFacility} />
+                    <span className="tabular-nums">{formatMarks(question.marks)} marks</span>
+                  </div>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -499,6 +522,20 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
         </Link>
       </p>
     </div>
+  );
+}
+
+/** Observed facility from real attempts, as a short square bar. Shows "no data" until there are enough attempts. */
+function FacilityMini({ value }: { value: number | null }) {
+  if (value === null) return <span className="normal-case tracking-normal text-ink-muted">No data yet</span>;
+  const pct = Math.min(100, Math.max(0, value * 100));
+  return (
+    <span className="inline-flex items-center gap-2 tabular-nums" title="Observed facility from real attempts">
+      <span aria-hidden="true" className="relative block h-1.5 w-12 bg-paper-sunk">
+        <span className="absolute inset-0 origin-left bg-cobalt transition-transform duration-(--duration-slow) ease-(--ease-enter)" style={{ transform: `scaleX(${pct / 100})` }} />
+      </span>
+      <span>{Math.round(pct)}% facility</span>
+    </span>
   );
 }
 
