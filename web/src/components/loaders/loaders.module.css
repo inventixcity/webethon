@@ -1,0 +1,148 @@
+.orbit {
+  position: relative;
+  border: 1px solid currentColor;
+}
+
+.orbit::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--vermilion);
+  animation: orbit 2.4s linear infinite;
+}
+
+@keyframes orbit {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(var(--size), 0);
+  }
+  50% {
+    transform: translate(var(--size), var(--size));
+  }
+  75% {
+    transform: translate(0, var(--size));
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.gridCell {
+  background: currentColor;
+  animation: gridPulse 1.5s var(--ease-move) infinite;
+  animation-delay: calc(var(--step) * 110ms);
+}
+
+@keyframes gridPulse {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(0.25);
+    opacity: 0.35;
+  }
+}
+
+.bar {
+  background: currentColor;
+  transform-origin: bottom;
+  animation: barRise 1s var(--ease-move) infinite alternate;
+  animation-delay: calc(var(--step) * 120ms);
+}
+
+@keyframes barRise {
+  from {
+    transform: scaleY(0.18);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.fold {
+  background: currentColor;
+  animation: fold 2.4s var(--ease-move) infinite;
+  animation-delay: calc(var(--step) * 300ms);
+  transform-origin: var(--origin);
+}
+
+@keyframes fold {
+  0%,
+  10% {
+    transform: perspective(90px) rotate3d(var(--axis), 180deg);
+    opacity: 0;
+  }
+  35%,
+  65% {
+    transform: perspective(90px) rotate3d(var(--axis), 0deg);
+    opacity: 1;
+  }
+  90%,
+  100% {
+    transform: perspective(90px) rotate3d(var(--axis), -180deg);
+    opacity: 0;
+  }
+}
+
+.stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    currentColor 0 6px,
+    transparent 6px 12px
+  );
+  background-size: 200% 100%;
+  animation: stripes 1.1s linear infinite;
+}
+
+@keyframes stripes {
+  to {
+    background-position: -17px 0;
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 34%;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  animation: scan 1.5s var(--ease-move) infinite;
+}
+
+@keyframes scan {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(310%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit::after,
+  .gridCell,
+  .bar,
+  .fold,
+  .stripes,
+  .skeleton::after {
+    animation: none;
+  }
+
+  .fold {
+    opacity: 1;
+  }
+}

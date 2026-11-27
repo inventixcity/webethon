@@ -1,0 +1,15 @@
+.board { display: grid; gap: clamp(3px, .65vw, 10px); width: 100%; }
+.cell { position: relative; aspect-ratio: .72; container-type: inline-size; perspective: 650px; background: var(--ink); }
+.half { position: absolute; left: 0; width: 100%; height: 50%; overflow: hidden; background: var(--ink); color: var(--paper); backface-visibility: hidden; }
+.top { top: 0; }
+.bottom { bottom: 0; }
+.letter { position: absolute; left: 0; display: flex; width: 100%; height: 200%; align-items: center; justify-content: center; font-family: var(--font-code), monospace; font-size: 108cqw; font-weight: 500; line-height: 1; }
+.top .letter { top: 0; }
+.bottom .letter { bottom: 0; }
+.movingTop { transform-origin: center bottom; z-index: 3; will-change: transform; }
+.movingBottom { transform-origin: center top; z-index: 4; will-change: transform; }
+.seam { position: absolute; top: calc(50% - 1px); left: 0; right: 0; z-index: 5; height: 2px; background: var(--ink); }
+.seam::before, .seam::after { content: ""; position: absolute; top: -3px; width: 3px; height: 8px; background: var(--ink-muted); }
+.seam::before { left: 0; }
+.seam::after { right: 0; }
+.shade { position: absolute; inset: 0; background: var(--ink); pointer-events: none; opacity: 0; }

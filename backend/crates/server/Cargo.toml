@@ -1,0 +1,61 @@
+[package]
+name = "server"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "api"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+examcore.workspace = true
+exam_questions.workspace = true
+exam_authoring.workspace = true
+exam_enroll.workspace = true
+exam_grading.workspace = true
+exam_attempts.workspace = true
+exam_resilience.workspace = true
+exam_integrity.workspace = true
+exam_analytics.workspace = true
+jobs.workspace = true
+transfer.workspace = true
+webhooks.workspace = true
+bytes.workspace = true
+futures.workspace = true
+flags.workspace = true
+shares.workspace = true
+kernel.workspace = true
+admin.workspace = true
+auth.workspace = true
+records.workspace = true
+files.workspace = true
+realtime.workspace = true
+analytics.workspace = true
+assist.workspace = true
+social.workspace = true
+teams.workspace = true
+payments.workspace = true
+booking.workspace = true
+places.workspace = true
+ai.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+secrecy.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }

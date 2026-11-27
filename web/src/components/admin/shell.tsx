@@ -1,0 +1,9 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
+const links = [["/admin", "Overview"], ["/admin/users", "Users"], ["/admin/content", "Content"], ["/admin/files", "Files"], ["/admin/comments", "Comments"], ["/admin/teams", "Teams"], ["/admin/bookings", "Bookings"], ["/admin/payments", "Payments"], ["/admin/places", "Places"], ["/admin/system", "System"], ["/admin/audit", "Audit"], ["/admin/jobs", "Jobs"], ["/admin/flags", "Flags"]];
+export function AdminShell({ children }: { children: React.ReactNode }) {
+ const pathname = usePathname();
+ return <div className="min-h-screen bg-paper text-ink"><a href="#admin-main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-paper focus:p-3">Skip to content</a><div className="flex min-h-screen flex-col md:flex-row"><aside className="border-b border-ink bg-paper-raised md:w-56 md:shrink-0 md:border-b-0 md:border-r"><div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-5"><Link href="/admin" className="font-semibold">Administration</Link><ThemeToggle /></div><nav aria-label="Administration" className="flex gap-1 overflow-x-auto p-2 md:flex-col">{links.map(([href,label]) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} className={`whitespace-nowrap border-l-2 px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-vermilion ${pathname === href ? "border-vermilion bg-paper-sunk font-semibold" : "border-transparent hover:bg-paper-sunk"}`}>{label}</Link>)}</nav><Link href="/app" className="hidden px-5 py-5 text-sm underline underline-offset-4 md:block">Back to app</Link></aside><main id="admin-main" className="min-w-0 flex-1 px-5 py-8 md:px-10 lg:px-14">{children}</main></div></div>;
+}

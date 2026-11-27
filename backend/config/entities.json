@@ -1,0 +1,23 @@
+{
+  "notes": {
+    "label": "Note", "read": "owner", "create": "authenticated", "write": "owner", "allowPublic": true, "maxPerOwner": 2000,
+    "social": {"comments": true, "reactions": ["like"], "bookmarks": true},
+    "sortable": ["title"], "filterable": ["pinned"], "searchable": ["title", "body"],
+    "schema": {"type": "object", "additionalProperties": false, "required": ["title"], "properties": {
+      "title": {"type": "string", "minLength": 1, "maxLength": 200},
+      "body": {"type": "string", "maxLength": 20000, "default": ""},
+      "pinned": {"type": "boolean", "default": false},
+      "tags": {"type": "array", "maxItems": 50, "items": {"type": "string", "maxLength": 100}, "default": []}
+    }}
+  },
+  "tasks": {
+    "label": "Task", "read": "owner", "create": "authenticated", "write": "owner", "allowPublic": false, "maxPerOwner": 2000,
+    "sortable": ["title", "priority", "due"], "filterable": ["status", "priority"], "searchable": ["title"],
+    "schema": {"type": "object", "additionalProperties": false, "required": ["title"], "properties": {
+      "title": {"type": "string", "minLength": 1, "maxLength": 200},
+      "status": {"type": "string", "enum": ["todo", "doing", "done"], "maxLength": 5, "default": "todo"},
+      "priority": {"type": "integer", "minimum": 0, "maximum": 3, "default": 0},
+      "due": {"type": ["string", "null"], "format": "date-time", "maxLength": 40, "default": null}
+    }}
+  }
+}

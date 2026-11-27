@@ -1,0 +1,14 @@
+# Secrets and local env: never commit.
+.env
+.env.*
+!.env.example
+deploy/k8s/overlays/*/secrets.env
+# Build output
+backend/target/
+node_modules/
+.next/
+# Local upload storage in development
+storage/
+handoff/run/
+tests/browser/artifacts/
+*.log

@@ -1,0 +1,107 @@
+.board {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.rows {
+  display: grid;
+  gap: 0.9cqw;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 0.28cqw;
+}
+
+.cell {
+  position: relative;
+  aspect-ratio: 5 / 7.4;
+  perspective: 240px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: calc(100cqw / var(--cols) * 0.78);
+  line-height: 1;
+  color: var(--ink);
+}
+
+.accent {
+  color: var(--vermilion);
+}
+
+.half {
+  position: absolute;
+  inset-inline: 0;
+  height: 50%;
+  overflow: hidden;
+  background: var(--paper-raised);
+}
+
+.upper {
+  top: 0;
+  transform-origin: bottom;
+}
+
+.lower {
+  bottom: 0;
+  transform-origin: top;
+}
+
+.glyph {
+  position: absolute;
+  inset-inline: 0;
+  height: 200%;
+  display: grid;
+  place-items: center;
+}
+
+.upper .glyph {
+  top: 0;
+}
+
+.lower .glyph {
+  bottom: 0;
+}
+
+/* The hinge between the two halves. */
+.cell::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+  background: var(--paper);
+  z-index: 3;
+}
+
+.leafFalling {
+  z-index: 2;
+  backface-visibility: hidden;
+  animation: fall var(--flip) linear forwards;
+}
+
+.leafLanding {
+  z-index: 2;
+  backface-visibility: hidden;
+  transform: rotateX(90deg);
+  animation: land var(--flip) linear var(--flip) forwards;
+}
+
+@keyframes fall {
+  to {
+    transform: rotateX(-90deg);
+  }
+}
+
+@keyframes land {
+  to {
+    transform: rotateX(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leafFalling,
+  .leafLanding {
+    display: none;
+  }
+}

@@ -1,0 +1,221 @@
+.shark-404-root {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: max(720px, 100svh);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.shark-404-ocean {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-mono);
+}
+
+.shark-404-masthead,
+.shark-404-footer {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 clamp(24px, 4.5vw, 80px);
+  padding: 28px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.shark-404-masthead { border-bottom: 1px solid color-mix(in srgb, var(--ink) 24%, transparent); }
+.shark-404-masthead > span, .shark-404-footer > span { background: var(--paper); padding: 2px 4px; }
+.shark-404-footer { justify-content: center; }
+
+.shark-404-content {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.shark-404-code {
+  font-size: clamp(160px, 27vw, 400px);
+  font-weight: 600;
+  line-height: 0.83;
+  letter-spacing: -0.075em;
+  font-variation-settings: "wdth" 90;
+  margin-left: -0.075em;
+}
+
+.shark-404-title {
+  margin: 32px 0 0;
+  padding: 5px 12px;
+  background: var(--paper);
+  font-size: clamp(24px, 3.1vw, 44px);
+  line-height: 1.05;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.shark-404-description {
+  max-width: 43ch;
+  margin: 14px 0 28px;
+  padding: 4px 12px;
+  background: var(--paper);
+  font-size: 15px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.shark-404-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 48px;
+  min-height: 56px;
+  padding: 16px 24px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.shark-404-home:hover { text-decoration: underline; text-underline-offset: 4px; }
+.shark-404-home > span { font-size: 20px; line-height: 1; }
+
+@media (max-width: 600px) {
+  .shark-404-root { min-height: max(680px, 100svh); }
+  .shark-404-content { padding: 80px 24px; }
+  .shark-404-code { font-size: 49vw; }
+  .shark-404-title { max-width: 16ch; margin-top: 28px; }
+  .shark-404-description { max-width: 31ch; font-size: 15px; }
+  .shark-404-masthead, .shark-404-footer { font-size: 10px; }
+}
+
+/* Extras for error pages. They reuse the recovery link's square ink button and the masthead's hairline rules. */
+
+.shark-404-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px 32px;
+  pointer-events: auto;
+}
+
+.shark-404-action,
+.shark-404-secondary,
+.shark-404-copy {
+  font-family: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.shark-404-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 48px;
+  min-height: 56px;
+  padding: 16px 24px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.shark-404-action:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 4px; }
+.shark-404-action:active:not(:disabled) { transform: translateY(1px); }
+.shark-404-action:disabled {
+  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
+  background: var(--paper-sunk);
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+.shark-404-secondary {
+  padding: 2px 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.shark-404-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 16px;
+  margin-top: 28px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+
+.shark-404-details-label { color: var(--ink-muted); }
+
+.shark-404-details-id {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  word-break: break-all;
+  user-select: all;
+}
+
+.shark-404-copy {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.shark-404-copy:hover { background: var(--ink); color: var(--paper); }
+
+.shark-404-action:focus-visible,
+.shark-404-secondary:focus-visible,
+.shark-404-copy:focus-visible,
+.shark-404-home:focus-visible {
+  outline: 2px solid var(--vermilion);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .shark-404-details { font-size: 10px; }
+  .shark-404-details-id { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shark-404-action:active:not(:disabled) { transform: none; }
+}

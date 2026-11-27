@@ -1,0 +1,24 @@
+[package]
+name = "assist"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kernel.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+ai.workspace = true
+records.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+secrecy.workspace = true
+tokio.workspace = true
+time.workspace = true

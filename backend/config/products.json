@@ -1,0 +1,21 @@
+{
+  "products": [
+    {
+      "id": "pro-pass",
+      "name": "Pro pass",
+      "description": "One-time payment for full access to Pro.",
+      "priceCents": 4900,
+      "currency": "usd",
+      "mode": "payment"
+    },
+    {
+      "id": "pro-plan",
+      "name": "Pro plan",
+      "description": "Monthly subscription to Pro. Cancel any time in the billing portal.",
+      "priceCents": 900,
+      "currency": "usd",
+      "mode": "subscription",
+      "interval": "month"
+    }
+  ]
+}

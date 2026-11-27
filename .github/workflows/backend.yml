@@ -1,0 +1,214 @@
+name: backend
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - "deploy/ci/**"
+      - "tests/e2e/**"
+      - ".github/workflows/backend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - "deploy/ci/**"
+      - "tests/e2e/**"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch: {}
+
+# Least privilege: the workflow only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  check:
+    name: fmt, clippy, tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: invigil
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # Database tests (#[sqlx::test]) create one database per test, so the role needs CREATEDB (superuser here).
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/invigil
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The GitHub Ubuntu image already has stable Rust; add the two components we need.
+      - name: Rust components
+        run: rustup component add rustfmt clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: backend
+          shared-key: backend-ci
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      # --locked fails if Cargo.lock is out of date. It must be committed for this binary crate.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace --locked
+
+  supply-chain:
+    name: cargo deny, cargo audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Prebuilt binaries, so no compile. Tools are pinned by the action version.
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-deny,cargo-audit
+
+      # Licenses, banned sources, yanked crates and RustSec advisories (see backend/deny.toml).
+      - name: cargo deny
+        run: cargo deny check
+
+      # Advisories, including unmaintained crates (--deny warnings).
+      - name: cargo audit
+        run: cargo audit --deny warnings
+
+  # Black-box suite (tests/e2e) against the real compose stack: Postgres, Mailpit and the API image built from
+  # backend/Dockerfile. Known limits: the suite's payments file provisions its own API from a
+  # invigil-rust:dev image this job does not build, and zz-rate-limits asserts the default per-IP budgets
+  # (tests/e2e/README.md). Expect those two to fail until they are addressed. Not verified in CI yet.
+  e2e:
+    name: e2e suite (compose)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Postgres, Mailpit and the API. --wait blocks until the API healthcheck passes.
+      - name: Start the stack
+        run: docker compose -f docker-compose.yml -f deploy/ci/compose.e2e.yml up -d --build --wait postgres mailpit api
+
+      # Node 24 in a container, so the job does not depend on the runner's Node version. --network host
+      # reaches the ports compose publishes on 127.0.0.1.
+      - name: Run tests/e2e/run.mjs
+        run: |
+          docker run --rm --network host \
+            -e API_URL=http://localhost:8080 \
+            -e MAILPIT_URL=http://localhost:8025 \
+            -v "$PWD/tests:/work/tests:ro" \
+            -w /work \
+            node:24-bookworm-slim \
+            node tests/e2e/run.mjs
+
+      - name: API logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.yml -f deploy/ci/compose.e2e.yml logs --no-color --tail=300 api
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f deploy/ci/compose.e2e.yml down -v
+
+  # The image that ships, built from backend/Dockerfile and started in production mode with throwaway
+  # secrets. /readyz must answer, which proves the config gate passes and the migrations apply.
+  image-smoke:
+    name: image smoke (/readyz)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: invigil
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d invigil"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build -f backend/Dockerfile -t invigil-api:ci backend
+
+      # Secrets are generated for this run only and are never printed. Storage and mail values are
+      # placeholders that the production config check requires; nothing is sent.
+      - name: Run the image in production mode
+        run: |
+          docker run -d --name api --network host \
+            -e APP_ENV=production \
+            -e APP_ORIGIN=https://smoke.invalid \
+            -e SECURE_COOKIES=true \
+            -e RUN_MIGRATIONS=true \
+            -e DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/invigil \
+            -e CODE_PEPPER="$(openssl rand -hex 24)" \
+            -e PROXY_SECRET="$(openssl rand -hex 24)" \
+            -e MFA_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+            -e SMTP_URL=smtp://127.0.0.1:1025 \
+            -e STORAGE_BACKEND=s3 \
+            -e S3_REGION=us-east-1 \
+            -e S3_BUCKET=smoke \
+            -e S3_ACCESS_KEY_ID=smoke \
+            -e S3_SECRET_ACCESS_KEY=smoke \
+            invigil-api:ci
+
+      - name: Wait for /readyz
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS -m 3 http://127.0.0.1:8080/readyz; then
+              echo
+              echo "/readyz answered"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::/readyz did not answer within 120 seconds"
+          docker logs api || true
+          exit 1
+
+      # The image's own liveness probe, as used by the HEALTHCHECK and the compose file.
+      - name: Container healthcheck
+        run: docker exec api /app/api healthcheck
+
+      - name: Remove the container
+        if: always()
+        run: docker rm -f api || true

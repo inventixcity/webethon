@@ -1,0 +1,6 @@
+Pieces here are from ascii.rest by bas3line (https://github.com/bas3line/ascii), MIT licensed.
+
+Changed for this project:
+- fractal-tree.ts: growth, leaves and gust come from the caller, and the frame is taller so the crown is not cropped.
+
+The scenes in src/components/ascii/scenes/owl.ts and radar.ts are also adapted from ascii.rest pieces.

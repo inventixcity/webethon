@@ -1,0 +1,39 @@
+﻿"use client";
+import { useEffect, useState } from "react";
+import { FieldError } from "@/components/feedback/field-error";
+import { useToast } from "@/components/feedback/toaster";
+import { Button } from "@/components/ui/button";
+import { actionToast, namedFieldError } from "@/features/admin/errors";
+import { adminApi, adminList, isStepUpRequired, type Row } from "@/features/admin/client";
+import { ConfirmDialog, DataTable, Details, Drawer, Filters, PageHeading, Pagination, Status, StepUpModal, type Action } from "./workspace";
+
+const input = "min-h-10 border border-ink bg-paper px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion";
+type Section = "purchases" | "entitlements" | "places";
+const ENTITLEMENT_FIELDS = ["userId", "productId", "expiresAt"] as const;
+function stripeLink(row: Row): string | null {
+  const candidate = row.stripeDashboardUrl ?? row.dashboardUrl;
+  if (typeof candidate !== "string") return null;
+  try { const url = new URL(candidate); return url.protocol === "https:" && url.hostname === "dashboard.stripe.com" && !url.username && !url.password && !url.port ? url.href : null; } catch { return null; }
+}
+function scalarDetails(row: Row) {
+  return Object.fromEntries(Object.entries(row).filter(([key,value]) => !/url/i.test(key) && (value === null || typeof value !== "object")));
+}
+export function DomainPage({ places = false }: { places?: boolean }) {
+  const [section,setSection] = useState<Section>(places ? "places" : "purchases");
+  const [filters,setFilters] = useState<Record<string,string>>({}); const [cursors,setCursors] = useState([""]); const [index,setIndex] = useState(0);
+  const [rows,setRows] = useState<Row[]>([]); const [next,setNext] = useState<string|null>(null); const [loading,setLoading] = useState(true); const [error,setError] = useState<unknown>(); const [selected,setSelected] = useState<Row|null>(null); const [revision,setRevision] = useState(0);
+  const [userId,setUserId] = useState(""); const [productId,setProductId] = useState(""); const [expiresAt,setExpiresAt] = useState(""); const [action,setAction] = useState<Action|null>(null); const [step,setStep] = useState(false); const [busy,setBusy] = useState(false); const [notice,setNotice] = useState(""); const [fieldErrors,setFieldErrors] = useState<Record<string,string>>({}); const toast = useToast();
+  const path = section === "places" ? "/admin/places" : `/admin/payments/${section}`;
+  useEffect(() => { let live=true; setLoading(true); setError(undefined); adminList(path,{...filters,limit:"25",cursor:cursors[index]}).then(result=>{if(live){setRows(result.data);setNext(result.meta.nextCursor);}}).catch(e=>{if(live)setError(e);}).finally(()=>{if(live)setLoading(false);}); return ()=>{live=false;}; },[path,filters,cursors,index,revision]);
+  function switchSection(nextSection: Section) { setSection(nextSection); setFilters({}); setCursors([""]); setIndex(0); setSelected(null); }
+  function prepareEntitlement(kind: "grant" | "revoke") { const user=userId.trim(), product=productId.trim(); if(!user || !product) return; const body = {userId:user,productId:product,...(kind === "grant" && expiresAt ? {expiresAt:new Date(expiresAt).toISOString()} : {})}; setFieldErrors({}); setAction({title:kind === "grant" ? "Grant entitlement" : "Revoke entitlement",target:`user ${user}, product ${product}`,path:`/admin/payments/entitlements/${kind}`,body}); }
+  async function run() { if(!action)return; setBusy(true); try { await adminApi(action.path,{method:"POST",body:action.body}); setNotice(`${action.title} completed for ${action.target}.`); setAction(null); setSelected(null); setRevision(v=>v+1); } catch(e) { if(isStepUpRequired(e)) setStep(true); else { const named = section === "entitlements" ? namedFieldError(e, ENTITLEMENT_FIELDS) : null; if(named) { setAction(null); setFieldErrors({ [named.field]: named.message }); } else toast.error(actionToast(e)); } } finally {setBusy(false);} }
+  return <><PageHeading title={places ? "Places" : "Payments"} description={places ? "Find places and hide entries that need moderation." : "Review purchases and manage product access. Refunds are handled in Stripe."}/>
+    {!places && <div className="mb-6 flex gap-2" aria-label="Payment sections"><Button variant="secondary" size="sm" aria-pressed={section === "purchases"} onClick={()=>switchSection("purchases")}>Purchases</Button><Button variant="secondary" size="sm" aria-pressed={section === "entitlements"} onClick={()=>switchSection("entitlements")}>Entitlements</Button></div>}
+    {section === "entitlements" && <section className="mb-8 border border-rule p-4"><h2 className="mb-3 text-lg font-semibold">Manage access</h2><div className="flex flex-wrap items-end gap-3"><div className="grid gap-1"><label className="grid gap-1 text-sm">User ID<input className={input} aria-invalid={fieldErrors.userId ? true : undefined} aria-describedby={fieldErrors.userId ? "entitlement-user-error" : undefined} value={userId} onChange={e=>setUserId(e.target.value)}/></label><FieldError id="entitlement-user-error" message={fieldErrors.userId}/></div><div className="grid gap-1"><label className="grid gap-1 text-sm">Product ID<input className={input} aria-invalid={fieldErrors.productId ? true : undefined} aria-describedby={fieldErrors.productId ? "entitlement-product-error" : undefined} value={productId} onChange={e=>setProductId(e.target.value)}/></label><FieldError id="entitlement-product-error" message={fieldErrors.productId}/></div><div className="grid gap-1"><label className="grid gap-1 text-sm">Expiry (optional)<input type="datetime-local" className={input} aria-invalid={fieldErrors.expiresAt ? true : undefined} aria-describedby={fieldErrors.expiresAt ? "entitlement-expiry-error" : undefined} value={expiresAt} onChange={e=>setExpiresAt(e.target.value)}/></label><FieldError id="entitlement-expiry-error" message={fieldErrors.expiresAt}/></div><Button size="sm" disabled={!userId.trim()||!productId.trim()} onClick={()=>prepareEntitlement("grant")}>Grant</Button><Button variant="danger" size="sm" disabled={!userId.trim()||!productId.trim()} onClick={()=>prepareEntitlement("revoke")}>Revoke</Button></div></section>}
+    <Filters fields={[["q","Search"]]} onApply={f=>{setFilters(f);setCursors([""]);setIndex(0);}}/><p role="status" className="mb-3 text-sm">{notice}</p><Status loading={loading} error={error} empty={!loading&&!error&&!rows.length} onRetry={()=>setRevision(v=>v+1)}/>
+    {!loading&&!error&&rows.length>0&&<><DataTable rows={rows.map(scalarDetails)} onSelect={row=>setSelected(rows.find(original=>original.id != null && original.id === row.id) ?? row)}/><Pagination previous={index>0} next={!!next} onPrevious={()=>setIndex(index-1)} onNext={()=>{if(next){setCursors([...cursors.slice(0,index+1),next]);setIndex(index+1);}}}/></>}
+    {selected && <Drawer title={String(selected.name ?? selected.id ?? (section === "purchases" ? "Purchase" : "Entitlement"))} onClose={()=>setSelected(null)}><Details value={scalarDetails(selected)}/>{section === "purchases" && stripeLink(selected) && <p className="mt-6"><a className="underline underline-offset-4" href={stripeLink(selected)!} target="_blank" rel="noopener noreferrer">Open in Stripe Dashboard</a></p>}{section === "places" && <Button variant="danger" size="sm" className="mt-6" disabled={typeof selected.id !== "string"} onClick={()=>{const id=String(selected.id);setAction({title:"Hide place",target:String(selected.name ?? id),path:`/admin/places/${encodeURIComponent(id)}/hide`});}}>Hide place</Button>}</Drawer>}
+    {action&&!step&&<ConfirmDialog action={action} onCancel={()=>setAction(null)} onConfirm={run} busy={busy}/>} {step&&<StepUpModal onCancel={()=>{setStep(false);setAction(null);}} onSuccess={expiry=>{setStep(false);setNotice(`Identity verified until ${new Date(expiry).toLocaleString()}. Confirm the action to continue.`);}}/>}
+  </>;
+}

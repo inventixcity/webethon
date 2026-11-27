@@ -1,0 +1,2 @@
+alter table assist_embedding_models drop constraint assist_embedding_models_dimensions_check;
+alter table assist_embedding_models add constraint assist_embedding_models_dimensions_check check (dimensions between 1 and 16000);

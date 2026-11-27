@@ -1,0 +1,5276 @@
+openapi: 3.1.0
+info:
+  title: Invigil API
+  version: 1.0.0
+  description: HTTP API. Session tokens are opaque; use the session cookie or the same token as a Bearer credential. Cookie-authenticated
+    mutations require a valid Origin or Referer. Global middleware can return shared errors before a handler; x-request-id
+    is returned on responses. Signup uses the signup cookie scoped to /api/v1/auth; password reset uses the reset cookie scoped
+    to /api/v1/auth/password. These are separate from the session cookie.
+servers:
+- url: /
+  description: Current origin
+paths:
+  /api/v1/entities/{entity}/stats:
+    get:
+      operationId: getApiV1EntitiesEntityStats
+      summary: Aggregate records
+      description: 'Unknown or repeated parameters are rejected; query up to 8192 bytes, each value up to 2048 bytes.
+        Window bounds creation time: from inclusive, to exclusive; defaults to last 30 days ending now, positive and
+        at most 366 days. Percent-encode + in offsets. Buckets start midnight UTC; weeks start Monday. At most 200
+        groups. Count includes null/missing values; numeric aggregates ignore them and return null when empty. Ungrouped
+        results contain one null key; grouped empty results contain no rows. Missing and null group together. scope=mine
+        requires a viewer, public follows record access and all requires admin.'
+      security:
+      - {}
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: metric
+        in: query
+        required: true
+        schema:
+          type: string
+        description: count or sum:field, avg:field, min:field, max:field for a configured numeric field.
+      - name: groupBy
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filterable scalar field, or createdAt/date-time schema field followed by :day, :week or :month.
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - mine
+          - public
+          - all
+          default: mine
+      - name: filter[field]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Replace field with a configured filterable field; use records list filter syntax.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/assist/ask:
+    post:
+      operationId: postApiV1AssistAsk
+      summary: Ask the assistant
+      description: 'SSE event payloads: delta (AssistDeltaEvent), sources (AssistSourcesEvent), pending (AssistPendingEvent),
+        done (AssistDoneEvent), error (AssistErrorEvent). Up to five tool calls; only viewer-owned records are accessed.
+        Writes are proposals, not mutations; proposals expire in ten minutes and are viewer-bound and single-use.'
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                  minLength: 1
+                  maxLength: 8000
+                entity:
+                  type: string
+                  maxLength: 48
+              required:
+              - question
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                conversation:
+                  summary: Example events
+                  value: 'event: delta
+  
+                    data: {"text":"Hello"}
+  
+  
+                    event: sources
+  
+                    data: {"sources":[{"entity":"notes","id":"c4f2b566-5b53-4ad9-b572-97e7f943ea10","label":"notes"}]}
+  
+  
+                    event: pending
+  
+                    data: {"pendingActions":[]}
+  
+  
+                    event: done
+  
+                    data: {"usage":{"input":10,"output":4}}
+  
+  
+                    '
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/assist/confirm:
+    post:
+      operationId: postApiV1AssistConfirm
+      summary: Confirm a proposed action
+      description: Claim and record mutation commit atomically.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionId:
+                  type: string
+                  format: uuid
+              required:
+              - actionId
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      record:
+                        $ref: '#/components/schemas/Record'
+                    required:
+                    - record
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/assist/cancel:
+    post:
+      operationId: postApiV1AssistCancel
+      summary: Cancel a proposed action
+      description: ''
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionId:
+                  type: string
+                  format: uuid
+              required:
+              - actionId
+              additionalProperties: false
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/assist/search:
+    post:
+      operationId: postApiV1AssistSearch
+      summary: Search owned records
+      description: Uses semantic search when embeddings are configured; otherwise uses configured lexical search with
+        score 1.0. Returns only viewer-owned records.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity:
+                  type: string
+                  maxLength: 48
+                query:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 20
+                  default: 10
+              required:
+              - entity
+              - query
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AssistSearchResult'
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/entities/{entity}/{id}/comments:
+    get:
+      operationId: getApiV1EntitiesEntityIdComments
+      summary: List comments
+      description: Readable live record and enabled comments required. At most 500 comments; deleted comments remain
+        as placeholders with null body.
+      security:
+      - {}
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Comment'
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    post:
+      operationId: postApiV1EntitiesEntityIdComments
+      summary: Add comment
+      description: Replies may only target a non-deleted top-level comment; nesting is limited to one reply level.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: Must contain non-whitespace characters.
+                parentId:
+                  type:
+                  - string
+                  - 'null'
+                  format: uuid
+              required:
+              - body
+              additionalProperties: false
+      responses:
+        '201':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Comment'
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/comments/{id}:
+    patch:
+      operationId: patchApiV1CommentsId
+      summary: Edit comment
+      description: Only the author may edit.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: Must contain non-whitespace characters.
+              required:
+              - body
+              additionalProperties: false
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Comment'
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    delete:
+      operationId: deleteApiV1CommentsId
+      summary: Delete comment
+      description: Only the author may delete; deletion is soft.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/entities/{entity}/{id}/reactions:
+    get:
+      operationId: getApiV1EntitiesEntityIdReactions
+      summary: List reactions
+      description: Readable live record and enabled reactions required. mine is empty for anonymous viewers.
+      security:
+      - {}
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      counts:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                          minimum: 0
+                      mine:
+                        type: array
+                        items:
+                          type: string
+                    required:
+                    - counts
+                    - mine
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/entities/{entity}/{id}/reactions/{kind}:
+    put:
+      operationId: putApiV1EntitiesEntityIdReactionsKind
+      summary: Add reaction
+      description: Idempotent; kind must be enabled for the entity.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: ^[a-z0-9_-]+$
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    delete:
+      operationId: deleteApiV1EntitiesEntityIdReactionsKind
+      summary: Remove reaction
+      description: Idempotent; kind must be enabled for the entity.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: ^[a-z0-9_-]+$
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/entities/{entity}/{id}/bookmark:
+    get:
+      operationId: getApiV1EntitiesEntityIdBookmark
+      summary: Get bookmark status
+      description: ''
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      active:
+                        type: boolean
+                    required:
+                    - active
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    put:
+      operationId: putApiV1EntitiesEntityIdBookmark
+      summary: Add bookmark
+      description: Idempotent.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    delete:
+      operationId: deleteApiV1EntitiesEntityIdBookmark
+      summary: Remove bookmark
+      description: Idempotent.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: entity
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/users/{id}/follow:
+    get:
+      operationId: getApiV1UsersIdFollow
+      summary: Get follow status
+      description: ''
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      active:
+                        type: boolean
+                    required:
+                    - active
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    put:
+      operationId: putApiV1UsersIdFollow
+      summary: Add follow
+      description: Idempotent.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+    delete:
+      operationId: deleteApiV1UsersIdFollow
+      summary: Remove follow
+      description: Idempotent.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/bookmarks:
+    get:
+      operationId: getApiV1Bookmarks
+      summary: List bookmarks
+      description: Results are rechecked for current access and enabled bookmarks.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: UUID from the preceding page.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Record'
+                  meta:
+                    $ref: '#/components/schemas/SocialPageMeta'
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/notifications:
+    get:
+      operationId: getApiV1Notifications
+      summary: List notifications
+      description: Only currently visible notifications are returned; unreadCount reflects current visibility.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: UUID from the preceding page.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notification'
+                  meta:
+                    $ref: '#/components/schemas/NotificationPageMeta'
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/notifications/count:
+    get:
+      operationId: getApiV1NotificationsCount
+      summary: Count unread notifications
+      description: Only currently visible notifications are counted.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      unreadCount:
+                        type: integer
+                        minimum: 0
+                    required:
+                    - unreadCount
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/notifications/read:
+    post:
+      operationId: postApiV1NotificationsRead
+      summary: Mark notifications read
+      description: 'Provide exactly one of ids (up to 100, including empty) or all: true. Unknown and inaccessible
+        IDs are ignored.'
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRead'
+      responses:
+        '204':
+          description: Successful response.
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/notifications/events:
+    get:
+      operationId: getApiV1NotificationsEvents
+      summary: Stream notifications
+      description: 'Private SSE stream: notification payload is NotificationEvent; resync payload is ResyncEvent and
+        signals clients to reload the list. Heartbeat comments arrive every 15 seconds. Visibility and session validity
+        are rechecked; revocation closes the stream. No durable replay or Last-Event-ID support.'
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                events:
+                  summary: Resync and heartbeat
+                  value: 'event: resync
+  
+                    data: {}
+  
+  
+                    : heartbeat
+  
+  
+                    '
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/activity:
+    get:
+      operationId: getApiV1Activity
+      summary: List followed activity
+      description: Activity from followed users only; record activity is limited to currently public and accessible
+        records and enabled features.
+      security:
+      - sessionCookie: []
+      - hostSessionCookie: []
+      - bearerAuth: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: UUID from the preceding page.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Activity'
+                  meta:
+                    $ref: '#/components/schemas/SocialPageMeta'
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '400':
+          $ref: '#/components/responses/E400'
+        '401':
+          $ref: '#/components/responses/E401'
+        '403':
+          $ref: '#/components/responses/E403'
+        '404':
+          $ref: '#/components/responses/E404'
+        '413':
+          $ref: '#/components/responses/E413'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+  /api/v1/auth/signup:
+    post:
+      operationId: postApiV1AuthSignup
+      summary: Start signup
+      description: Sets a pending-signup cookie and returns signupToken. Verification requires the token in the body or cookie.
+      security: []
+      responses:
+        '202':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id001
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id001
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: &id002
+                        type: string
+                      signupToken: *id002
+                    required:
+                    - status
+                    - signupToken
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+                password:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 8
+                  maxLength: 128
+              required:
+              - name
+              - email
+              - password
+              additionalProperties: false
+      parameters:
+      - &id004
+        name: x-request-id
+        in: header
+        required: false
+        description: Optional client correlation ID; a valid value is echoed in responses.
+        schema: *id002
+  /api/v1/auth/verify-email:
+    post:
+      operationId: postApiV1AuthVerifyEmail
+      summary: Verify signup
+      description: Consumes the signup token from the body or pending cookie; creates a session and clears the pending cookie.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id003
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id003
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Login'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '409':
+          $ref: '#/components/responses/E409'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 1
+                  maxLength: 128
+                signupToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Opaque token; successful token checks require the issued 43-character base64url value.
+              required:
+              - email
+              - code
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/resend-code:
+    post:
+      operationId: postApiV1AuthResendCode
+      summary: Resend a code
+      description: For verification, the signup token may come from the body or pending cookie. The response does not disclose
+        account existence.
+      security: []
+      responses:
+        '202':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id005
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id005
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: *id002
+                    required:
+                    - status
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+                purpose:
+                  type: string
+                  enum:
+                  - verify_email
+                  - reset_password
+                signupToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Opaque token; successful token checks require the issued 43-character base64url value.
+              required:
+              - email
+              - purpose
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/signin:
+    post:
+      operationId: postApiV1AuthSignin
+      summary: Sign in
+      description: MFA_REQUIRED is a 403 with details.mfaToken; submit it to MFA verification.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id006
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id006
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Login'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+                password:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 1
+                  maxLength: 128
+              required:
+              - email
+              - password
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/signout:
+    post:
+      operationId: postApiV1AuthSignout
+      summary: Sign out
+      description: Revokes a supplied session if present and clears the cookie.
+      security: &id012
+      - {}
+      - &id008
+        sessionCookie: []
+      - &id009
+        hostSessionCookie: []
+      - &id010
+        bearerAuth: []
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id007
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id007
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id004
+  /api/v1/auth/signout-all:
+    post:
+      operationId: postApiV1AuthSignoutAll
+      summary: Sign out all sessions
+      description: Sign out all sessions.
+      security: &id017
+      - *id008
+      - *id009
+      - *id010
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id011
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id011
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/E429'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id004
+  /api/v1/auth/session:
+    get:
+      operationId: getApiV1AuthSession
+      summary: Get current session
+      description: Returns user null when no valid session exists; mfaEnabled reflects the current factor.
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id013
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id013
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        oneOf:
+                        - $ref: '#/components/schemas/SessionUser'
+                        - type: 'null'
+                    required:
+                    - user
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: postApiV1AuthPasswordForgot
+      summary: Request password reset
+      description: Returns the same response whether or not the account exists.
+      security: []
+      responses:
+        '202':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id014
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id014
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: *id002
+                    required:
+                    - status
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+              required:
+              - email
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/password/verify-code:
+    post:
+      operationId: postApiV1AuthPasswordVerifyCode
+      summary: Verify reset code
+      description: Sets the reset cookie and returns a resetToken, valid for ten minutes.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id015
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id015
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      resetToken: *id002
+                    required:
+                    - resetToken
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: sana@example.com
+                  minLength: 3
+                  maxLength: 254
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 1
+                  maxLength: 128
+              required:
+              - email
+              - code
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/password/reset:
+    post:
+      operationId: postApiV1AuthPasswordReset
+      summary: Reset password
+      description: Accepts resetToken or the reset cookie. Revokes sessions; MFA_REQUIRED returns a challenge after password
+        reset. The MFA_REQUIRED response clears the reset cookie and does not issue a session cookie.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id016
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id016
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Login'
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          description: Forbidden or MFA_REQUIRED; the latter clears the reset cookie and issues no session cookie.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: *id002
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id002
+            Set-Cookie:
+              description: Clears the reset cookie on MFA_REQUIRED.
+              schema: *id002
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 8
+                  maxLength: 128
+                resetToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Opaque token; successful token checks require the issued 43-character base64url value.
+              required:
+              - password
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/password/change:
+    post:
+      operationId: postApiV1AuthPasswordChange
+      summary: Change password
+      description: Other sessions are revoked.
+      security: *id017
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id018
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id018
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 1
+                  maxLength: 128
+                newPassword:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 8
+                  maxLength: 128
+              required:
+              - currentPassword
+              - newPassword
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/demo:
+    post:
+      operationId: postApiV1AuthDemo
+      summary: Sign in to demo
+      description: Requires server demo configuration; may return MFA_REQUIRED.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id019
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id019
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Login'
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id004
+  /api/v1/auth/mfa:
+    get:
+      operationId: getApiV1AuthMfa
+      summary: Get MFA status
+      description: Get MFA status.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id020
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id020
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totpEnabled: &id030
+                        type: boolean
+                      recoveryCodesRemaining: &id063
+                        type: integer
+                    required:
+                    - totpEnabled
+                    - recoveryCodesRemaining
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/auth/mfa/totp/setup:
+    post:
+      operationId: postApiV1AuthMfaTotpSetup
+      summary: Set up TOTP
+      description: Set up TOTP.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id021
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id021
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      secret: *id002
+                      otpauthUrl:
+                        type: string
+                        format: uri
+                      qrSvg: *id002
+                    required:
+                    - secret
+                    - otpauthUrl
+                    - qrSvg
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '409':
+          $ref: '#/components/responses/E409'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 1
+                  maxLength: 128
+              required:
+              - currentPassword
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/mfa/totp/enable:
+    post:
+      operationId: postApiV1AuthMfaTotpEnable
+      summary: Enable TOTP
+      description: Enable TOTP.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id022
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id022
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      recoveryCodes: &id025
+                        type: array
+                        items: *id002
+                    required:
+                    - recoveryCodes
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '409':
+          $ref: '#/components/responses/E409'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 6
+                  maxLength: 6
+              required:
+              - code
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/mfa/totp/disable:
+    post:
+      operationId: postApiV1AuthMfaTotpDisable
+      summary: Disable TOTP
+      description: Code may be a TOTP or recovery code.
+      security: *id017
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id023
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id023
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 1
+                  maxLength: 128
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 1
+                  maxLength: 64
+              required:
+              - currentPassword
+              - code
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/mfa/recovery-codes:
+    post:
+      operationId: postApiV1AuthMfaRecoveryCodes
+      summary: Regenerate recovery codes
+      description: Code may be a TOTP or recovery code.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id024
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id024
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      recoveryCodes: *id025
+                    required:
+                    - recoveryCodes
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  format: password
+                  example: correct horse battery staple
+                  minLength: 1
+                  maxLength: 128
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 1
+                  maxLength: 64
+              required:
+              - currentPassword
+              - code
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/auth/mfa/verify:
+    post:
+      operationId: postApiV1AuthMfaVerify
+      summary: Complete MFA sign-in
+      description: Provide exactly one of code and recoveryCode.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id026
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id026
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaLogin'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mfaToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Opaque token; successful token checks require the issued 43-character base64url value.
+                code:
+                  type: string
+                  example: '123456'
+                  minLength: 6
+                  maxLength: 6
+                recoveryCode:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+              required:
+              - mfaToken
+              additionalProperties: false
+              oneOf:
+              - required:
+                - code
+              - required:
+                - recoveryCode
+      parameters:
+      - *id004
+  /api/v1/auth/sessions:
+    get:
+      operationId: getApiV1AuthSessions
+      summary: List sessions
+      description: List sessions.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id027
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id027
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: &id032
+                          type: string
+                          format: uuid
+                          example: c4f2b566-5b53-4ad9-b572-97e7f943ea10
+                        createdAt: &id028
+                          type: string
+                          format: date-time
+                        lastSeenAt: *id028
+                        ip: &id029
+                          type:
+                          - string
+                          - 'null'
+                        userAgent: *id029
+                        current: *id030
+                      required:
+                      - id
+                      - createdAt
+                      - lastSeenAt
+                      - ip
+                      - userAgent
+                      - current
+                      additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '401':
+          $ref: '#/components/responses/E401'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/auth/sessions/{id}:
+    delete:
+      operationId: deleteApiV1AuthSessionsId
+      summary: Revoke a session
+      description: Revoke a session.
+      security: *id017
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id031
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id031
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - &id045
+        name: id
+        in: path
+        required: true
+        schema: *id032
+      - *id004
+  /api/v1/auth/oauth/{provider}/start:
+    get:
+      operationId: getApiV1AuthOauthProviderStart
+      summary: OAuth start
+      description: Redirects to the provider.
+      security: []
+      responses:
+        '302':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id033
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id033
+            Location:
+              description: Redirect destination.
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: OAuth state or session cookie.
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '500':
+          $ref: '#/components/responses/E500'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - &id035
+        name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - google
+          - github
+      - name: next
+        in: query
+        required: false
+        description: Local destination after sign-in; unsafe paths fall back to /app.
+        schema: *id002
+      - *id004
+  /api/v1/auth/oauth/{provider}/callback:
+    get:
+      operationId: getApiV1AuthOauthProviderCallback
+      summary: OAuth callback
+      description: Clears oauth_state and redirects to the app, login error, or MFA verification. The MFA redirect includes
+        the sanitized next destination and does not issue a session cookie; a completed sign-in sets one.
+      security: []
+      responses:
+        '302':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id034
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id034
+            Location:
+              description: Redirect destination.
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: Clears the OAuth state cookie; also sets a session cookie when sign-in completes without MFA.
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '500':
+          $ref: '#/components/responses/E500'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id035
+      - name: code
+        in: query
+        required: false
+        schema: *id002
+      - name: state
+        in: query
+        required: false
+        schema: *id002
+      - *id004
+  /api/v1/me:
+    get:
+      operationId: getApiV1Me
+      summary: Get profile
+      description: Get profile.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id036
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id036
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: &id038
+                    type: object
+                    properties:
+                      id: *id032
+                      email: &id059
+                        type: string
+                        format: email
+                        example: sana@example.com
+                      displayName: *id002
+                      avatarUrl:
+                        type:
+                        - string
+                        - 'null'
+                        format: uri
+                      role: *id002
+                      createdAt: *id028
+                    required:
+                    - id
+                    - email
+                    - displayName
+                    - avatarUrl
+                    - role
+                    - createdAt
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+    patch:
+      operationId: patchApiV1Me
+      summary: Update profile
+      description: avatarUrl must be HTTPS; null clears it.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id037
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id037
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: *id038
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                avatarUrl:
+                  type:
+                  - string
+                  - 'null'
+                  format: uri
+                  maxLength: 2048
+                  description: HTTPS URL with a host, at most 2048 UTF-8 bytes; null clears it.
+              additionalProperties: false
+      parameters:
+      - *id004
+    delete:
+      operationId: deleteApiV1Me
+      summary: Delete account
+      description: Soft deletes the account, revokes sessions, and clears the session cookie.
+      security: *id017
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id039
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id039
+            Set-Cookie:
+              description: Sets or clears the corresponding authentication cookie.
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/E429'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/entities:
+    get:
+      operationId: getApiV1Entities
+      summary: List entity definitions
+      description: List entity definitions.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id040
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id040
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entity'
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/entities/{entity}:
+    get:
+      operationId: getApiV1EntitiesEntity
+      summary: List records
+      description: Entity schemas and permitted filters come from GET /api/v1/entities. mine requires a session; all requires
+        admin.
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id041
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id041
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - meta
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Record'
+                  meta:
+                    type: object
+                    required:
+                    - nextCursor
+                    properties:
+                      nextCursor:
+                        type:
+                        - string
+                        - 'null'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - &id043
+        name: entity
+        in: path
+        required: true
+        schema: *id002
+      - &id050
+        name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - &id051
+        name: cursor
+        in: query
+        required: false
+        schema: *id002
+      - name: sort
+        in: query
+        required: false
+        description: createdAt, updatedAt, or a sortable entity field; prefix - for descending.
+        schema: *id002
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - mine
+          - public
+          - all
+          default: mine
+      - name: q
+        in: query
+        required: false
+        description: Search configured searchable fields. Three or more Unicode characters use English websearch full-text ranking; shorter queries use escaped literal case-insensitive substring matching. Search cursors bind query, filters, scope and viewer.
+        schema: *id002
+      - name: filter[field]
+        in: query
+        required: false
+        description: Equality filter for a configured filterable field; replace field with its name.
+        schema: *id002
+      - *id004
+    post:
+      operationId: postApiV1EntitiesEntity
+      summary: Create record
+      description: data must conform to the entity schema. Public visibility depends on the entity configuration.
+      security: *id017
+      responses:
+        '201':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id042
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id042
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Record'
+                required:
+                - data
+                additionalProperties: false
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+        '409':
+          $ref: '#/components/responses/E409'
+      parameters:
+      - *id043
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: 8?128 ASCII letters, digits, underscores or hyphens. A key is retained for 24 hours; reuse with a different
+          request yields 422 and concurrent use may yield 409.
+        schema: *id002
+      - *id004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  additionalProperties: true
+                visibility:
+                  type: string
+                  enum:
+                  - private
+                  - public
+              required:
+              - data
+              additionalProperties: false
+  /api/v1/entities/{entity}/{id}:
+    get:
+      operationId: getApiV1EntitiesEntityId
+      summary: Get record
+      description: Get record.
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id044
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id044
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Record'
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id043
+      - *id045
+      - *id004
+    patch:
+      operationId: patchApiV1EntitiesEntityId
+      summary: Update record
+      description: Shallow merges data and validates the complete result against the entity schema.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id046
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id046
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Record'
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '428':
+          $ref: '#/components/responses/E428'
+        '401':
+          $ref: '#/components/responses/E401'
+        '409':
+          $ref: '#/components/responses/E409'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id043
+      - *id045
+      - name: If-Match
+        in: header
+        required: true
+        description: Record version, optionally quoted.
+        schema: *id002
+      - *id004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  additionalProperties: true
+                visibility:
+                  type: string
+                  enum:
+                  - private
+                  - public
+              additionalProperties: false
+    delete:
+      operationId: deleteApiV1EntitiesEntityId
+      summary: Delete record
+      description: Delete record.
+      security: *id017
+      responses:
+        '204':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id047
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id047
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '409':
+          $ref: '#/components/responses/E409'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id043
+      - *id045
+      - name: If-Match
+        in: header
+        required: false
+        description: Record version, optionally quoted.
+        schema: *id002
+      - *id004
+  /api/v1/entities/{entity}/events:
+    get:
+      operationId: getApiV1EntitiesEntityEvents
+      summary: Watch record changes
+      description: 'SSE events: change carries {id, entity, op, version}; resync carries {} and requires a refetch. Includes
+        retry and keepalive frames; streams close after 30 minutes.'
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id048
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id048
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: 'event: change
+
+                data: {"id":"c4f2b566-5b53-4ad9-b572-97e7f943ea10","entity":"notes","op":"update","version":2}
+
+
+                event: resync
+
+                data: {}
+
+
+                '
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id043
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - mine
+          - public
+          - all
+          default: mine
+      - *id004
+  /api/v1/files:
+    get:
+      operationId: getApiV1Files
+      summary: List files
+      description: List files.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id049
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id049
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/File'
+                  meta: &id060
+                    type: object
+                    properties:
+                      nextCursor: *id029
+                    required:
+                    - nextCursor
+                    additionalProperties: false
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id050
+      - *id051
+      - *id004
+    post:
+      operationId: postApiV1Files
+      summary: Upload a file
+      description: One file part only. PNG, JPEG, WebP, GIF and PDF are detected from bytes. The multipart extractor limits
+        the body to 4 MiB; image processing and storage quotas also apply.
+      security: *id017
+      responses:
+        '201':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id052
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id052
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/File'
+                required:
+                - data
+                additionalProperties: false
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '415':
+          $ref: '#/components/responses/E415'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/files/{id}:
+    get:
+      operationId: getApiV1FilesId
+      summary: Get file metadata
+      description: Get file metadata.
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id053
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id053
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/File'
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '500':
+          $ref: '#/components/responses/E500'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id045
+      - *id004
+    patch:
+      operationId: patchApiV1FilesId
+      summary: Change file visibility
+      description: Change file visibility.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id054
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id054
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/File'
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id045
+      - *id004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                visibility:
+                  type: string
+                  enum:
+                  - private
+                  - public
+              required:
+              - visibility
+              additionalProperties: false
+    delete:
+      operationId: deleteApiV1FilesId
+      summary: Delete file
+      description: Delete file.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id055
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id055
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: *id032
+                    required:
+                    - id
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id045
+      - *id004
+  /api/v1/files/{id}/content:
+    get:
+      operationId: getApiV1FilesIdContent
+      summary: Download file
+      description: Returns the detected content type, ETag, cache policy and Content-Disposition.
+      security: *id012
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id056
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id056
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '500':
+          $ref: '#/components/responses/E500'
+        '304':
+          description: ETag matched.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id057
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id057
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id045
+      - name: If-None-Match
+        in: header
+        required: false
+        schema: *id002
+      - *id004
+  /api/v1/admin/users:
+    get:
+      operationId: getApiV1AdminUsers
+      summary: List users
+      description: List users.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id058
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id058
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: *id032
+                        email: *id059
+                        displayName: *id002
+                        avatarUrl: *id029
+                        role: *id002
+                        status: *id002
+                        emailVerifiedAt:
+                          type:
+                          - string
+                          - 'null'
+                          format: date-time
+                        createdAt: *id028
+                      required:
+                      - id
+                      - email
+                      - displayName
+                      - avatarUrl
+                      - role
+                      - status
+                      - emailVerifiedAt
+                      - createdAt
+                      additionalProperties: false
+                  meta: *id060
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id050
+      - *id051
+      - name: q
+        in: query
+        required: false
+        schema: *id002
+      - *id004
+  /api/v1/admin/users/{id}:
+    patch:
+      operationId: patchApiV1AdminUsersId
+      summary: Update user access
+      description: Administrators cannot change their own role or status. Suspension revokes sessions.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id061
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id061
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: *id032
+                      role: *id002
+                      status: *id002
+                    required:
+                    - id
+                    - role
+                    - status
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '404':
+          $ref: '#/components/responses/E404'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+        '415':
+          $ref: '#/components/responses/E415'
+      parameters:
+      - *id045
+      - *id004
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum:
+                  - user
+                  - admin
+                status:
+                  type: string
+                  enum:
+                  - active
+                  - suspended
+              additionalProperties: false
+  /api/v1/admin/audit:
+    get:
+      operationId: getApiV1AdminAudit
+      summary: List audit entries
+      description: List audit entries.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id062
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id062
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: *id063
+                        at: *id028
+                        actorId:
+                          type:
+                          - string
+                          - 'null'
+                          format: uuid
+                        action: *id002
+                        targetType: *id029
+                        targetId: *id029
+                        ip: *id029
+                        userAgent: *id029
+                        requestId: *id029
+                        meta:
+                          type: object
+                          additionalProperties: true
+                      required:
+                      - id
+                      - at
+                      - actorId
+                      - action
+                      - targetType
+                      - targetId
+                      - ip
+                      - userAgent
+                      - requestId
+                      - meta
+                      additionalProperties: false
+                  meta: *id060
+                required:
+                - data
+                - meta
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id050
+      - *id051
+      - name: action
+        in: query
+        required: false
+        schema: *id002
+      - *id004
+  /api/v1/admin/stats:
+    get:
+      operationId: getApiV1AdminStats
+      summary: Get administration statistics
+      description: Get administration statistics.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id064
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id064
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      users: *id063
+                      verifiedUsers: *id063
+                      records:
+                        type: object
+                        additionalProperties: *id063
+                    required:
+                    - users
+                    - verifiedUsers
+                    - records
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/ai/chat:
+    post:
+      operationId: postApiV1AiChat
+      summary: Stream AI chat
+      description: Total message content is limited to 48000 characters; model must be allowed by server configuration. SSE
+        events delta {text}, done {usage:{input,output},finishReason}, and error {code,message}. Errors after streaming starts
+        are events; upstream authentication maps to 503, rate limiting to 429, and other failures to 503.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id065
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id065
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: 'event: delta
+
+                data: {"text":"Hello"}
+
+
+                event: done
+
+                data: {"usage":{"input":20,"output":1},"finishReason":"stop"}
+
+
+                '
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '415':
+          $ref: '#/components/responses/E415'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum:
+                        - user
+                        - assistant
+                      content:
+                        type: string
+                        minLength: 1
+                        maxLength: 8000
+                    required:
+                    - role
+                    - content
+                    additionalProperties: false
+                  minItems: 1
+                  maxItems: 40
+                model:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                  description: Only models in AI_MODELS_ALLOWED may be selected.
+              required:
+              - messages
+              additionalProperties: false
+              example:
+                messages:
+                - role: user
+                  content: Summarize my notes.
+              description: At most 48000 message-content characters in total; clients cannot submit a system role.
+      parameters:
+      - *id004
+  /api/v1/ai/complete:
+    post:
+      operationId: postApiV1AiComplete
+      summary: Complete a prompt
+      description: When json is true, returns a parsed object in data.json; unreadable or non-object JSON is 502. Upstream
+        401/403 maps to 503; upstream 429 maps to 429; other upstream failures map to 503.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id066
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id066
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      text: *id002
+                      usage:
+                        $ref: '#/components/schemas/Usage'
+                      json:
+                        type: object
+                        additionalProperties: true
+                    required:
+                    - text
+                    - usage
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '422':
+          $ref: '#/components/responses/E422'
+        '429':
+          $ref: '#/components/responses/E429'
+        '400':
+          $ref: '#/components/responses/E400'
+        '503':
+          $ref: '#/components/responses/E503'
+        '401':
+          $ref: '#/components/responses/E401'
+        '502':
+          $ref: '#/components/responses/E502'
+        '415':
+          $ref: '#/components/responses/E415'
+        '500':
+          $ref: '#/components/responses/E500'
+        '403':
+          $ref: '#/components/responses/E403'
+        '413':
+          $ref: '#/components/responses/E413'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 16000
+                  example: Give me a concise summary.
+                json:
+                  type: boolean
+                  default: false
+              required:
+              - prompt
+              additionalProperties: false
+      parameters:
+      - *id004
+  /api/v1/ai/usage:
+    get:
+      operationId: getApiV1AiUsage
+      summary: Get daily AI usage
+      description: Get daily AI usage.
+      security: *id017
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id067
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id067
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      day:
+                        type: string
+                        format: date
+                      requests: *id063
+                      inputTokens: *id063
+                      outputTokens: *id063
+                      dailyLimit: *id063
+                    required:
+                    - day
+                    - requests
+                    - inputTokens
+                    - outputTokens
+                    - dailyLimit
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '401':
+          $ref: '#/components/responses/E401'
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness probe
+      description: Liveness probe.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id068
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id068
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: *id002
+                required:
+                - status
+                additionalProperties: false
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /readyz:
+    get:
+      operationId: getReadyz
+      summary: Readiness probe
+      description: Readiness probe.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id069
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id069
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: *id002
+                required:
+                - status
+                additionalProperties: false
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+  /api/v1/health:
+    get:
+      operationId: getApiV1Health
+      summary: API readiness probe
+      description: API readiness probe.
+      security: []
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            x-request-id:
+              description: Request correlation ID.
+              schema: &id070
+                type: string
+            RateLimit-Remaining:
+              description: Remaining global IP budget when the request reaches a handler.
+              schema:
+                type: integer
+            Retry-After:
+              description: Retry delay, when provided.
+              schema: *id070
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: *id002
+                    required:
+                    - status
+                    additionalProperties: false
+                required:
+                - data
+                additionalProperties: false
+        '429':
+          $ref: '#/components/responses/E429'
+        '500':
+          $ref: '#/components/responses/E500'
+        '503':
+          $ref: '#/components/responses/E503'
+        '400':
+          $ref: '#/components/responses/E400'
+        '413':
+          $ref: '#/components/responses/E413'
+      parameters:
+      - *id004
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Default development session cookie; SESSION_COOKIE can override its name.
+    hostSessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-session
+      description: Default production session cookie; SESSION_COOKIE can override its name.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The same opaque session token returned at sign-in.
+  schemas:
+    SocialConfig:
+      type: object
+      properties:
+        comments:
+          type: boolean
+        reactions:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 32
+            pattern: ^[a-z0-9_-]+$
+        bookmarks:
+          type: boolean
+      required: []
+      additionalProperties: false
+    Comment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        entity:
+          type: string
+        recordId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        parentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        body:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - entity
+      - recordId
+      - authorId
+      - parentId
+      - body
+      - createdAt
+      - updatedAt
+      - deletedAt
+      additionalProperties: false
+    SocialActor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+      required:
+      - id
+      - displayName
+      additionalProperties: false
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        actor:
+          $ref: '#/components/schemas/SocialActor'
+        entity:
+          type:
+          - string
+          - 'null'
+        recordId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        commentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - kind
+      - actor
+      - entity
+      - recordId
+      - commentId
+      - createdAt
+      - readAt
+      additionalProperties: false
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        actor:
+          $ref: '#/components/schemas/SocialActor'
+        entity:
+          type:
+          - string
+          - 'null'
+        recordId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        commentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        targetUserId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - id
+      - kind
+      - actor
+      - entity
+      - recordId
+      - commentId
+      - createdAt
+      - targetUserId
+      additionalProperties: false
+    PendingAction:
+      type: object
+      properties:
+        actionId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - create
+          - update
+        entity:
+          type: string
+        recordId:
+          type: string
+          format: uuid
+        data:
+          type: object
+          additionalProperties: true
+          description: Proposed entity data, validated on confirmation.
+        version:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+      - actionId
+      - kind
+      - entity
+      - data
+      - expiresAt
+      additionalProperties: false
+    AssistSource:
+      type: object
+      properties:
+        entity:
+          type: string
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+      required:
+      - entity
+      - id
+      - label
+      additionalProperties: false
+    AssistDeltaEvent:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+      - text
+      additionalProperties: false
+    AssistSourcesEvent:
+      type: object
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistSource'
+      required:
+      - sources
+      additionalProperties: false
+    AssistPendingEvent:
+      type: object
+      properties:
+        pendingActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAction'
+      required:
+      - pendingActions
+      additionalProperties: false
+    AssistDoneEvent:
+      type: object
+      properties:
+        usage:
+          $ref: '#/components/schemas/Usage'
+      required:
+      - usage
+      additionalProperties: false
+    AssistErrorEvent:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+      - message
+      additionalProperties: false
+    NotificationEvent:
+      type: object
+      properties:
+        notification:
+          $ref: '#/components/schemas/Notification'
+      required:
+      - notification
+      additionalProperties: false
+    ResyncEvent:
+      type: object
+      properties: {}
+      required: []
+      additionalProperties: false
+    StatsRow:
+      type: object
+      properties:
+        key:
+          type:
+          - string
+          - number
+          - boolean
+          - 'null'
+        value:
+          type:
+          - number
+          - 'null'
+      required:
+      - key
+      - value
+      additionalProperties: false
+    StatsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatsRow'
+        meta:
+          type: object
+          properties:
+            metric:
+              type: string
+            groupBy:
+              type:
+              - string
+              - 'null'
+          required:
+          - metric
+          - groupBy
+          additionalProperties: false
+      required:
+      - data
+      - meta
+      additionalProperties: false
+    NotificationRead:
+      oneOf:
+      - type: object
+        properties:
+          ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+            maxItems: 100
+        required:
+        - ids
+        additionalProperties: false
+      - type: object
+        properties:
+          all:
+            type: boolean
+            const: true
+        required:
+        - all
+        additionalProperties: false
+    SocialPageMeta:
+      type: object
+      properties:
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          format: uuid
+      required:
+      - nextCursor
+      additionalProperties: false
+    NotificationPageMeta:
+      type: object
+      properties:
+        nextCursor:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        unreadCount:
+          type: integer
+          minimum: 0
+      required:
+      - nextCursor
+      - unreadCount
+      additionalProperties: false
+    AssistSearchResult:
+      type: object
+      properties:
+        record:
+          $ref: '#/components/schemas/Record'
+        score:
+          type: number
+      required:
+      - record
+      - score
+      additionalProperties: false
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: *id002
+            message: *id002
+            details: {}
+            requestId: *id002
+          required:
+          - code
+          - message
+          - requestId
+          additionalProperties: false
+      required:
+      - error
+      additionalProperties: false
+      example:
+        error:
+          code: VALIDATION_FAILED
+          message: Please check your details.
+          details:
+          - path: /email
+            message: Enter a valid email.
+          requestId: req-123
+    User:
+      type: object
+      properties:
+        id: *id032
+        email:
+          type: string
+          format: email
+        displayName: *id002
+        role:
+          type: string
+          enum:
+          - user
+          - admin
+        mfaEnabled:
+          type: boolean
+          const: false
+          description: False in ordinary login responses; enabled accounts must complete an MFA challenge instead.
+      required:
+      - id
+      - email
+      - displayName
+      - role
+      - mfaEnabled
+      additionalProperties: false
+    SessionUser:
+      type: object
+      properties:
+        id: *id032
+        email:
+          type: string
+          format: email
+        displayName: *id002
+        role:
+          type: string
+          enum:
+          - user
+          - admin
+        mfaEnabled: *id030
+      required:
+      - id
+      - email
+      - displayName
+      - role
+      - mfaEnabled
+      additionalProperties: false
+    MfaUser:
+      type: object
+      properties:
+        id: *id032
+        email:
+          type: string
+          format: email
+        displayName: *id002
+        role:
+          type: string
+          enum:
+          - user
+          - admin
+        mfaEnabled:
+          type: boolean
+          const: true
+      required:
+      - id
+      - email
+      - displayName
+      - role
+      - mfaEnabled
+      additionalProperties: false
+    MfaLogin:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/MfaUser'
+            token: *id002
+          required:
+          - user
+          - token
+          additionalProperties: false
+      required:
+      - data
+      additionalProperties: false
+    Login:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            token: *id002
+          required:
+          - user
+          - token
+          additionalProperties: false
+      required:
+      - data
+      additionalProperties: false
+      example:
+        data:
+          user:
+            id: c4f2b566-5b53-4ad9-b572-97e7f943ea10
+            email: sana@example.com
+            displayName: Sana
+            role: user
+            mfaEnabled: false
+          token: opaque-session-token
+    Record:
+      type: object
+      properties:
+        id: *id032
+        entity: *id002
+        ownerId: *id032
+        data:
+          type: object
+          additionalProperties: true
+          description: Validated against the entity schema returned by GET /api/v1/entities.
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+        version: *id063
+        createdAt: *id028
+        updatedAt: *id028
+      required:
+      - id
+      - entity
+      - ownerId
+      - data
+      - visibility
+      - version
+      - createdAt
+      - updatedAt
+      additionalProperties: false
+      example:
+        id: c4f2b566-5b53-4ad9-b572-97e7f943ea10
+        entity: notes
+        ownerId: c4f2b566-5b53-4ad9-b572-97e7f943ea10
+        data:
+          title: Meeting notes
+        visibility: private
+        version: 1
+        createdAt: '2026-11-23T12:00:00Z'
+        updatedAt: '2026-11-23T12:00:00Z'
+    File:
+      type: object
+      properties:
+        id: *id032
+        contentType: *id002
+        sizeBytes: *id063
+        width:
+          type:
+          - integer
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+        originalName: *id029
+        visibility: *id002
+        createdAt: *id028
+        url:
+          type: string
+          format: uri-reference
+          x-widget: file
+          example: /api/v1/files/c4f2b566-5b53-4ad9-b572-97e7f943ea10/content
+      required:
+      - id
+      - contentType
+      - sizeBytes
+      - width
+      - height
+      - originalName
+      - visibility
+      - createdAt
+      - url
+      additionalProperties: false
+    Entity:
+      type: object
+      properties:
+        name: *id002
+        label: *id002
+        read:
+          type: string
+          enum:
+          - owner
+          - authenticated
+          - public
+          - admin
+        create:
+          type: string
+          enum:
+          - authenticated
+          - admin
+        write:
+          type: string
+          enum:
+          - owner
+          - admin
+        allowPublic: *id030
+        sortable: *id025
+        filterable: *id025
+        searchable: *id025
+        social:
+          description: Missing or null means social features are disabled.
+          oneOf:
+          - $ref: "#/components/schemas/SocialConfig"
+          - type: "null"
+        schema:
+          type: object
+          additionalProperties: true
+          description: 'JSON Schema for record data; a file field can use format: uri-reference and x-widget: file.'
+          example:
+            type: object
+            properties:
+              image:
+                type: string
+                format: uri-reference
+                x-widget: file
+      required:
+      - name
+      - label
+      - read
+      - create
+      - write
+      - allowPublic
+      - sortable
+      - filterable
+      - searchable
+      - schema
+      additionalProperties: false
+    Usage:
+      type: object
+      properties:
+        input: *id063
+        output: *id063
+      required:
+      - input
+      - output
+      additionalProperties: false
+  responses:
+    E400:
+      description: Invalid request or validation failure.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id071
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id071
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E401:
+      description: Authentication, credentials, or code invalid.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id072
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id072
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E403:
+      description: Forbidden, suspended, CSRF rejected, or MFA required. MFA_REQUIRED includes details.mfaToken.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id073
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id073
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E404:
+      description: Resource not found or not visible.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id074
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id074
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E409:
+      description: Conflict; version conflicts include details.currentVersion.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id075
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id075
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E413:
+      description: Request too large.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id076
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id076
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E415:
+      description: Unsupported media type.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id077
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id077
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E422:
+      description: Weak password, quota, idempotency mismatch, or unreadable upload.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id078
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id078
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E428:
+      description: If-Match required.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id079
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id079
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E429:
+      description: Rate limit reached.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id080
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id080
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E500:
+      description: Internal error.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id081
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id081
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E502:
+      description: AI returned unreadable JSON.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id082
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id082
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    E503:
+      description: Service unavailable or not configured.
+      headers:
+        x-request-id:
+          description: Request correlation ID.
+          schema: &id083
+            type: string
+        RateLimit-Remaining:
+          description: Remaining global IP budget when the request reaches a handler.
+          schema:
+            type: integer
+        Retry-After:
+          description: Retry delay, when provided.
+          schema: *id083
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

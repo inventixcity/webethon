@@ -1,0 +1,42 @@
+# cargo-deny policy. Run from backend/:  cargo deny check
+# Checked in CI by .github/workflows/backend.yml.
+
+[graph]
+all-features = true
+
+[advisories]
+# Known vulnerabilities and unsound crates fail the build. Yanked crates are denied too.
+# Add an exception only with a comment that gives the reason and an expiry date.
+ignore = []
+yanked = "deny"
+
+[licenses]
+# Permissive licenses only. Anything else needs an explicit, reviewed entry here.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",   # webpki-roots data (used by rustls)
+    "ISC",
+    "MIT",
+    "MPL-2.0",               # file-level copyleft; only affects modified MPL files
+    "Unicode-3.0",           # ICU data used by idna
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate versions are noisy but not a risk, so warn only.
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+# Only crates.io. No git dependencies or unknown registries.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []
+
+[sources.allow-org]
+github = []

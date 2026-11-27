@@ -1,0 +1,122 @@
+.wave-text-root {
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  overflow: hidden;
+  min-height: max(760px, 100svh);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.wave-text-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: inherit;
+  padding: 32px clamp(24px, 4.5vw, 80px);
+}
+
+.wave-text-masthead {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wave-text-body {
+  flex: 1;
+  padding: clamp(72px, 8vh, 112px) 0 80px;
+}
+
+.wave-text-headline {
+  margin: 0 0 40px -0.045em;
+  max-width: 100%;
+  font-size: clamp(72px, 13.5cqw, 220px);
+  line-height: 0.9;
+  font-weight: 600;
+  font-variation-settings: "wdth" 95;
+  letter-spacing: -0.055em;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.wave-text-support {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  width: 52%;
+  margin-left: auto;
+}
+
+.wave-text-support p {
+  margin: 0;
+  max-width: 30ch;
+  font-size: 16px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.wave-text-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 56px;
+  max-width: 100%;
+  padding: 16px 20px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.wave-text-action > span { font-size: 20px; line-height: 1; }
+.wave-text-action:hover { text-decoration: underline; text-underline-offset: 4px; }
+.wave-text-root:has(a:focus-visible) .wave-text-water .wave-text-action { outline: 2px solid var(--vermilion); outline-offset: 2px; }
+.wave-text-root:has(a:hover) .wave-text-water .wave-text-action { text-decoration: underline; text-underline-offset: 4px; }
+
+.wave-text-caption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wave-text-water {
+  position: absolute;
+  inset: 0;
+  min-height: inherit;
+  pointer-events: none;
+  user-select: none;
+  color: var(--paper);
+  background: var(--ink-soft);
+  /* A deliberate no-JS / pre-hydration still composition. */
+  clip-path: polygon(0 58%, 14% 61%, 28% 59%, 42% 52%, 58% 45%, 72% 43%, 86% 47%, 100% 55%, 100% 100%, 0 100%);
+}
+
+.wave-text-waves { position: absolute; inset: 0; pointer-events: none; }
+
+@container (max-width: 1050px) {
+  .wave-text-support { width: 65%; flex-wrap: wrap; gap: 24px; }
+}
+
+@container (max-width: 600px) {
+  .wave-text-content { padding: 24px; }
+  .wave-text-masthead { font-size: 10px; gap: 20px; }
+  .wave-text-masthead > span:last-child { max-width: 11ch; text-align: right; }
+  .wave-text-body { padding-top: 110px; padding-bottom: 80px; }
+  .wave-text-headline { font-size: clamp(72px, 17cqw, 102px); margin-bottom: 48px; }
+  .wave-text-support { width: 100%; display: grid; gap: 28px; }
+  .wave-text-support p { max-width: 29ch; font-size: 15px; }
+  .wave-text-action { justify-self: start; }
+  .wave-text-caption { font-size: 10px; }
+}

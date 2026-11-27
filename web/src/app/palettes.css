@@ -1,0 +1,129 @@
+/*
+ * Each auth set from 4 onward has its own colours. They reuse the kit's token names,
+ * so the shared forms and buttons take them on by themselves, in both modes.
+ * --scene-a, -b and -c are the three tones its animated scene is painted from.
+ */
+
+/*
+ * The shared inputs draw their placeholder as a faint tint of the text colour, which falls well below
+ * 4.5:1. Each set reads placeholders in its muted ink instead, in both modes.
+ */
+[data-palette="maison"] input::placeholder,
+[data-palette="botanica"] input::placeholder,
+[data-palette="polar"] input::placeholder {
+  color: var(--ink-muted);
+}
+
+/*
+ * Shared parts that fade themselves with opacity fall below 4.5:1 in some palettes, so each set lifts them.
+ * The password Show toggle is 60% in the kit; botanica's light ink needs 75% to read.
+ */
+[data-palette="botanica"] button[aria-pressed] {
+  opacity: 0.75;
+}
+
+[data-palette="botanica"] button[aria-pressed]:hover {
+  opacity: 1;
+}
+
+/* The strength checklist fades unmet rules to 55%; polar's light ink needs 75%. */
+[data-palette="polar"] li.opacity-55 {
+  opacity: 0.75;
+}
+
+/* The focus caret in the code boxes blinks forever. Reduced motion keeps it solid. */
+@media (prefers-reduced-motion: reduce) {
+  [data-palette] .animate-blink {
+    animation: none;
+  }
+}
+
+[data-palette="maison"] {
+  --paper: #f6eee6;
+  --paper-raised: #fcf7f1;
+  --paper-sunk: #ebdfd3;
+  --ink: #2a0a10;
+  --ink-soft: #5a2a30;
+  --ink-muted: #806065;
+  --vermilion: #9c7440;
+  --vermilion-deep: #7a5626;
+  --rule: rgb(42 10 16 / 0.18);
+  --scene-a: #e8d2c6;
+  --scene-b: #c4a093;
+  --scene-c: #fff6ec;
+}
+
+[data-theme="dark"] [data-palette="maison"] {
+  --paper: #1a0609;
+  --paper-raised: #27090e;
+  --paper-sunk: #120406;
+  --ink: #f6eae0;
+  --ink-soft: #d9c5b8;
+  --ink-muted: #ab908a;
+  --vermilion: #d4af72;
+  --vermilion-deep: #e0c089;
+  --rule: rgb(246 234 224 / 0.16);
+  --scene-a: #5a111d;
+  --scene-b: #1f0509;
+  --scene-c: #e2c084;
+}
+
+[data-palette="botanica"] {
+  --paper: #efebdd;
+  --paper-raised: #f8f5ea;
+  --paper-sunk: #e1dbc7;
+  --ink: #14261d;
+  --ink-soft: #33483c;
+  --ink-muted: #5a6e62;
+  --vermilion: #9a7432;
+  --vermilion-deep: #6f4f18;
+  --rule: rgb(20 38 29 / 0.18);
+  --scene-a: #cfd8c4;
+  --scene-b: #a9b9a2;
+  --scene-c: #2f5a44;
+}
+
+[data-theme="dark"] [data-palette="botanica"] {
+  --paper: #0d1712;
+  --paper-raised: #15241b;
+  --paper-sunk: #09100c;
+  --ink: #ede6d3;
+  --ink-soft: #c9cdb9;
+  --ink-muted: #8fa093;
+  --vermilion: #c9a35c;
+  --vermilion-deep: #d9b873;
+  --rule: rgb(237 230 211 / 0.15);
+  --scene-a: #16302a;
+  --scene-b: #0b1a15;
+  --scene-c: #7fb39a;
+}
+
+[data-palette="polar"] {
+  --paper: #eef3f7;
+  --paper-raised: #fafcfe;
+  --paper-sunk: #dfe8ef;
+  --ink: #0b1626;
+  --ink-soft: #2a3b52;
+  --ink-muted: #526479;
+  --vermilion: #1a7ea6;
+  --vermilion-deep: #0f5f80;
+  --rule: rgb(11 22 38 / 0.16);
+  --scene-a: #5ec4cf;
+  --scene-b: #6d7fe0;
+  --scene-c: #9fe3c8;
+}
+
+[data-theme="dark"] [data-palette="polar"] {
+  --paper: #060a12;
+  --paper-raised: #0d1420;
+  --paper-sunk: #03060b;
+  --ink: #e6f1f7;
+  --ink-soft: #b6c8d6;
+  --ink-muted: #7e93a6;
+  --vermilion: #6fe3e1;
+  --vermilion-deep: #8feded;
+  --rule: rgb(230 241 247 / 0.14);
+  --scene-a: #3fe0c0;
+  --scene-b: #5a6df0;
+  --scene-c: #b56dff;
+}

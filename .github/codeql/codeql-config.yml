@@ -1,0 +1,8 @@
+# Keep generated and vendored code out of the analysis.
+name: "invigil codeql config"
+paths-ignore:
+  - "**/node_modules"
+  - "**/.next"
+  - "**/target"
+  - "**/out"
+  - "**/*.min.js"

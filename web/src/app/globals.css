@@ -1,0 +1,246 @@
+@import "tailwindcss";
+/*
+ * The root 404 belongs to every route, so a stylesheet imported by it would be
+ * preloaded on every page. Bundling it here avoids that.
+ */
+@import "../components/effects/shark-404/shark-404.css";
+@import "./palettes.css";
+
+/* Browser test profiles hold locked files, and scanning them crashes the build. */
+@source not "../**/.verification/**";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Ivory & Ink palette. See docs/DESIGN.md.
+ * Dark mode swaps the same names, so anything built from them flips by itself.
+ * The attribute also works on any element: put data-theme="dark" on a section to
+ * keep that one panel dark in both modes.
+ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --paper: #f3eee3;
+  --paper-raised: #fbf8f1;
+  --paper-sunk: #e9e2d3;
+  --ink: #12110e;
+  --ink-soft: #3a372e;
+  --ink-muted: #6b6759;
+  --vermilion: #d23a1c;
+  --vermilion-deep: #b92d13;
+  --rule: rgb(18 17 14 / 0.16);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #12110e;
+  --paper-raised: #1c1a16;
+  --paper-sunk: #0b0a08;
+  --ink: #f3eee3;
+  --ink-soft: #cfc9bb;
+  --ink-muted: #9b9587;
+  --vermilion: #e0492a;
+  --vermilion-deep: #ef6a4c;
+  --rule: rgb(243 238 227 / 0.16);
+}
+
+/* Redeclared on every scope, so a themed panel recalculates these from its own colours. */
+:root,
+[data-theme],
+[data-palette] {
+  /* Mapped to the names shadcn/ui components expect. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-sunk);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--paper-sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--vermilion-deep);
+  --border: var(--rule);
+  --input: var(--ink);
+  --ring: var(--vermilion);
+  --radius: 0rem;
+
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-vermilion: var(--vermilion);
+  --color-vermilion-deep: var(--vermilion-deep);
+  --color-rule: var(--rule);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+  --radius-2xl: 0rem;
+
+  --font-heading: var(--font-head, var(--font-display)), serif;
+  --font-sans: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, monospace;
+  --ease-editorial: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * Motion tokens. Mirrored in src/lib/motion.ts, so keep the two in step.
+ * Enter is the editorial curve from DESIGN.md. Move is the in-out curve the shuttle already uses.
+ * Named enter and move, not out and in-out, so they don't replace Tailwind's built-in ease-out and ease-in-out.
+ */
+@theme {
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --animate-ticker: ticker 48s linear infinite;
+  --animate-ticker-y: ticker-y 48s linear infinite;
+  --animate-shuttle: shuttle 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-blink: blink 1.1s steps(1, end) infinite;
+  --animate-shake: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+
+  @keyframes ticker {
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @keyframes ticker-y {
+    to {
+      transform: translate3d(0, -50%, 0);
+    }
+  }
+
+  @keyframes shuttle {
+    from {
+      transform: translate3d(-100%, 0, 0);
+    }
+    to {
+      transform: translate3d(300%, 0, 0);
+    }
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes shake {
+    20%,
+    60% {
+      transform: translate3d(-8px, 0, 0);
+    }
+    40%,
+    80% {
+      transform: translate3d(8px, 0, 0);
+    }
+  }
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--rule);
+  }
+
+  /* Edge adds its own eye icon to password fields, which doubles up the Show button. */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
+  /* Stops browsers painting autofilled fields in their own colours. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: currentColor;
+    caret-color: var(--vermilion);
+    transition: background-color 99999s linear;
+  }
+
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background: var(--vermilion);
+    color: var(--paper);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--vermilion);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-content {
+    animation: reveal-up 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes reveal-up {
+    from { transform: translateY(115%); }
+    to { transform: translateY(0); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Components that read the duration tokens get no motion either. */
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}

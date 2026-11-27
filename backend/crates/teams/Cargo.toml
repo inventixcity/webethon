@@ -1,0 +1,28 @@
+[package]
+name = "teams"
+description = "Teams with owner, admin, member and viewer roles, email invites and ownership transfer."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kernel.workspace = true
+axum.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+tower = { workspace = true, features = ["util"] }
+tokio.workspace = true

@@ -1,0 +1,38 @@
+[package]
+name = "admin"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+[lints]
+workspace = true
+[dependencies]
+kernel.workspace = true
+auth.workspace = true
+payments.workspace = true
+records.workspace = true
+files.workspace = true
+social.workspace = true
+axum.workspace = true
+base64.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+places.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+object_store.workspace = true
+reqwest.workspace = true
+tower = { workspace = true, features = ["util"] }
+argon2.workspace = true
+
+hmac.workspace = true
+sha1.workspace = true

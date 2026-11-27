@@ -1,0 +1,25 @@
+# Keep the build context small and free of secrets. Build context = backend/.
+
+# Build output and local tooling
+target/
+**/target/
+.cargo/
+.vscode/
+.idea/
+
+# Secrets and local environment. Only the examples are allowed in.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Version control and OS noise
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+
+# Logs and coverage
+*.log
+coverage/

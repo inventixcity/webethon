@@ -1,0 +1,86 @@
+import { type NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIES } from "@/features/auth/session-cookie";
+import { isOnboardingExempt } from "@/features/auth/onboarding-routes";
+import { signedVisitorHeaders } from "@/lib/api/forward";
+
+/*
+ * Routing hints only. A session cookie's presence says nothing about whether it is still valid,
+ * so /app re-checks with the API on every request (see features/auth/require-user.ts).
+ *
+ * Does nothing until the API is connected, so the design previews work exactly as before.
+ */
+
+const APP = "/app";
+const SIGN_IN_PAGES = ["/login", "/signup"];
+
+export async function proxy(request: NextRequest) {
+  // Always replace the incoming value; layouts must never trust a client-supplied pathname.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-app-pathname");
+  requestHeaders.set("x-app-pathname", request.nextUrl.pathname);
+  const next = () => NextResponse.next({ request: { headers: requestHeaders } });
+  if (process.env.NEXT_PUBLIC_API_ENABLED !== "true") return next();
+
+  const { pathname, search, searchParams } = request.nextUrl;
+  const signedIn = SESSION_COOKIES.some((name) => request.cookies.has(name));
+
+  if (pathname === APP || pathname.startsWith(`${APP}/`)) {
+    if (signedIn) {
+      // Shared layouts are reused on client navigation, so enforce this on each route request too.
+      if (!isOnboardingExempt(pathname)) {
+        const origin = process.env.API_ORIGIN?.replace(/\/+$/, "");
+        if (!origin) return new NextResponse("Service unavailable", { status: 503 });
+        try {
+          const response = await fetch(`${origin}/api/v1/onboarding`, {
+            headers: {
+              accept: "application/json",
+              cookie: request.headers.get("cookie") ?? "",
+              "x-request-id": crypto.randomUUID(),
+              ...signedVisitorHeaders(request.headers),
+            },
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(10_000),
+          });
+          // Let the layout handle expired sessions through its usual login redirect.
+          if (response.status === 401) return next();
+          if (!response.ok) return new NextResponse("Service unavailable", { status: 503 });
+          const body: unknown = await response.json();
+          const completedAt = (body as { data?: { completedAt?: unknown } })?.data?.completedAt;
+          if (completedAt === null) {
+            const url = request.nextUrl.clone();
+            url.pathname = "/app/onboarding";
+            url.search = "";
+            return NextResponse.redirect(url);
+          }
+          if (typeof completedAt !== "string") return new NextResponse("Service unavailable", { status: 503 });
+        } catch {
+          return new NextResponse("Service unavailable", { status: 503 });
+        }
+      }
+      return next();
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(url);
+  }
+
+  // A rejected cookie is marked session=expired by the app, so the visitor can sign in again instead of looping.
+  if (SIGN_IN_PAGES.includes(pathname) && signedIn && searchParams.get("session") !== "expired") {
+    const url = request.nextUrl.clone();
+    url.pathname = APP;
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  return next();
+}
+
+export const config = {
+  matcher: [
+    "/app/:path*",
+    "/((?!api|_next/static|_next/image|favicon|kit|auth/|.*\\..*).*)",
+  ],
+};

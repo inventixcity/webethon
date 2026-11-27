@@ -1,0 +1,97 @@
+[workspace]
+resolver = "3"
+members = ["crates/examcore", "crates/exam_questions", "crates/exam_authoring", "crates/exam_enroll", "crates/exam_grading", "crates/exam_attempts", "crates/exam_resilience", "crates/exam_integrity", "crates/exam_analytics", "crates/flags", "crates/shares", "crates/transfer", "crates/webhooks", "crates/jobs", "crates/admin", "crates/kernel", "crates/auth", "crates/records", "crates/files", "crates/realtime", "crates/ai", "crates/analytics", "crates/assist", "crates/social", "crates/teams", "crates/payments", "crates/booking", "crates/places", "crates/server"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+flags = { path = "crates/flags" }
+shares = { path = "crates/shares" }
+transfer = { path = "crates/transfer" }
+webhooks = { path = "crates/webhooks" }
+csv = "1.4.0"
+jobs = { path = "crates/jobs" }
+aes-gcm = "0.11.1"
+qrcode = { version = "0.15.0", default-features = false, features = ["svg"] }
+async-stream = "0.3.6"
+async-trait = "0.1.92"
+bytes = "1"
+futures = "0.3.34"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+oauth2 = { version = "5.0.0", default-features = false }
+object_store = { version = "0.14.2", features = ["aws"] }
+kernel = { path = "crates/kernel" }
+examcore = { path = "crates/examcore" }
+exam_questions = { path = "crates/exam_questions" }
+exam_authoring = { path = "crates/exam_authoring" }
+exam_enroll = { path = "crates/exam_enroll" }
+exam_grading = { path = "crates/exam_grading" }
+exam_attempts = { path = "crates/exam_attempts" }
+exam_resilience = { path = "crates/exam_resilience" }
+exam_integrity = { path = "crates/exam_integrity" }
+exam_analytics = { path = "crates/exam_analytics" }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+admin = { path = "crates/admin" }
+places = { path = "crates/places" }
+booking = { path = "crates/booking" }
+payments = { path = "crates/payments" }
+teams = { path = "crates/teams" }
+social = { path = "crates/social" }
+assist = { path = "crates/assist" }
+analytics = { path = "crates/analytics" }
+auth = { path = "crates/auth" }
+records = { path = "crates/records" }
+files = { path = "crates/files" }
+realtime = { path = "crates/realtime" }
+ai = { path = "crates/ai" }
+
+anyhow = "1"
+argon2 = { version = "0.5", features = ["std"] }
+axum = { version = "0.8", features = ["macros"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
+hex = "0.4"
+hmac = "0.12"
+jsonschema = { version = "0.63", default-features = false }
+lettre = { version = "0.11.24", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+secrecy = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_path_to_error = "0.1.20"
+serde_urlencoded = "0.7.1"
+sha1 = "0.10"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "time", "json", "macros", "migrate"] }
+subtle = "2"
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "request-id", "limit", "timeout", "compression-gzip", "sensitive-headers", "set-header", "catch-panic", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+metrics = "0.24.6"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+dbg_macro = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
