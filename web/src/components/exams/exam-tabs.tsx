@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /** Every examiner exam section, in order. The slug is appended to /app/examiner/exams/{id}. */
@@ -21,10 +22,26 @@ export const EXAM_TABS = [
 export function ExamTabs({ examId, className }: { examId: string; className?: string }) {
   const pathname = usePathname();
   const base = `/app/examiner/exams/${encodeURIComponent(examId)}`;
+  const listRef = useRef<HTMLUListElement>(null);
+  const [indicator, setIndicator] = useState<{ x: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>("[data-active='true']");
+    if (!list || !active) return;
+    setIndicator({ x: active.offsetLeft, width: active.offsetWidth });
+    const scroller = list.parentElement;
+    if (scroller && scroller.scrollWidth > scroller.clientWidth) {
+      const left = active.offsetLeft - (scroller.clientWidth - active.offsetWidth) / 2;
+      scroller.scrollTo({ left, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }
+    const observer = new ResizeObserver(() => setIndicator({ x: active.offsetLeft, width: active.offsetWidth }));
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [pathname]);
 
   return (
     <nav aria-label="Exam sections" className={cn("scroll-fade relative -mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
-      <ul className="flex w-max min-w-full border border-ink bg-paper-raised">
+      <ul ref={listRef} className="relative flex w-max min-w-full border border-ink bg-paper-raised">
         {EXAM_TABS.map((tab) => {
           const href = tab.slug ? `${base}/${tab.slug}` : base;
           const active = tab.slug
@@ -35,10 +52,11 @@ export function ExamTabs({ examId, className }: { examId: string; className?: st
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
+                data-active={active ? "true" : undefined}
                 className={cn(
                   "relative inline-flex h-11 items-center border-r border-ink px-4 font-mono text-[12.5px] font-semibold tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus",
-                  "after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-cobalt",
-                  active ? "bg-ink text-paper after:block" : "text-ink-soft after:hidden hover:bg-paper-sunk hover:text-ink",
+                  "",
+                  active ? "bg-fill font-bold text-on-fill" : "text-ink-soft hover:bg-hover hover:text-ink",
                 )}
               >
                 {tab.label}
@@ -46,6 +64,7 @@ export function ExamTabs({ examId, className }: { examId: string; className?: st
             </li>
           );
         })}
+        {indicator && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 h-[3px] origin-left bg-cobalt transition-transform duration-(--duration-slow) ease-(--ease-enter)" style={{ transform: `translateX(${indicator.x}px) scaleX(${indicator.width})` }} />}
       </ul>
     </nav>
   );

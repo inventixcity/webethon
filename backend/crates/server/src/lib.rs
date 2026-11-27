@@ -50,6 +50,7 @@ pub fn build_router(registry: Arc<records::EntityRegistry>) -> Router<AppState> 
         .merge(exam_resilience::router())
         .merge(exam_integrity::router())
         .merge(exam_analytics::router())
+        .merge(exam_contact::router())
         .merge(exam_disputes::router())
         .merge(exam_assist::router())
         .merge(records::account_router())

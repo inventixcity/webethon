@@ -10,7 +10,12 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/exams/{id}/analytics", get(exam_analytics))
         .route("/questions/{id}/stats", get(question_stats))
+        .route("/exams/{id}/stats/timeseries", get(stats::timeseries))
+        .route("/examiner/stats", get(stats::examiner_overview))
+        .route("/admin-stats/overview", get(stats::admin_overview))
 }
+
+mod stats;
 
 #[derive(Clone, FromRow)]
 struct Attempt {

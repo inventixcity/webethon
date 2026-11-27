@@ -24,6 +24,7 @@ exam_integrity.workspace = true
 exam_analytics.workspace = true
 exam_disputes.workspace = true
 exam_assist.workspace = true
+exam_contact.workspace = true
 jobs.workspace = true
 webhooks.workspace = true
 bytes.workspace = true

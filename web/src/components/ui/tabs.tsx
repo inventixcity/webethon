@@ -39,6 +39,13 @@ function useIndicator(activeKey: string | null) {
     const measure = () => {
       const active = list.querySelector<HTMLElement>("[data-active='true']");
       setBox(active ? { x: active.offsetLeft, w: active.offsetWidth } : null);
+      if (active) {
+        const scroller = list.parentElement;
+        if (scroller && scroller.scrollWidth > scroller.clientWidth) {
+          const left = active.offsetLeft - (scroller.clientWidth - active.offsetWidth) / 2;
+          scroller.scrollTo({ left, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        }
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);

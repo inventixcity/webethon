@@ -557,6 +557,36 @@ export type GradingSuggestion = {
   model: string;
 };
 
+// ------------------------------------------------------------------ STATS
+/** GET /exams/{id}/stats/timeseries: buckets are UTC RFC 3339 timestamps. */
+export type ExamTimeseriesBucket = {
+  at: string;
+  answersSaved: number;
+  activeCandidates: number;
+  connectionDrops: number;
+  submissions: number;
+};
+export type ExamTimeseries = {
+  examId: string;
+  bucketSeconds: number;
+  from: string;
+  to: string;
+  buckets: ExamTimeseriesBucket[];
+};
+/** GET /examiner/stats. */
+export type ExaminerStats = {
+  submissionsPerDay: Array<{ day: string; count: number }>;
+  passRateByExam: Array<{ examId: string; title: string; completedAt: string; passRate: number; submissions: number }>;
+  candidatesNow: number;
+};
+/** GET /admin-stats/overview. */
+export type AdminStatsOverview = {
+  signInsPerHour: Array<{ at: string; count: number }>;
+  activeSessions: number;
+  accountsByRole: Array<{ role: "candidate" | "examiner" | "admin"; count: number }>;
+  examsByPhase: Array<{ phase: ExamPhase; count: number }>;
+};
+
 // ------------------------------------------------------------------ live room
 /** Server-sent event payload on GET /exams/{id}/monitor/stream (event: "snapshot"). */
 export type MonitorSnapshotEvent = ExamMonitor;

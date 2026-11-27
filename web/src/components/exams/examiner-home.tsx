@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
+import { BarChart, Sparkline } from "@/components/charts";
 import { useTick } from "@/components/candidate/clock";
 import { formatCountdown } from "@/components/candidate/format";
 import { useToast } from "@/components/feedback/toaster";
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { api } from "@/lib/api/client";
 import { messageFor } from "@/lib/errors/describe";
-import type { ExamSummary, Page } from "@/lib/exam/types";
+import type { ExaminerStats, ExamSummary, Page } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { createSandboxAttempt } from "./actions";
 import { EXAM_CHANGED_EVENT, formatWindow, PHASE_LABEL } from "./format";
@@ -62,6 +63,13 @@ function useLive<T>(path: `/${string}`) {
     };
   }, [reload]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") reload();
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
+
   return { ...state, reload };
 }
 
@@ -70,6 +78,12 @@ const byTime = (key: "startsAt" | "endsAt") => (a: ExamSummary, b: ExamSummary) 
 /** The examiner's cockpit: what is running, what is coming, what waits on results, and the guided flow. */
 export function ExaminerHome() {
   const { data, error, reload } = useLive<Page<ExamSummary>>("/exams");
+  const stats = useLive<ExaminerStats>("/examiner/stats");
+  const [candidateSamples, setCandidateSamples] = useState<Array<{ key: string; value: number }>>([]);
+
+  useEffect(() => {
+    if (stats.data) setCandidateSamples((current) => [...current.slice(-18), { key: new Date().toISOString(), value: stats.data!.candidatesNow }]);
+  }, [stats.data]);
 
   if (!data) return error ? <ErrorState error={error} onRetry={reload} /> : <LoadingState label="Loading your exams" rows={4} />;
 
@@ -117,6 +131,18 @@ export function ExaminerHome() {
       ) : (
         <>
           <LiveBoard ongoing={ongoing} />
+          <section aria-label="Exam activity charts" className="grid gap-6 border border-rule bg-paper-raised p-5 md:grid-cols-2">
+            <div className="min-w-0">
+              <p className="mb-3 flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase"><LiveDot /> Candidates in exams right now</p>
+              <p className="mb-2 text-3xl font-medium tabular-nums">{stats.data?.candidatesNow ?? "—"}</p>
+              <Sparkline label="Candidates active during recent 15-second samples" data={candidateSamples.map((point) => ({ key: new Date(point.key).toLocaleTimeString(), value: point.value, tone: "info" as const }))} />
+            </div>
+            <BarChart label="Submissions per day · last 14 days" data={(stats.data?.submissionsPerDay ?? []).map((row) => ({ key: row.day, value: row.count, tone: "info" as const }))} />
+          </section>
+          <section className="grid gap-3 border-t border-rule pt-5" aria-labelledby="recent-pass-rates">
+            <h2 id="recent-pass-rates" className="font-mono text-[11px] tracking-[0.12em] uppercase">Pass rate · recent completed exams</h2>
+            {(stats.data?.passRateByExam ?? []).length === 0 ? <p className="text-sm text-ink-muted">No completed exams with scored submissions yet.</p> : <ul className="grid gap-3">{stats.data?.passRateByExam.map((exam) => <li key={exam.examId} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,2fr)_3rem] sm:items-center"><span className="truncate text-sm">{exam.title}</span><span className="h-2 border border-rule bg-paper-sunk" role="img" aria-label={`${exam.title}: ${(exam.passRate * 100).toFixed(1)} percent pass rate`}><span className="block h-full bg-cobalt" style={{ width: `${Math.max(0, Math.min(100, exam.passRate * 100))}%` }} /></span><span className="font-mono text-xs tabular-nums">{(exam.passRate * 100).toFixed(0)}%</span></li>)}</ul>}
+          </section>
           <dl className="grid grid-cols-2 gap-px border border-rule bg-rule md:grid-cols-5">
             <Tile label="Exams" value={exams.length} note={data.nextCursor ? "First page only" : "All exams"} />
             <Tile label="Ongoing" value={ongoing.length} tone="live" note="Running now" />

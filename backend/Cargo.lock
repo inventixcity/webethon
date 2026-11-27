@@ -1072,6 +1072,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "exam_contact"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "examcore",
+ "hex",
+ "kernel",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "exam_disputes"
 version = "0.1.0"
 dependencies = [
@@ -3579,6 +3597,7 @@ dependencies = [
  "exam_assist",
  "exam_attempts",
  "exam_authoring",
+ "exam_contact",
  "exam_disputes",
  "exam_enroll",
  "exam_grading",

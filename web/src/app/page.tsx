@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LandingOwl } from "@/components/app-shell/landing-owl";
-import { SectionLink } from "@/components/app-shell/section-link";
 import { WaveText } from "@/components/effects/wave-text";
 import { MethodSteps } from "@/components/landing/method-steps";
 import { Eyebrow, Figure, SectionTitle } from "@/components/landing/primitives";
 import { ResilienceCompare } from "@/components/landing/resilience-compare";
 import { SecurityCards } from "@/components/landing/security-cards";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Art, artSrc } from "@/components/ui/art";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
 import { SiteFooter } from "@/components/marketing/site-footer";
+import { SiteNav } from "@/components/marketing/site-nav";
 
 // Resolved once on the server. Without the file, the metadata simply carries no image.
 const ogImage = artSrc("og-image");
@@ -94,14 +93,6 @@ const ROLES = [
   },
 ] as const;
 
-const NAV = [
-  { href: "#method", label: "Method" },
-  { href: "#resilience", label: "Resilience" },
-  { href: "#integrity", label: "Integrity" },
-  { href: "#security", label: "Security" },
-  { href: "#roles", label: "Roles" },
-] as const;
-
 const SECTION = "grid gap-12 border-t border-ink px-5 py-16 md:px-8 md:py-24";
 const NOTE = "font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase";
 // Each list row of the collected / never-collected panel: a hover tint and a 2px cobalt bar on the left.
@@ -111,28 +102,7 @@ const LIST_ROW =
 export default function LandingPage() {
   return (
     <div className="min-h-dvh min-w-0 bg-paper text-ink">
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-ink bg-paper px-5 font-mono text-[11px] tracking-[0.14em] uppercase md:px-8">
-        <Link href="/" className="flex min-w-0 items-center gap-3">
-          <span className="grid size-7 shrink-0 place-items-center bg-fill text-xs font-bold text-on-fill">{siteConfig.mark}</span>
-          <span className="truncate">Inventix Invigil</span>
-        </Link>
-        <nav aria-label="Page sections" className="hidden items-center gap-6 lg:flex">
-          {NAV.map((item) => (
-            <SectionLink key={item.href} href={item.href} className="inline-flex min-h-6 items-center py-1 text-ink-soft transition-colors hover:text-ink">
-              {item.label}
-            </SectionLink>
-          ))}
-          <Link href="/verify" className="inline-flex min-h-6 items-center py-1 text-ink-soft transition-colors hover:text-ink">
-            Verify
-          </Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <ThemeToggle className="hidden min-h-6 min-w-6 py-1 uppercase sm:flex" />
-          <Button asChild size="sm">
-            <Link href="/login">Sign in</Link>
-          </Button>
-        </div>
-      </header>
+      <SiteNav />
 
       <main>
         {/* The opening statement: the animated water and the headline, with the hero figure and the actions

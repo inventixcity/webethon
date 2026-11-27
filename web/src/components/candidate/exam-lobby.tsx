@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -52,6 +52,49 @@ function Mark({ filled }: { filled: boolean }) {
   );
 }
 
+/** Why the exam can't be started yet, in words. Before the window opens it counts down and reloads at zero. */
+function LobbyReason({ reason, startsAt, onOpen }: { reason: string | null; startsAt: string; onOpen: () => void }) {
+  const opensAt = new Date(startsAt).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  const waiting = reason === "not_started" && Number.isFinite(opensAt);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= opensAt + 1500) {
+        window.clearInterval(timer);
+        onOpen();
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [waiting, opensAt, onOpen]);
+
+  let message: string;
+  if (waiting) {
+    const left = Math.max(0, Math.floor((opensAt - now) / 1000));
+    const hh = String(Math.floor(left / 3600)).padStart(2, "0");
+    const mm = String(Math.floor((left % 3600) / 60)).padStart(2, "0");
+    const ss = String(left % 60).padStart(2, "0");
+    const at = new Date(opensAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    message = left > 0 ? `This exam opens in ${hh}:${mm}:${ss} (${at}). You can start it then; this page updates itself.` : "Opening now…";
+  } else if (reason === "late_join_closed") {
+    message = "Late joining has closed for this exam. Contact your examiner if you think this is wrong.";
+  } else if (reason === "attempt_exists") {
+    message = "You have already submitted this exam. Your result appears on My exams once it is published.";
+  } else if (reason === "closed") {
+    message = "This exam has closed.";
+  } else {
+    message = "You can't start this exam right now.";
+  }
+  return (
+    <p className="flex items-center gap-3 text-sm tracking-normal normal-case">
+      <span aria-hidden="true" className={waiting ? "size-1.5 shrink-0 animate-pulse bg-cobalt" : "size-1.5 shrink-0 bg-vermilion"} />
+      {message}
+    </p>
+  );
+}
+
 export function ExamLobby({ examId }: { examId: string }) {
   const router = useRouter();
   const { state, reload } = useApiData<Lobby>(`/me/exams/${examId}`);
@@ -75,12 +118,18 @@ export function ExamLobby({ examId }: { examId: string }) {
   }
 
   const lobby = state.data;
-  const resuming = lobby.access === "in_progress";
+  const resuming = lobby.access === "in_progress" && Boolean(lobby.attemptId);
+  // Resuming is always allowed: the workspace re-checks the device and the deadline.
+  const canProceed = lobby.canStart || resuming;
   const integrity = lobby.settings.integrity;
 
   async function start() {
     setStarting(true);
     setStartError(undefined);
+    if (resuming && lobby.attemptId) {
+      router.push(`/exam/${lobby.attemptId}`);
+      return;
+    }
     try {
       // The device id travels in a header, so the server knows which device holds this attempt.
       const { attemptId } = await api<{ attemptId: string }>(`/me/exams/${examId}/attempt`, {
@@ -196,7 +245,7 @@ export function ExamLobby({ examId }: { examId: string }) {
             id={checkId}
             checked={agreed}
             onCheckedChange={(value) => setAgreed(value === true)}
-            disabled={!lobby.canStart || starting}
+            disabled={starting}
             className="mt-0.5"
           />
           <Label htmlFor={checkId} className="cursor-pointer text-base leading-snug tracking-normal normal-case">
@@ -205,12 +254,7 @@ export function ExamLobby({ examId }: { examId: string }) {
         </div>
 
         <div aria-live="polite" className="min-h-5 font-mono text-[11px] tracking-[0.04em]">
-          {!lobby.canStart && (
-            <p className="flex items-center gap-3">
-              <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
-              {lobby.reason ?? "You can't start this exam right now."}
-            </p>
-          )}
+          {!canProceed && <LobbyReason reason={lobby.reason} startsAt={lobby.startsAt} onOpen={reload} />}
         </div>
         {startError && (
           <p role="alert" className="flex items-center gap-3 font-mono text-[11px] tracking-[0.04em]">
@@ -223,7 +267,7 @@ export function ExamLobby({ examId }: { examId: string }) {
           <Button
             type="button"
             size="lg"
-            disabled={!agreed || !lobby.canStart || starting}
+            disabled={!agreed || !canProceed || starting}
             loading={starting}
             onClick={start}
           >

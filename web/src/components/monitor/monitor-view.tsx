@@ -17,6 +17,7 @@ import { IncidentPanel, INDICATOR_NOTICE } from "./incident-panel";
 import { LeakTracer } from "./leak-tracer";
 import { OutageCreditDialog } from "./outage-credit-dialog";
 import { PriorityChip } from "./priority-chip";
+import { ActivityCharts } from "./activity-charts";
 import { LiveMode, POLL_MS, useLiveMonitor, useNow } from "./use-live-monitor";
 
 /** How long a changed row stays highlighted. */
@@ -173,6 +174,8 @@ function ControlRoom({ examId }: { examId: string }) {
           <Kpi label="Submitted" value={data.submitted} detail={`${percent(data.submitted, data.enrolled)}% enrolled`} tone="ink" />
         </dl>
       )}
+
+      {data && <ActivityCharts examId={examId} snapshot={data} />}
 
       {data && (
         <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_22rem]">

@@ -22,8 +22,8 @@ function separateActionArt(actions: ReactNode): { art: ReactNode; controls: Reac
 
   const classes = actionArt.props.className?.split(/\s+/).filter((name) => !["hidden", "sm:block", "aspect-[4/3]", "w-60"].includes(name)) ?? [];
   const art = cloneElement(actionArt, {
-    position: "object-right",
-    className: cn(...classes, "block aspect-[16/7] w-full md:aspect-[4/3] md:max-w-72"),
+    position: "object-[78%_50%]",
+    className: cn(...classes, "block aspect-[16/7] w-full md:aspect-[16/10] md:max-w-[22rem]"),
   });
   const controls = parts.filter((_, index) => index !== artIndex);
   return { art, controls };
@@ -172,7 +172,7 @@ export function PageHeader({
   const separated = !showBanner && actions ? separateActionArt(actions) : { art: null, controls: actions };
   const headerArt = showBanner && banner ? (
     <>
-      <Art name={banner} alt="" sizes="(max-width: 767px) 100vw, 288px" position="object-right" className="aspect-[16/7] w-full border border-ink md:aspect-[4/3]" />
+      <Art name={banner} alt="" sizes="(max-width: 767px) 100vw, 352px" position="object-[78%_50%]" className="aspect-[16/7] w-full border border-ink md:aspect-[16/10]" />
       <figcaption className="mt-2 font-mono text-[11px] tracking-[0.06em] text-ink-muted uppercase md:text-[10px] md:tracking-[0.12em]">
         {bannerCaption ?? `FIG. ${index ?? "01"} / ${eyebrow}`}
       </figcaption>
@@ -189,7 +189,7 @@ export function PageHeader({
 
   return (
     <header className={cn("grid w-full min-w-0 max-w-full gap-4", level === 1 ? "pb-5 md:pb-7" : "border-b border-rule pb-5", className)}>
-      <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:items-center md:gap-8">
+      <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-center md:gap-8">
         <div className="grid min-w-0 content-center gap-3">
           <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
             {eyebrow}

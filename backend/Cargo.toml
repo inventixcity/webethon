@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/examcore", "crates/exam_disputes", "crates/exam_assist", "crates/exam_questions", "crates/exam_authoring", "crates/exam_enroll", "crates/exam_grading", "crates/exam_attempts", "crates/exam_resilience", "crates/exam_integrity", "crates/exam_analytics", "crates/flags", "crates/shares", "crates/transfer", "crates/webhooks", "crates/jobs", "crates/admin", "crates/kernel", "crates/auth", "crates/records", "crates/files", "crates/realtime", "crates/ai", "crates/analytics", "crates/assist", "crates/social", "crates/teams", "crates/payments", "crates/booking", "crates/places", "crates/server"]
+members = ["crates/examcore", "crates/exam_disputes", "crates/exam_assist", "crates/exam_questions", "crates/exam_authoring", "crates/exam_enroll", "crates/exam_grading", "crates/exam_attempts", "crates/exam_resilience", "crates/exam_integrity", "crates/exam_analytics", "crates/exam_contact", "crates/flags", "crates/shares", "crates/transfer", "crates/webhooks", "crates/jobs", "crates/admin", "crates/kernel", "crates/auth", "crates/records", "crates/files", "crates/realtime", "crates/ai", "crates/analytics", "crates/assist", "crates/social", "crates/teams", "crates/payments", "crates/booking", "crates/places", "crates/server"]
 
 [workspace.package]
 edition = "2024"
@@ -33,6 +33,7 @@ exam_attempts = { path = "crates/exam_attempts" }
 exam_resilience = { path = "crates/exam_resilience" }
 exam_integrity = { path = "crates/exam_integrity" }
 exam_analytics = { path = "crates/exam_analytics" }
+exam_contact = { path = "crates/exam_contact" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 admin = { path = "crates/admin" }
 places = { path = "crates/places" }
@@ -92,3 +93,5 @@ dbg_macro = "deny"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+
