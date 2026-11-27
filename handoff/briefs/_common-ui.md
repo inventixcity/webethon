@@ -1,0 +1,15 @@
+## Common rules for CX6–CX10
+- Rules: handoff/HANDOFF.md "USER UI RULES".
+  - Use the shared square Button with the fill-wipe hover.
+  - No wiggle and no tickers.
+  - Dark mode uses black shades only.
+  - Use tokens only: ink and paper, plus cobalt, amber and vermilion accents.
+  - Everything must read well in BOTH themes.
+- Never mention reference projects.
+- Verify visually with the screenshot tools in C:/Users/umerf/AppData/Local/Temp/claude/46368f72d808e358/3d64d5b3-0eee-4935-9e2c-1276c595d01d/scratchpad:
+  - shots.mjs and shots-theme.mjs take the env vars THEME=light|dark, W and H.
+  - Sessions are cached for examiner@invigil.app, admin@invigil.app and candidate@invigil.app (password Invigil#Demo2026). Delete a stale `.session-*.json` there to sign in again.
+  - Shoot at 1440x900 AND 390x844, in both themes. Read the PNGs and iterate.
+- `cd web && pnpm typecheck` must be clean.
+- Never create files in the repo root. Keep cookies and session files in the scratchpad only.
+- Write handoff/log/<YOUR ID>.md, ending with `STATUS: COMPLETE`.
