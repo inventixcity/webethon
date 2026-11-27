@@ -132,7 +132,7 @@ export default function LandingPage() {
                 alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
                 sizes="(min-width: 1024px) 28vw, 90vw"
                 priority
-                position="object-right"
+                position="object-[22%_50%]"
                 className="grain h-[min(44vh,480px)] w-full border border-ink bg-paper"
               />
               <span

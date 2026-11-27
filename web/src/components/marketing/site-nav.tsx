@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { SectionLink } from "@/components/app-shell/section-link";
@@ -18,6 +19,7 @@ const NAV = [
 ] as const;
 
 export function SiteNav() {
+  const pathname = usePathname();
   const [compact, setCompact] = useState(false);
   const [active, setActive] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -52,18 +54,18 @@ export function SiteNav() {
         <nav aria-label="Page sections" className="hidden h-full items-center gap-5 lg:flex">
           {NAV.map((item) => <SectionLink key={item.href} href={item.href} aria-current={active === item.href ? "location" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", active === item.href && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>{item.label}</SectionLink>)}
           <Link href="/verify" className="inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink">Verify</Link>
-          <Link href="/contact" className="inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink">Contact</Link>
+          <Link href="/contact" aria-current={pathname === "/contact" ? "page" : undefined} className={cn("relative inline-flex h-full items-center text-ink-soft transition-colors hover:text-ink", pathname === "/contact" && "font-bold text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-cobalt")}>Contact</Link>
         </nav>
         <div className="flex items-center gap-3">
           <ThemeToggle className="hidden min-h-6 min-w-6 py-1 uppercase sm:flex" />
-          <Button asChild size="sm" className="hidden sm:inline-flex"><Link href="/login">Sign in</Link></Button>
+          <Button asChild size="sm" className="hidden sm:inline-flex"><Link href="/contact">Contact us</Link></Button>
           <Button type="button" variant="secondary" size="icon" className="size-10 lg:hidden" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={menuOpen} aria-controls="site-mobile-nav" onClick={() => setMenuOpen((open) => !open)}>{menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</Button>
         </div>
       </div>
       {menuOpen && <nav id="site-mobile-nav" aria-label="Mobile page sections" className="absolute inset-x-0 top-full grid border-b border-ink bg-paper px-5 pb-4 md:px-8 lg:hidden">
         {NAV.map((item) => <SectionLink key={item.href} href={item.href} onClick={closeMenu} aria-current={active === item.href ? "location" : undefined} className={cn("min-h-11 border-t border-rule py-3 text-ink-soft", active === item.href && "border-l-2 border-l-cobalt pl-3 font-bold text-ink")}>{item.label}</SectionLink>)}
         <Link href="/verify" onClick={closeMenu} className="min-h-11 border-t border-rule py-3">Verify</Link>
-        <Link href="/contact" onClick={closeMenu} className="min-h-11 border-t border-rule py-3">Contact</Link>
+        <Link href="/contact" onClick={closeMenu} aria-current={pathname === "/contact" ? "page" : undefined} className={cn("min-h-11 border-t border-rule py-3", pathname === "/contact" && "border-l-2 border-l-cobalt pl-3 font-bold")}>Contact</Link>
         <Link href="/login" onClick={closeMenu} className="min-h-11 border-t border-rule py-3 font-bold">Sign in</Link>
       </nav>}
     </header>

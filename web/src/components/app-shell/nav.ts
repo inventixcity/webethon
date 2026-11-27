@@ -1,4 +1,4 @@
-import { ClipboardList, GraduationCap, LayoutDashboard, Library, ScrollText, Server, Settings, Users, Inbox, type LucideIcon } from "lucide-react";
+import { ClipboardList, GraduationCap, LayoutDashboard, Library, ScrollText, Server, Settings, Users, Inbox, LifeBuoy, type LucideIcon } from "lucide-react";
 import { EXAM_TABS } from "@/components/exams/exam-tabs";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
@@ -33,15 +33,16 @@ const ADMIN: NavGroup = {
 };
 
 export const SETTINGS_ITEM: NavItem = { href: "/app/settings", label: "Settings", icon: Settings };
+const SUPPORT: NavGroup = { label: "Help", items: [{ href: "/contact", label: "Contact support", icon: LifeBuoy }] };
 
 export const ROLE_LABEL: Record<string, string> = { candidate: "Candidate", examiner: "Examiner", admin: "Admin" };
 
 /** The groups each role sees. The server decides what each role may do; this only decides what is shown. */
 export function navGroupsFor(role: string): NavGroup[] {
-  if (role === "candidate") return [CANDIDATE];
-  if (role === "examiner") return [EXAMINER];
+  if (role === "candidate") return [CANDIDATE, SUPPORT];
+  if (role === "examiner") return [EXAMINER, SUPPORT];
   // An admin can also open every exam, so the examiner area sits beside the admin area.
-  if (role === "admin") return [ADMIN, EXAMINER];
+  if (role === "admin") return [ADMIN, EXAMINER, SUPPORT];
   return [];
 }
 
