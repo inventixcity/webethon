@@ -125,7 +125,7 @@ export function ResetForm({ layout = "band", hideMeter = false, onValues, onDone
     <form
       noValidate
       onSubmit={handleSubmit(onSubmit)}
-      className="grid gap-x-10 gap-y-8 px-5 py-8 md:grid-cols-12 md:px-8"
+      className="grid gap-x-10 gap-y-5 px-5 py-5 md:grid-cols-12 md:px-8 md:py-6"
     >
       <div className="md:col-span-5">{newPassword}</div>
       <div className="md:col-span-4">{repeat}</div>

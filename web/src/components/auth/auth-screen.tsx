@@ -4,7 +4,7 @@ import type { AuthScreenId, AuthSetId } from "@/config/kit";
 import { Art } from "@/components/ui/art";
 import { DriftField } from "@/components/ui/empty-state";
 
-type ScreenProps = { email?: string; next?: string; side?: ReactNode };
+type ScreenProps = { email?: string; next?: string; side?: ReactNode; demo?: ReactNode };
 
 // Each screen loads on its own, so a page never carries the code for the other sets.
 const screens: Record<AuthSetId, Record<AuthScreenId, ComponentType<ScreenProps>>> = {

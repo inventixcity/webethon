@@ -75,19 +75,19 @@ export function InviteForm({ token, side }: { token: string; side?: ReactNode })
   const lockState: PasswordLockState = pending ? "pending" : "idle";
 
   return (
-    <main className="flex min-h-screen flex-col bg-paper text-ink">
+    <main className="flex min-h-dvh flex-col bg-paper text-ink md:h-dvh md:overflow-hidden">
       <AuthHeader index="06" section="Invitation" />
-      <div className="flex flex-1 flex-col lg:flex-row">
-      <section className="mx-auto grid min-h-[calc(100vh-4rem)] w-full min-w-0 max-w-6xl flex-1 content-center gap-10 px-5 py-12 md:grid-cols-12 md:px-8">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <section className="mx-auto grid min-h-0 w-full min-w-0 max-w-6xl flex-1 content-center gap-8 px-5 py-8 md:grid-cols-12 md:px-8">
         <div className="md:col-span-5">
           <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">Account access / 01</p>
-          <h1 className="mt-5 text-[clamp(2.5rem,7vw,5.5rem)] leading-[0.94] font-semibold tracking-[-0.04em]">
+          <h1 className="mt-5 text-[clamp(2.5rem,min(6.5vw,12vh),5.5rem)] leading-[0.94] font-semibold tracking-[-0.04em]">
             You’re invited.
           </h1>
-          <p className="mt-6 max-w-sm text-base text-ink-soft">
+          <p className="mt-4 max-w-sm text-base text-ink-soft">
             Set a password to activate your Invigil candidate account.
           </p>
-          <div data-theme="dark" className="mt-10 size-32 overflow-hidden bg-vermilion md:size-40">
+          <div data-theme="dark" className="mt-8 size-28 overflow-hidden bg-vermilion md:size-[min(12vw,22vh)]">
             <PasswordLock length={password.length} state={lockState} className="scale-[1.35]" />
           </div>
         </div>
@@ -103,7 +103,7 @@ export function InviteForm({ token, side }: { token: string; side?: ReactNode })
             </p>
           )}
           {!loading && invite && (
-            <form onSubmit={submit} className="flex flex-col gap-6">
+            <form onSubmit={submit} className="flex flex-col gap-5">
               <p className="border-b border-rule pb-4 font-mono text-xs">INVITED AS&nbsp; {invite.email}</p>
               <Field
                 label="Display name"
@@ -135,7 +135,7 @@ export function InviteForm({ token, side }: { token: string; side?: ReactNode })
           )}
         </div>
       </section>
-      {side ? <aside className="hidden border-l border-ink lg:block lg:w-[min(30vw,26rem)] lg:shrink-0">{side}</aside> : null}
+      {side ? <aside className="hidden min-h-0 border-l border-ink lg:block lg:w-[min(30vw,26rem)] lg:shrink-0">{side}</aside> : null}
       </div>
     </main>
   );

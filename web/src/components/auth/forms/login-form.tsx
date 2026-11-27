@@ -36,8 +36,8 @@ export type LoginEvents = {
 };
 
 type LoginFormProps = LoginEvents & {
-  /** "strip" lays the form out in a wide band. "column" stacks it. */
-  layout?: "strip" | "column";
+  /** "strip" lays the form out in a wide band. "column" stacks it. "compact" stacks the fields and sets the button beside the note. */
+  layout?: "strip" | "column" | "compact";
 };
 
 export function LoginForm({
@@ -176,6 +176,18 @@ export function LoginForm({
         </div>
         <div className="grid content-start gap-6 md:col-span-5">{fields}</div>
         <div className="flex flex-col justify-end gap-3 md:col-span-4">{actions}</div>
+      </form>
+    );
+  }
+
+  if (layout === "compact") {
+    return (
+      <form noValidate onSubmit={submit} className="grid gap-4">
+        {fields}
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+          <div className="min-w-0 md:flex-1">{signup}</div>
+          <div className="grid gap-2 md:w-64 md:shrink-0">{actions}</div>
+        </div>
       </form>
     );
   }

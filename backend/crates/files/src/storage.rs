@@ -111,6 +111,8 @@ pub fn storage_from_env() -> anyhow::Result<Arc<dyn Storage>> {
             let s3 = Arc::new(builder.build()?);
             (s3.clone(), Some(s3))
         }
+        // Deployments that serve no uploads (file routes unmounted) keep an empty in-memory store.
+        "disabled" => (Arc::new(object_store::memory::InMemory::new()), None),
         "" | "local" => anyhow::bail!("local storage is disabled in production"),
         _ => anyhow::bail!("unknown STORAGE_BACKEND"),
     };

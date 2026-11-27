@@ -13,7 +13,7 @@ export function AuthHeader({ index, section, className }: AuthHeaderProps) {
   return (
     <header
       className={cn(
-        "flex h-16 shrink-0 items-center justify-between border-b border-ink px-5 font-mono text-[11px] tracking-[0.14em] uppercase md:px-8",
+        "flex h-14 shrink-0 items-center justify-between border-b border-ink px-5 font-mono text-[11px] tracking-[0.14em] uppercase md:px-8",
         className,
       )}
     >

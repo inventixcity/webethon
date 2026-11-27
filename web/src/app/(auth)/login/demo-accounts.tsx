@@ -44,41 +44,44 @@ export function DemoAccounts() {
   }
 
   return (
-    <section aria-labelledby="demo-accounts" className="border-t border-ink px-5 py-10 md:px-8">
-      <div className="mx-auto grid w-full max-w-6xl gap-8">
-        <div className="grid gap-3">
-          <h2 id="demo-accounts" className="font-mono text-[11px] tracking-[0.14em] uppercase">
-            Demo accounts
-          </h2>
-          <p className="max-w-[62ch] text-base text-ink-soft">
-            Each button fills the form with a demo account and signs in. Password for all three:{" "}
-            <span className="font-mono text-[13px] tracking-normal text-ink">{DEMO_PASSWORD}</span>
+    <section aria-labelledby="demo-accounts" className="grid gap-3 border-t border-ink pt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id="demo-accounts" className="font-mono text-[11px] tracking-[0.14em] uppercase">
+          Demo accounts
+        </h2>
+        <p className="font-mono text-[11px] tracking-wide text-ink-muted">
+          Password for all three: <span className="text-ink">{DEMO_PASSWORD}</span>
+        </p>
+      </div>
+
+      <ul className="grid gap-3 md:grid-cols-3">
+        {ACCOUNTS.map((account) => (
+          <li key={account.role} className="grid min-w-0 gap-2">
+            <div className="grid min-w-0 gap-0.5">
+              <span className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{account.role}</span>
+              <span className="truncate font-mono text-xs">{account.email}</span>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              title={account.summary}
+              onClick={() => signInAs(account.email)}
+            >
+              Sign in as {account.role}
+            </Button>
+          </li>
+        ))}
+      </ul>
+
+      <div aria-live="polite" className="min-h-4 font-mono text-[11px] tracking-wide">
+        {message && (
+          <p className="flex items-center gap-2">
+            <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
+            {message}
           </p>
-        </div>
-
-        <ul className="grid gap-px border-y border-rule md:grid-cols-3">
-          {ACCOUNTS.map((account) => (
-            <li key={account.role} className="grid content-start gap-4 py-6 md:px-6 md:first:pl-0 md:last:pr-0">
-              <div className="grid gap-1">
-                <span className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{account.role}</span>
-                <span className="font-mono text-sm break-all">{account.email}</span>
-                <span className="text-sm text-ink-soft">{account.summary}</span>
-              </div>
-              <Button type="button" variant="secondary" className="w-full" onClick={() => signInAs(account.email)}>
-                Sign in as {account.role}
-              </Button>
-            </li>
-          ))}
-        </ul>
-
-        <div aria-live="polite" className="min-h-4 font-mono text-[11px] tracking-wide">
-          {message && (
-            <p className="flex items-center gap-2">
-              <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
-              {message}
-            </p>
-          )}
-        </div>
+        )}
       </div>
     </section>
   );
