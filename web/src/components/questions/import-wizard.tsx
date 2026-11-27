@@ -184,7 +184,7 @@ export function QuestionImportWizard() {
 
           <ImportErrors errors={errors} rowLabel={(row) => `Row ${row}`} />
 
-          <div className="sticky bottom-0 -mx-5 flex flex-wrap items-center gap-3 border-t border-ink bg-paper px-5 py-4 md:-mx-8 md:px-8">
+          <div className="mobile-safe-action sticky bottom-0 -mx-5 flex flex-col items-stretch gap-3 border-t border-ink bg-paper px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center md:-mx-8 md:px-8">
             <Button variant="secondary" loading={validating} onClick={() => void validate()}>
               {checked ? "Validate again" : "Validate"}
             </Button>

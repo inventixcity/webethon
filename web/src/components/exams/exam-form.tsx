@@ -491,7 +491,7 @@ export function ExamForm({
         <Toggle id={`${idPrefix}-fullscreen`} label="Ask for fullscreen and record exits" description="The workspace asks candidates to go fullscreen and records when they leave it." checked={values.fullscreen} disabled={!canEdit("fullscreen")} onChange={(v) => set("fullscreen", v)} />
       </Section>
 
-      <div className="sticky bottom-0 z-10 -mx-5 grid gap-4 border-t border-ink bg-paper px-5 py-5 md:-mx-8 md:px-8">
+      <div className="mobile-safe-action sticky bottom-0 z-10 -mx-5 grid gap-4 border-t border-ink bg-paper px-5 py-5 md:-mx-8 md:px-8">
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" loading={pending} disabled={!dirty && mode === "edit"}>
             {mode === "create" ? "Create draft" : "Save changes"}

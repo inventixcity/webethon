@@ -173,14 +173,14 @@ export function PageHeader({
   const headerArt = showBanner && banner ? (
     <>
       <Art name={banner} alt="" sizes="(max-width: 767px) 100vw, 288px" position="object-right" className="aspect-[16/7] w-full border border-ink md:aspect-[4/3]" />
-      <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
+      <figcaption className="mt-2 font-mono text-[11px] tracking-[0.06em] text-ink-muted uppercase md:text-[10px] md:tracking-[0.12em]">
         {bannerCaption ?? `FIG. ${index ?? "01"} / ${eyebrow}`}
       </figcaption>
     </>
   ) : separated.art ? (
     <>
       {separated.art}
-      <figcaption className="mt-2 font-mono text-[10px] tracking-[0.12em] text-ink-muted uppercase">
+      <figcaption className="mt-2 font-mono text-[11px] tracking-[0.06em] text-ink-muted uppercase md:text-[10px] md:tracking-[0.12em]">
         FIG. {index ?? "01"} / {eyebrow}
       </figcaption>
     </>
@@ -188,8 +188,8 @@ export function PageHeader({
   const Heading = level === 1 ? "h1" : "h2";
 
   return (
-    <header className={cn("grid w-full min-w-0 max-w-[calc(100vw-2.5rem)] gap-4 md:max-w-full", level === 1 ? "pb-6 md:pb-7" : "border-b border-rule pb-5", className)}>
-      <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:items-center md:gap-8">
+    <header className={cn("grid w-full min-w-0 max-w-full gap-4", level === 1 ? "pb-5 md:pb-7" : "border-b border-rule pb-5", className)}>
+      <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(15rem,18rem)] md:items-center md:gap-8">
         <div className="grid min-w-0 content-center gap-3">
           <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
             {eyebrow}
@@ -199,14 +199,14 @@ export function PageHeader({
             className={cn(
               "font-medium tracking-[-0.03em] break-words",
               level === 1
-                ? "text-[clamp(2rem,1.2rem+2.6vw,3rem)] leading-[1]"
+                ? "text-[clamp(1.75rem,1.3rem+2vw,3rem)] leading-[1] md:text-[clamp(2rem,1.2rem+2.6vw,3rem)]"
                 : "text-[clamp(1.5rem,1rem+1.6vw,2rem)] leading-[1.05]",
             )}
           >
             {title}
           </Heading>
           {description ? <p className="max-w-[62ch] text-[15px] leading-relaxed text-ink-soft">{description}</p> : null}
-          {separated.controls ? <div className="mt-1 flex flex-wrap items-center gap-3">{separated.controls}</div> : null}
+          {separated.controls ? <div className="mt-1 flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center">{separated.controls}</div> : null}
         </div>
         {headerArt ? (
           <figure aria-hidden="true" className="w-full min-w-0 md:w-full">

@@ -47,6 +47,8 @@ describe("attempt PDF report route", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("content-disposition")).toContain("filename=\"final-assessment_a-k-n_result.pdf\"");
+    expect(response.headers.get("content-disposition")).toContain("filename*=UTF-8''");
     expect(new TextDecoder().decode(bytes.slice(0, 8))).toContain("%PDF");
   });
 

@@ -92,7 +92,7 @@ function NextUp({ card, serverNow }: { card: CandidateExamCard; serverNow: numbe
     );
 
   return (
-    <section aria-labelledby="next-up" className="grid gap-6 border border-ink bg-paper-raised p-6 md:p-10">
+    <section aria-labelledby="next-up" className="grid min-w-0 gap-5 border border-ink bg-paper-raised p-5 sm:gap-6 sm:p-6 md:p-10">
       <div className="flex items-center gap-3">
         <span aria-hidden="true" className="size-1.5 bg-vermilion" />
         <h2 id="next-up" className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
@@ -109,12 +109,12 @@ function NextUp({ card, serverNow }: { card: CandidateExamCard; serverNow: numbe
         <p className="font-mono text-[11px] tracking-[0.04em] text-ink-muted">{formatWindow(card.startsAt, card.endsAt)}</p>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-6">
+      <div className="flex min-w-0 flex-col items-stretch gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
         <div>
           <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{live ? "Closes in" : "Starts in"}</p>
           <p
             className={cn(
-              "font-mono text-[clamp(2.25rem,5vw,4.25rem)] leading-none font-medium tracking-[-0.02em] tabular-nums",
+              "max-w-full break-words font-mono text-[clamp(1.875rem,8vw,4.25rem)] leading-none font-medium tracking-[-0.04em] tabular-nums sm:text-[clamp(2.25rem,5vw,4.25rem)]",
               live ? "text-cobalt-deep" : "text-ink",
             )}
           >
@@ -317,7 +317,7 @@ export function CandidateDashboard() {
 
       {total > 0 ? (
         <>
-          <dl className="grid grid-cols-3 gap-px border border-rule bg-rule">
+          <dl className="grid grid-cols-1 gap-px border border-rule bg-rule sm:grid-cols-3">
             <Stat label="Open now" value={data.available.length} tone="live" />
             <Stat label="Scheduled" value={data.upcoming.length} />
             <Stat label="Completed" value={data.completed.length} tone="caution" />

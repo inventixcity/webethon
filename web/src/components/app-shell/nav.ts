@@ -1,4 +1,4 @@
-import { ClipboardList, GraduationCap, LayoutDashboard, Library, ScrollText, Server, Settings, Users, type LucideIcon } from "lucide-react";
+import { ClipboardList, GraduationCap, LayoutDashboard, Library, ScrollText, Server, Settings, Users, Inbox, type LucideIcon } from "lucide-react";
 import { EXAM_TABS } from "@/components/exams/exam-tabs";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean };
@@ -26,6 +26,7 @@ const ADMIN: NavGroup = {
   items: [
     { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
     { href: "/admin/users", label: "Users", icon: Users },
+    { href: "/admin/requests", label: "Requests", icon: Inbox },
     { href: "/admin/audit", label: "Audit", icon: ScrollText },
     { href: "/admin/system", label: "System", icon: Server },
   ],
@@ -56,7 +57,7 @@ export function isActive(pathname: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-const ADMIN_PAGES: Record<string, string> = { users: "Users", audit: "Audit", system: "System" };
+const ADMIN_PAGES: Record<string, string> = { users: "Users", requests: "Requests", audit: "Audit", system: "System" };
 
 /** The trail shown in the top bar, from the path. Dynamic exam segments become exam crumbs the shell names. */
 export function crumbsFor(pathname: string): Crumb[] {
@@ -111,3 +112,4 @@ export function crumbsFor(pathname: string): Crumb[] {
 
   return [];
 }
+

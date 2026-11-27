@@ -4,6 +4,7 @@ export const siteConfig = {
   mark: "I",
   description: "Inventix Invigil: secure, failure-resilient online examinations.",
   tagline: "Exams that hold up.",
+  institute: { name: "COMSATS University Islamabad, Lahore Campus", short: "CUI Lahore" },
   contact: {
     email: "info@inventixhq.com",
     address: "COMSATS University Lahore, Pakistan",

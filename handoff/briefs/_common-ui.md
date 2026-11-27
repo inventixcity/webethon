@@ -13,3 +13,4 @@
 - `cd web && pnpm typecheck` must be clean.
 - Never create files in the repo root. Keep cookies and session files in the scratchpad only.
 - Write handoff/log/<YOUR ID>.md, ending with `STATUS: COMPLETE`.
+- ENCODING: every source file must be UTF-8 (no BOM). Never write files with PowerShell Set-Content/Out-File defaults; use the apply_patch/edit tool or `[IO.File]::WriteAllText(path, text, (New-Object Text.UTF8Encoding $false))`. A non-UTF-8 file breaks the whole Next build for everyone.

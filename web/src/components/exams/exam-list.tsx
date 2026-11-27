@@ -73,11 +73,11 @@ export function ExamList() {
 
   return (
     <section aria-labelledby="exam-list-heading" className="grid gap-8">
-      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="grid min-w-0 gap-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between sm:gap-6">
         <h2 id="exam-list-heading" className="sr-only">
           Exams
         </h2>
-        <div role="group" aria-label="Filter exams by status" className="flex max-w-full overflow-x-auto border border-ink bg-paper-raised">
+        <div role="group" aria-label="Filter exams by status" className="scroll-fade relative -mx-5 flex max-w-[calc(100%+2.5rem)] overflow-x-auto border-y border-ink bg-paper-raised px-5 sm:mx-0 sm:max-w-full sm:border">
           {FILTERS.map((filter) => {
             const active = status === filter.value;
             return (
@@ -97,7 +97,7 @@ export function ExamList() {
             );
           })}
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link href="/app/examiner/exams/new">New exam</Link>
         </Button>
       </div>

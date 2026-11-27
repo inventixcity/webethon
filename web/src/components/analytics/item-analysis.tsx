@@ -19,11 +19,11 @@ const FLAG_INFO: Record<ItemAnalytics["flags"][number], { label: string; help: s
 
 /** Flags are review prompts: too easy is informational cobalt, every other flag needs a look and takes amber. */
 const FLAG_TONE: Record<ItemAnalytics["flags"][number], string> = {
-  too_easy: "border-cobalt text-cobalt-deep",
-  too_hard: "border-amber bg-amber text-ink",
-  negative_discrimination: "border-amber bg-amber text-ink",
-  often_skipped: "border-amber bg-amber text-ink",
-  dead_distractor: "border-amber bg-amber text-ink",
+  too_easy: "border-cobalt text-cobalt-deep dark:bg-surface-1 dark:text-cobalt-deep",
+  too_hard: "border-amber bg-amber text-ink dark:bg-surface-1 dark:text-amber",
+  negative_discrimination: "border-amber bg-amber text-ink dark:bg-surface-1 dark:text-amber",
+  often_skipped: "border-amber bg-amber text-ink dark:bg-surface-1 dark:text-amber",
+  dead_distractor: "border-amber bg-amber text-ink dark:bg-surface-1 dark:text-amber",
 };
 
 const TEXT_LIMIT = 90;
@@ -84,7 +84,8 @@ export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
   }
 
   return (
-    <div className="overflow-x-auto border border-ink">
+    <>
+    <div className="hidden overflow-x-auto border border-ink md:block">
       <table className="w-full min-w-[860px] text-left text-sm">
         <caption className="sr-only">Item analysis: facility, discrimination, skipped rate and flags for each question</caption>
         <thead className="bg-paper-sunk">
@@ -167,6 +168,28 @@ export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
         </tbody>
       </table>
     </div>
+    <ul className="grid gap-3 md:hidden" aria-label="Item analysis cards">
+      {items.map((item) => {
+        const expanded = openId === item.itemId;
+        const panelId = `${idBase}-mobile-${item.itemId}`;
+        return <li key={item.itemId} className="grid gap-4 border border-rule p-4">
+          <div className="grid gap-2">
+            <p className="font-mono text-[11px] tracking-[0.1em] text-ink-muted uppercase">Item {item.position} · {item.topic}</p>
+            <p className="text-sm">{item.stem}</p>
+            <p className="font-mono text-[11px] text-ink-muted">{item.attempts} {item.attempts === 1 ? "attempt" : "attempts"}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><p className="mb-1 font-mono text-[10px] text-ink-muted uppercase">Facility</p><FacilityBar value={item.facility} /></div>
+            <div><p className="mb-1 font-mono text-[10px] text-ink-muted uppercase">Discrimination</p><DiscriminationBar value={item.discrimination} /></div>
+            <p><span className="font-mono text-[10px] text-ink-muted uppercase">Skipped </span><span className="font-mono tabular-nums">{formatPercent(item.skipRate * 100)}</span></p>
+          </div>
+          {item.flags.length > 0 && <ul aria-label="Review flags" className="flex flex-wrap gap-1.5">{item.flags.map((flag) => <li key={flag}><span title={FLAG_INFO[flag].help} className={cn("inline-block border px-2 py-0.5 font-mono text-[11px] tracking-[0.06em] uppercase", FLAG_TONE[flag])}>{FLAG_INFO[flag].label}</span></li>)}</ul>}
+          <Button variant="link" size="sm" aria-expanded={expanded} aria-controls={panelId} onClick={() => setOpenId(expanded ? null : item.itemId)}>{expanded ? "Hide options" : "Options"}<span className="sr-only"> for question {item.position}</span></Button>
+          {expanded && <div id={panelId} className="border-t border-rule pt-4"><DistractorList item={item} /></div>}
+        </li>;
+      })}
+    </ul>
+    </>
   );
 }
 
@@ -188,7 +211,7 @@ function DistractorList({ item }: { item: ItemAnalytics }) {
                 <span className={option.correct ? "font-medium" : ""}>
                   {option.text}
                   {option.correct && (
-                    <span className="ml-2 border border-ink px-1.5 font-mono text-[10px] tracking-[0.12em] uppercase">
+                    <span className="ml-2 inline-block border border-cobalt px-1.5 py-0.5 font-mono text-[10px] tracking-[0.12em] text-cobalt-deep uppercase">
                       Correct answer
                     </span>
                   )}

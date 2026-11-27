@@ -166,10 +166,10 @@ function EnrollmentTable({
 
   return (
     <>
-      <div className="-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0">
-        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+      <div className="min-w-0">
+        <table className="w-full border-collapse text-left text-sm md:min-w-[760px]">
           <caption className="sr-only">Enrolled candidates for this exam</caption>
-          <thead>
+          <thead className="max-md:sr-only">
             <tr className="border-b border-ink font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
               <th scope="col" className="py-3 pr-4 font-medium">Candidate</th>
               <th scope="col" className="py-3 pr-4 font-medium">Status</th>
@@ -181,7 +181,7 @@ function EnrollmentTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-md:block">
             {rows.map((row) => (
               <EnrollmentRow
                 key={row.candidateId}
@@ -290,12 +290,12 @@ function EnrollmentRow({
     : "No attempt";
 
   return (
-    <tr className="border-b border-rule align-top">
-      <th scope="row" className="py-4 pr-4 font-normal">
+    <tr className="border-b border-rule align-top max-md:my-3 max-md:grid max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-4 max-md:border max-md:bg-paper-raised max-md:p-4">
+      <th scope="row" className="py-4 pr-4 font-normal max-md:col-span-2 max-md:p-0">
         <span className="block font-medium">{row.displayName}</span>
         <span className="block text-ink-muted break-all">{row.email}</span>
       </th>
-      <td className="py-4 pr-4">
+      <td data-label="Status" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {revoked ? (
           <Badge tone="muted">Revoked</Badge>
         ) : (
@@ -304,12 +304,12 @@ function EnrollmentRow({
           </Badge>
         )}
       </td>
-      <td className="py-4 pr-4">
+      <td data-label="Account" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <Badge tone={row.activated ? "info" : row.invited ? "dashed" : "muted"} dot={row.activated ? "live" : undefined}>
           {accountLabel}
         </Badge>
       </td>
-      <td className="py-4 pr-4">
+      <td data-label="Extra minutes" className="py-4 pr-4 max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <div className="grid gap-2">
           <div className="flex items-center gap-2">
             <Label htmlFor={`${idPrefix}-minutes`} className="sr-only">
@@ -336,9 +336,9 @@ function EnrollmentRow({
           ) : null}
         </div>
       </td>
-      <td className="py-4 pr-4 text-ink-soft">{attemptLabel}</td>
-      <td className="py-4">
-        <div className="flex flex-wrap justify-end gap-2">
+      <td data-label="Attempt" className="py-4 pr-4 text-ink-soft max-md:grid max-md:gap-1 max-md:p-0 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">{attemptLabel}</td>
+      <td data-label="Actions" className="py-4 max-md:col-span-2 max-md:border-t max-md:border-rule max-md:pt-3">
+        <div className="flex flex-wrap justify-end gap-2 max-md:justify-start">
           {revoked ? (
             <Button variant="secondary" size="sm" onClick={onReenroll}>
               Enrol again

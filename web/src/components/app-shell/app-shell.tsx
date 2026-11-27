@@ -120,7 +120,7 @@ function NavLink({ item, onNavigate, compact = false }: { item: NavItem; onNavig
       onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-        compact ? "h-10 px-2 text-ink-soft hover:text-ink" : "h-10 px-3 font-mono text-[12px] tracking-[0.08em] uppercase",
+        compact ? "min-h-11 px-2 text-ink-soft hover:text-ink" : "min-h-11 px-3 font-mono text-[12px] tracking-[0.08em] uppercase",
         !compact && (active ? "relative bg-fill text-on-fill before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-cobalt" : "text-ink-soft hover:bg-hover hover:text-ink"),
       )}
     >
@@ -243,7 +243,7 @@ function HoldSignOut({ onConfirm }: { onConfirm: () => Promise<boolean> }) {
         />
         <span className="relative">{done ? "Signing out everywhere" : progress ? "Keep holding" : "Sign out everywhere"}</span>
       </Button>
-      <p id="signout-all-help" className="font-mono text-[10px] tracking-[0.08em] text-ink-muted">Hold to confirm · Space or Enter</p>
+      <p id="signout-all-help" className="font-mono text-[11px] tracking-[0.04em] text-ink-muted">Hold to confirm · Space or Enter</p>
     </div>
   );
 }
@@ -265,7 +265,9 @@ function Drawer({ open, onClose, children }: { open: boolean; onClose: () => voi
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
-      const focusable = Array.from(panel.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"));
+      const focusable = Array.from(panel.current.querySelectorAll<HTMLElement>(
+        'a[href]:not([tabindex="-1"]), button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.offsetWidth > 0 || element.offsetHeight > 0);
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  */
 
 const itemClass =
-  "relative inline-flex h-12 shrink-0 items-center gap-2 px-4 font-mono text-[12px] tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
+  "relative inline-flex min-h-11 shrink-0 items-center gap-2 px-4 font-mono text-[12px] tracking-[0.1em] whitespace-nowrap uppercase transition-colors duration-(--duration-fast) ease-(--ease-enter) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus";
 
 function Count({ value, active }: { value: number; active: boolean }) {
   return (
@@ -63,7 +63,7 @@ export function NavTabs({ items, label, className }: { items: NavTab[]; label: s
   const activeKey = items.find((item) => item.active)?.href ?? null;
   const { listRef, indicator } = useIndicator(activeKey);
   return (
-    <nav aria-label={label} className={cn("-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
+    <nav aria-label={label} className={cn("scroll-fade relative -mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
       <div ref={listRef} className="relative w-max min-w-full">
       <ul className="flex border-b border-rule">
         {items.map((item) => (
@@ -103,7 +103,7 @@ export function SegmentedControl<T extends string>({
 }) {
   const { listRef, indicator } = useIndicator(value);
   return (
-    <div className={cn("-mx-5 max-w-[calc(100%+2.5rem)] overflow-x-auto px-5 md:mx-0 md:max-w-full md:px-0", className)}>
+    <div className={cn("scroll-fade relative -mx-5 max-w-[calc(100%+2.5rem)] overflow-x-auto px-5 md:mx-0 md:max-w-full md:px-0", className)}>
       <div ref={listRef} role="group" aria-label={label} className="relative flex w-max border-b border-rule">
         {options.map((option) => {
           const active = option.value === value;

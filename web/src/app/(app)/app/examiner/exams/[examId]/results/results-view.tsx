@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api/client";
-import type { ExamResults, GradingStatus, ResultRow } from "@/lib/exam/types";
+import type { Exam, ExamResults, GradingStatus, ResultRow } from "@/lib/exam/types";
 import { describeError } from "@/lib/errors/describe";
 import { useToast } from "@/components/feedback/toaster";
 import { HoldButton } from "@/components/effects/hold-button";
@@ -19,6 +19,7 @@ import { Stat, StatGrid } from "@/components/ui/stat";
 import { formatDateTime, formatMarks, formatPercent, messageOf } from "@/components/analytics/format";
 import { cn } from "@/lib/utils";
 import { downloadCsv, resultsToCsv } from "./csv";
+import { dateSlug, safeSlug } from "@/lib/pdf/names";
 
 const STATUS: Record<ResultRow["status"], string> = {
   in_progress: "In progress",
@@ -39,6 +40,7 @@ type PendingAction = "publish" | "unpublish";
 /** Results for one exam: the ranked board, the publish panel and exports. Publishing issues verifiable certificates. */
 export function ResultsView({ examId }: { examId: string }) {
   const [data, setData] = useState<ExamResults | null>(null);
+  const [examTitle, setExamTitle] = useState("examination");
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [action, setAction] = useState<PendingAction | null>(null);
@@ -58,6 +60,7 @@ export function ResultsView({ examId }: { examId: string }) {
       .catch((cause: unknown) => {
         if (live) setError(messageOf(cause));
       });
+    api<Exam>(`/exams/${examId}`).then((exam) => { if (live) setExamTitle(exam.title); }).catch(() => undefined);
     return () => {
       live = false;
     };
@@ -95,7 +98,7 @@ export function ResultsView({ examId }: { examId: string }) {
   if (!data) return <BrailleSpinner label="Loading results" className="m-8 text-ink" />;
 
   const published = data.resultsPublishedAt !== null;
-  const exportCsv = () => downloadCsv(`exam-${examId.slice(0, 8)}-results.csv`, resultsToCsv(data.rows));
+  const exportCsv = () => downloadCsv(`${safeSlug(examTitle)}_results_${dateSlug()}.csv`, resultsToCsv(data.rows));
   const passed = data.rows.filter((row) => row.passed === true).length;
   const graded = data.rows.filter((row) => row.gradingStatus === "complete").length;
 
@@ -266,8 +269,21 @@ function RankedBoard({ rows, totalMarks }: { rows: ResultRow[]; totalMarks: numb
   );
 
   return (
-    <div className="overflow-x-auto border border-ink">
-      <div role="table" aria-label="Ranked results" className="min-w-[860px]">
+    <div className="border border-ink">
+      <div className="grid md:hidden">
+        {ranked.map((row, index) => (
+          <article key={row.attemptId} className={cn("grid gap-3 border-b border-rule p-4 last:border-b-0", index % 2 ? "bg-paper-sunk" : "bg-paper")}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0"><p className="font-mono text-[11px] text-ink-muted">RANK {String(index + 1).padStart(2, "0")}</p><p className="truncate font-medium">{row.displayName}</p><p className="truncate font-mono text-[11px] text-ink-muted">{row.email}</p></div>
+              <a href={`/api/reports/attempt/${row.attemptId}`} className="shrink-0 font-mono text-[11px] uppercase underline underline-offset-4">PDF<span className="sr-only"> for {row.displayName}</span></a>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm"><p><span className="block font-mono text-[10px] text-ink-muted">SCORE</span>{formatMarks(row.totalScore)} / {formatMarks(totalMarks)}</p><p><span className="block font-mono text-[10px] text-ink-muted">RESULT</span>{row.passed === null ? "Pending" : row.passed ? "Pass" : "Not passed"}</p></div>
+            <Meter value={row.percent ?? 0} max={100} tone={row.passed === false ? "muted" : row.passed === true ? "info" : "caution"} label={`${row.displayName}: ${formatPercent(row.percent, 1)}`} valueText={formatPercent(row.percent, 1)} />
+          </article>
+        ))}
+      </div>
+      <div role="table" aria-label="Ranked results" className="hidden overflow-x-auto md:block">
+       <div className="min-w-[860px]">
         <div role="row" className={cn(GRID, "h-11 border-b border-ink bg-paper-sunk font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase")}>
           <span role="columnheader">#</span>
           <span role="columnheader">Candidate</span>
@@ -340,6 +356,7 @@ function RankedBoard({ rows, totalMarks }: { rows: ResultRow[]; totalMarks: numb
             </span>
           </motion.div>
         ))}
+       </div>
       </div>
     </div>
   );

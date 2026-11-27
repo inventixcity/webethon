@@ -16,9 +16,9 @@ const GAP = 3;
 
 /** Tone by mean percent: strong topics are ink, middling ones sand, and weak ones amber because they need a look. */
 export function topicTone(meanPercent: number): string {
-  if (meanPercent >= 70) return "bg-cobalt text-paper";
-  if (meanPercent >= 50) return "bg-paper-sunk text-ink";
-  return "bg-amber text-ink";
+  if (meanPercent >= 70) return "bg-cobalt text-paper dark:border dark:border-cobalt dark:bg-surface-1 dark:text-cobalt-deep";
+  if (meanPercent >= 50) return "border border-ink/20 bg-paper-sunk text-ink dark:border-rule dark:bg-surface-1 dark:text-ink";
+  return "bg-amber text-ink dark:border dark:border-amber dark:bg-surface-1 dark:text-amber";
 }
 
 /**
@@ -48,7 +48,7 @@ export function TopicTreemap({ topics }: { topics: Topic[] }) {
               transition={{ duration: 0.3, delay: reduced ? 0 : index * 0.04, ease: [0.22, 1, 0.36, 1] }}
               title={`${topic.topic}: ${formatPercent(topic.meanPercent, 1)} mean across ${topic.items} items`}
               className={cn(
-                "absolute grid content-between overflow-hidden p-3 transition-colors duration-(--duration-base) hover:brightness-110",
+                "absolute grid content-between overflow-hidden p-3 transition-colors duration-(--duration-base)",
                 topicTone(topic.meanPercent),
               )}
               style={{
@@ -63,7 +63,7 @@ export function TopicTreemap({ topics }: { topics: Topic[] }) {
                 <span className={cn("leading-none font-medium tracking-[-0.03em] tabular-nums", small ? "text-2xl" : "text-[clamp(1.75rem,3vw,2.75rem)]")}>
                   {formatPercent(topic.meanPercent, 0)}
                 </span>
-                <span className="font-mono text-[11px] tracking-[0.06em] uppercase opacity-80">
+                <span className="font-mono text-[11px] tracking-[0.06em] uppercase">
                   {topic.items} {topic.items === 1 ? "item" : "items"}
                 </span>
               </span>

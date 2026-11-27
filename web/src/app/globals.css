@@ -425,3 +425,58 @@
 section[id] {
   scroll-margin-top: 4rem;
 }
+
+/* Keep dense examiner labels readable and controls comfortably tappable on phones. */
+@media (max-width: 639px) {
+  [class*="text-[10px]"],
+  [class*="text-[11px]"] {
+    font-size: 12px !important;
+  }
+
+  .font-mono {
+    letter-spacing: 0.04em;
+  }
+
+  [data-slot="button"] {
+    min-height: 44px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  @media (max-width: 639px) {
+    .mobile-safe-action {
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+@media (max-width: 767px) {
+  .scroll-fade::before,
+  .scroll-fade::after {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    flex: 0 0 0.75rem;
+    height: 100%;
+    content: "";
+    pointer-events: none;
+  }
+
+  .scroll-fade::before {
+    left: 0;
+    margin-right: -0.75rem;
+    background: linear-gradient(to right, var(--paper), transparent);
+  }
+
+  .scroll-fade::after {
+    right: 0;
+    margin-left: -0.75rem;
+    background: linear-gradient(to left, var(--paper), transparent);
+  }
+}

@@ -24,7 +24,7 @@ const FLASH_MS = 1600;
 /** The screen reader summary is updated at most this often. */
 const ANNOUNCE_MS = 15000;
 const PRIORITY_RANK: Record<ReviewPriority, number> = { high: 3, medium: 2, low: 1, none: 0 };
-const GRID = "grid items-center gap-x-4 px-3 md:grid-cols-[minmax(0,2fr)_7.5rem_minmax(0,1.5fr)_4.5rem_6rem_9rem_5.5rem_8.5rem]";
+const GRID = "grid items-center gap-x-4 px-3 max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-3 max-md:px-4 md:grid-cols-[minmax(0,2fr)_7.5rem_minmax(0,1.5fr)_4.5rem_6rem_9rem_5.5rem_8.5rem]";
 
 type SortKey = "priority" | "name" | "deadline" | "progress";
 
@@ -201,11 +201,11 @@ function ControlRoom({ examId }: { examId: string }) {
             ) : rows.length === 0 ? (
               <EmptyState eyebrow="No matches / 00" title="No attempts match these filters." variant="inline" />
             ) : (
-              <div className="overflow-x-auto border border-ink">
-                <div role="table" aria-label="Attempts for this exam" className="min-w-[1000px]">
+              <div className="border-y border-ink md:overflow-x-auto md:border">
+                <div role="table" aria-label="Attempts for this exam" className="min-w-0 md:min-w-[1000px]">
                   <div
                     role="row"
-                    className={cn(GRID, "h-11 border-b border-ink bg-paper-sunk font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase")}
+                    className={cn(GRID, "hidden h-11 border-b border-ink bg-paper-sunk font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase md:grid")}
                   >
                     <span role="columnheader">Candidate</span>
                     <span role="columnheader">Status</span>
@@ -357,17 +357,17 @@ function BoardRow({
       transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.8 }}
       className={cn(
         GRID,
-        "min-h-16 cursor-pointer border-b border-rule py-2 transition-colors duration-(--duration-slow) odd:bg-paper-raised hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus",
+        "min-h-16 cursor-pointer border-b border-rule py-4 transition-colors duration-(--duration-slow) odd:bg-paper-raised hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus max-md:my-3 max-md:border max-md:bg-paper-raised max-md:py-4",
         flashing ? "bg-cobalt/10" : "bg-paper",
       )}
     >
-      <span role="cell" className="grid min-w-0">
+      <span role="cell" data-label="Candidate" className="grid min-w-0 max-md:col-span-2">
         <span className="truncate text-left font-medium underline-offset-4 hover:underline">
           {row.displayName}
         </span>
         <span className="truncate font-mono text-[11px] text-ink-muted">{row.email}</span>
       </span>
-      <span role="cell">
+      <span role="cell" data-label="Status" className="max-md:grid max-md:gap-1 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {running ? (
           <Badge tone="info" dot="live" size="sm">In progress</Badge>
         ) : row.status === "submitted" ? (
@@ -376,7 +376,7 @@ function BoardRow({
           <Badge tone="muted" size="sm">Closed</Badge>
         )}
       </span>
-      <span role="cell" className="grid min-w-0 gap-1.5">
+      <span role="cell" data-label="Answered" className="grid min-w-0 gap-1.5 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <Meter
           value={row.answered}
           max={Math.max(1, row.total)}
@@ -388,13 +388,13 @@ function BoardRow({
           {row.answered}/{row.total}
         </span>
       </span>
-      <span role="cell" className="text-right font-mono tabular-nums">
+      <span role="cell" data-label="Flagged" className="grid gap-1 text-right font-mono tabular-nums max-md:text-left max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {row.flagged}
       </span>
-      <span role="cell" className="text-right font-mono text-sm tabular-nums">
+      <span role="cell" data-label="Time left" className="grid gap-1 text-right font-mono text-sm tabular-nums max-md:text-left max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {running ? formatClock(remaining) : row.status === "submitted" ? "Done" : "Closed"}
       </span>
-      <span role="cell" className="grid gap-0.5">
+      <span role="cell" data-label="Connection" className="grid gap-0.5 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <span className="inline-flex items-center gap-2 text-sm">
           <span className="relative inline-flex size-2 shrink-0" aria-hidden="true">
             {row.online ? <span className="absolute inset-0 animate-breathe bg-cobalt" /> : null}
@@ -406,7 +406,7 @@ function BoardRow({
           {lastSeen === null ? "No heartbeat yet" : `Seen ${formatAge(lastSeen)} ago`}
         </span>
       </span>
-      <span role="cell" className="text-right font-mono tabular-nums">
+      <span role="cell" data-label="Incidents" className="grid gap-1 text-right font-mono tabular-nums max-md:text-left max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         {row.incidents > 0 ? (
           <span className="inline-flex items-center justify-end gap-1.5 text-ink">
             <span aria-hidden="true" className="size-2 bg-amber" />
@@ -416,7 +416,7 @@ function BoardRow({
           <span className="text-ink-muted">0</span>
         )}
       </span>
-      <span role="cell">
+      <span role="cell" data-label="Review priority" className="grid gap-1 max-md:before:font-mono max-md:before:text-[11px] max-md:before:tracking-[0.04em] max-md:before:text-ink-muted max-md:before:uppercase max-md:before:content-[attr(data-label)]">
         <PriorityChip priority={row.reviewPriority} />
       </span>
     </motion.div>

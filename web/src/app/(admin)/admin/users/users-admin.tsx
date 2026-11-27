@@ -166,7 +166,27 @@ export function UsersAdmin() {
 
         {!loading && !error && rows.length > 0 && (
           <>
-            <div className="overflow-x-auto border border-rule">
+            <ul className="grid gap-3 md:hidden" aria-label="User accounts">
+              {rows.map((user) => (
+                <li key={user.id} className="grid min-w-0 gap-4 border border-rule bg-paper-raised p-4">
+                  <div className="min-w-0">
+                    <h3 className="font-medium break-words">{user.displayName}</h3>
+                    <p className="mt-1 break-all font-mono text-[11px] text-ink-muted">{user.email}</p>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-rule pt-3 text-sm">
+                    <div><dt className="font-mono text-[10px] tracking-[0.1em] text-ink-muted uppercase">Role</dt><dd>{ROLE_LABEL[presentRole(user.role) ?? "candidate"]}</dd></div>
+                    <div><dt className="font-mono text-[10px] tracking-[0.1em] text-ink-muted uppercase">Status</dt><dd>{statusText(user)}</dd></div>
+                    <div><dt className="font-mono text-[10px] tracking-[0.1em] text-ink-muted uppercase">Email verified</dt><dd>{user.emailVerifiedAt ? "Yes" : "No"}</dd></div>
+                    <div><dt className="font-mono text-[10px] tracking-[0.1em] text-ink-muted uppercase">Two-step sign-in</dt><dd>{user.mfa ? "On" : "Off"}</dd></div>
+                    <div className="col-span-2"><dt className="font-mono text-[10px] tracking-[0.1em] text-ink-muted uppercase">Created</dt><dd className="font-mono text-xs">{formatDateTime(user.createdAt)}</dd></div>
+                  </dl>
+                  <Button variant="secondary" size="md" className="w-full" onClick={() => setSelected(user)}>
+                    Manage<span className="sr-only"> {user.displayName}</span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto border border-rule md:block">
               <table className="w-full min-w-[760px] text-left text-sm">
                 <caption className="sr-only">User accounts with role, status and security state</caption>
                 <thead className="bg-paper-sunk">

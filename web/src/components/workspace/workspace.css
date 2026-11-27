@@ -83,3 +83,28 @@
 .ws-banner {
   padding-inline: clamp(16px, 3vw, 32px);
 }
+
+@media (max-width: 639px) {
+  .ws-header .ws-bar {
+    gap: 8px 12px;
+    padding-block: 8px;
+  }
+
+  .ws-header .ws-bar:first-child > div:first-child {
+    flex-basis: 0;
+  }
+
+  .ws-header .ws-bar:first-child h1 {
+    font-size: 15px;
+  }
+
+  .ws-header .ws-bar:nth-child(2) > div:last-child {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ws-option {
+    min-height: 56px;
+  }
+}

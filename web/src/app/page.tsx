@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Art, artSrc } from "@/components/ui/art";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/config/site";
+import { SiteFooter } from "@/components/marketing/site-footer";
 
 // Resolved once on the server. Without the file, the metadata simply carries no image.
 const ogImage = artSrc("og-image");
@@ -405,6 +406,10 @@ export default function LandingPage() {
           />
         </section>
 
+        <section aria-labelledby="contact-heading" className="grid gap-6 border-t border-ink bg-paper-raised px-5 py-14 md:grid-cols-12 md:items-center md:px-8 md:py-20">
+          <div className="grid gap-3 md:col-span-8"><p className={NOTE}>For institutes</p><h2 id="contact-heading" className="text-3xl font-medium tracking-tight md:text-5xl">Bring Invigil to your institute.</h2><p className="max-w-[50ch] text-base text-ink-soft">Tell us about your exam programme and our team will help you get started.</p></div><Button asChild size="lg"><Link href="/contact">Contact us</Link></Button>
+        </section>
+
         <section aria-labelledby="signin-heading" className="grid gap-8 border-t border-ink bg-paper-sunk px-5 py-20 md:px-8 md:py-28">
           <h2 id="signin-heading" className="max-w-[18ch] text-[clamp(3rem,8vw,6.5rem)] leading-[0.92] font-medium tracking-[-0.045em]">
             Sign in to your exams.
@@ -421,36 +426,8 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="grid gap-10 border-t border-ink px-5 py-10 font-mono text-[11px] tracking-[0.12em] uppercase md:grid-cols-3 md:px-8">
-        <div className="grid content-start gap-4">
-          <span className="flex items-center gap-3">
-            <span aria-hidden="true" className="grid size-6 place-items-center bg-fill text-[11px] font-bold text-on-fill">
-              {siteConfig.mark}
-            </span>
-            <span>Inventix Invigil · {siteConfig.tagline}</span>
-          </span>
-          <p className="max-w-[40ch] leading-relaxed text-ink-muted">
-            Built by the Inventix Invigil team · Technoverse 5.0 Web-e-Thon, COMSATS University Lahore
-          </p>
-          <p className="text-ink-muted">© 2026 Inventix Invigil</p>
-        </div>
-        <section aria-labelledby="footer-contact" className="grid content-start gap-3">
-          <h2 id="footer-contact">Contact</h2>
-          <a className="w-fit text-ink-soft hover:text-ink" href={`mailto:${siteConfig.contact.email}`}>
-            {siteConfig.contact.email}
-          </a>
-          <p className="max-w-[32ch] leading-relaxed text-ink-soft">{siteConfig.contact.address}</p>
-          <p className="text-ink-muted">{siteConfig.contact.hours}</p>
-        </section>
-        <nav aria-label="Footer" className="flex items-start gap-6">
-          <Link href="/verify" className="inline-flex min-h-6 items-center py-1 text-ink-soft hover:text-ink">
-            Verify
-          </Link>
-          <Link href="/login" className="inline-flex min-h-6 items-center py-1 text-ink-soft hover:text-ink">
-            Sign in
-          </Link>
-        </nav>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
+

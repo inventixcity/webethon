@@ -57,7 +57,7 @@ export const TopBar = forwardRef<HTMLElement, TopBarProps>(function TopBar(
   ref,
 ) {
   return (
-    <header ref={ref} className="ws-header z-30 border-b border-ink bg-paper">
+    <header ref={ref} className="ws-header sticky top-0 z-30 border-b border-ink bg-paper">
       <div className="ws-bar flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
         <div className="min-w-0 flex-1 basis-56">
           <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">

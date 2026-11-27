@@ -23,7 +23,7 @@ export function ExamTabs({ examId, className }: { examId: string; className?: st
   const base = `/app/examiner/exams/${encodeURIComponent(examId)}`;
 
   return (
-    <nav aria-label="Exam sections" className={cn("-mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
+    <nav aria-label="Exam sections" className={cn("scroll-fade relative -mx-5 overflow-x-auto px-5 md:mx-0 md:px-0", className)}>
       <ul className="flex w-max min-w-full border border-ink bg-paper-raised">
         {EXAM_TABS.map((tab) => {
           const href = tab.slug ? `${base}/${tab.slug}` : base;

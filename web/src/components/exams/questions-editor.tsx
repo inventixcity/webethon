@@ -254,7 +254,7 @@ function PaperEditor({ exam }: { exam: Exam }) {
           )}
 
           {editable ? (
-            <div className="sticky bottom-0 z-10 -mx-2 grid gap-4 border-y border-ink bg-paper px-3 py-4 sm:mx-0 sm:flex sm:items-center sm:justify-between sm:px-4">
+            <div className="mobile-safe-action sticky bottom-0 z-10 -mx-2 grid gap-4 border-y border-ink bg-paper px-3 py-4 sm:mx-0 sm:flex sm:items-center sm:justify-between sm:px-4">
               <p className={cn("font-mono text-sm tracking-[0.08em] uppercase tabular-nums", mismatch ? "text-amber-deep" : "text-cobalt-deep")} aria-live="polite">Total {formatMarks(total)} of {formatMarks(exam.totalMarks)} marks</p>
               {saveError ? (
                 <p role="alert" className="text-sm text-vermilion-deep">
