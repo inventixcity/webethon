@@ -78,7 +78,7 @@ async fn grading_list(
          select t.id as attempt_id, i.id as item_id, s.script_no::int as script_no,
                 i.position, i.stem, i.rubric, i.marks::float8 as marks,
                 coalesce(a.response->>'text','') as answer_text,
-                a.manual_marks::float8 as manual_marks, a.feedback, a.graded_at
+                a.manual_marks::float8 as manual_marks, coalesce(a.feedback, '') as feedback, a.graded_at
          from scripts s join attempts t on t.id=s.id
          join exam_items i on i.exam_id=t.exam_id and i.id=any(t.item_order) and i.kind='written'
          left join answers a on a.attempt_id=t.id and a.item_id=i.id
@@ -245,7 +245,7 @@ async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
         .bind(exam_id).fetch_one(&state.db).await?;
     let pass_marks: f64 = exam.try_get("pass_marks")?;
     let published: Option<time::OffsetDateTime> = exam.try_get("results_published_at")?;
-    let rows = sqlx::query("select a.id as attempt_id,a.candidate_id,u.display_name,u.email,a.status,a.auto_score::float8 as auto_score,a.manual_score::float8 as manual_score,a.total_score::float8 as total_score,case when a.total_score is null then null else round((a.total_score::numeric / $2::numeric * 100),2)::float8 end as percent,case when a.total_score is null then null else a.total_score >= $3 end as passed,a.grading_status,a.review_priority,a.submitted_at from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox order by a.created_at,a.id")
+    let rows = sqlx::query("select a.id as attempt_id,a.candidate_id,u.display_name,u.email,a.status,a.auto_score::float8 as auto_score,a.manual_score::float8 as manual_score,a.total_score::float8 as total_score,case when a.total_score is null then null else round((a.total_score::numeric / nullif($2::numeric,0) * 100),2)::float8 end as percent,case when a.total_score is null then null else a.total_score >= $3 end as passed,a.grading_status,a.review_priority,a.submitted_at from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox order by a.created_at,a.id")
         .bind(exam_id).bind(total_marks).bind(pass_marks).fetch_all(&state.db).await?;
     let mut conn = state.db.acquire().await?;
     let blockers = publication_blockers(&mut conn, exam_id).await?;
@@ -396,7 +396,7 @@ pub async fn issue_certificate(
         "certificateId": verify_code,
         "examTitle": exam_title,
         "candidate": format!("{first_initial}. {last_initial}****{last_character}"),
-        "percent": round2(score / total_marks * 100.0),
+        "percent": if total_marks > 0.0 { round2(score / total_marks * 100.0) } else { 0.0 },
         "passed": score >= pass_marks,
         "issuedAt": examcore::ts(issued_at),
         "issuer": "Inventix Invigil"

@@ -1,0 +1,6 @@
+RESUME C13. The reviewer found a MAJOR in your blueprint draw (handoff/reviews/R2-pass2.md): with overlapping blueprint rows (two rows whose topic and difficulty bands match some of the same items), backend/crates/exam_attempts/src/lib.rs (~line 281) greedily consumes items for the first row, then fails at ~line 303 even when a valid assignment exists. That means a candidate can be unable to START a published exam.
+Fix:
+- Assign items to rows so that every row gets `count` distinct items whenever a feasible assignment exists. Process the most constrained rows first (fewest eligible items), then, per row, draw from the eligible items not yet taken. Retry with different seeded orders before failing. A small bipartite matching or augmenting-path fallback is fine for these sizes.
+- The publish-time feasibility check (exam_authoring readiness and preview) must use the SAME assignment logic, so an exam can't be published unless every candidate can actually draw a paper.
+- Add tests: overlapping rows that are feasible only under a non-greedy assignment, and an infeasible overlap that publish refuses.
+Then run fmt (only your crates), clippy (`--all-targets -- -D warnings`) and tests for exam_attempts and exam_authoring. Finish with `STATUS: COMPLETE` in handoff/log/C13.md. Remove the old COMPLETE line first.
