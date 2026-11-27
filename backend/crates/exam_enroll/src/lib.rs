@@ -435,6 +435,52 @@ async fn invite_one(
         json!({"sent":true,"inviteLink":{"email":email,"url":url}}),
     ))
 }
+
+async fn reset_access(
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    Path((id, cid)): Path<(Uuid, Uuid)>,
+    ExaminerViewer(v): ExaminerViewer,
+) -> examcore::ApiJson {
+    examcore::load_exam_for_examiner(&state.db, &v, id).await?;
+    security::enforce_rate_limit(
+        &state.db,
+        &format!("exam:reset-access:{}", v.id),
+        security::Limit {
+            limit: 10,
+            window: std::time::Duration::from_secs(3600),
+        },
+    )
+    .await?;
+    let mut tx = state.db.begin().await?;
+    let found: Option<Uuid> = sqlx::query_scalar("select u.id from enrollments e join users u on u.id=e.candidate_id where e.exam_id=$1 and e.candidate_id=$2 and e.status='enrolled' and u.role='user' and u.deleted_at is null for update of u")
+        .bind(id).bind(cid).fetch_optional(&mut *tx).await?;
+    let uid = found.ok_or_else(AppError::not_found)?;
+    let (token, hash) = crypto::new_token();
+    sqlx::query("update users set password_hash=null,password_changed_at=now() where id=$1")
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("update sessions set revoked_at=now() where user_id=$1 and revoked_at is null")
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("update account_invites set used_at=now() where user_id=$1 and used_at is null")
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
+    let expires: time::OffsetDateTime = sqlx::query_scalar("insert into account_invites(token_hash,user_id,invited_by,expires_at) values($1,$2,$3,now()+interval '72 hours') returning expires_at")
+        .bind(hash.as_slice()).bind(uid).bind(v.id).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    audit(&state.db, &meta, v.id, "exam.reset_access", id).await;
+    let expires_at = expires
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(AppError::internal)?;
+    Ok(examcore::ok(
+        json!({"inviteUrl":format!("{}/invite/{token}",state.config.app_origin),"expiresAt":expires_at}),
+    ))
+}
+
 async fn patch(
     State(state): State<AppState>,
     meta: RequestMeta,
@@ -569,6 +615,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/exams/{id}/enrollments/{candidateId}/invite",
             post(invite_one),
+        )
+        .route(
+            "/exams/{id}/enrollments/{candidateId}/reset-access",
+            post(reset_access),
         )
         .route("/invites/{token}", get(lookup_invite))
         .route("/invites/accept", post(accept))

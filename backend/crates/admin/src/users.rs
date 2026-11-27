@@ -231,6 +231,81 @@ action!(revoke, "revoke");
 action!(reset_mfa, "mfa_reset");
 action!(delete, "delete");
 action!(restore, "restore");
+#[allow(dead_code)] // Wired by the admin router integration owner.
+pub(crate) async fn reset_access(
+    State(state): State<AppState>,
+    meta: RequestMeta,
+    AdminViewer(viewer): AdminViewer,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Value>> {
+    if viewer.id == id {
+        return Err(invalid("id"));
+    }
+    security::enforce_rate_limit(
+        &state.db,
+        &format!("admin:reset-access:user:{}", viewer.id),
+        security::Limit {
+            limit: 10,
+            window: std::time::Duration::from_secs(3600),
+        },
+    )
+    .await?;
+    let mut tx = state.db.begin().await?;
+    admin_security::lock_users_in_order(&mut tx, viewer.id, id).await?;
+    admin_security::require_step_up(&mut tx, &state, &viewer).await?;
+    let row: Option<(String, String)> = sqlx::query_as(
+        "select email::text,role from users where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (_email, role) = row.ok_or_else(AppError::not_found)?;
+    if role == "admin" {
+        sqlx::query("select pg_advisory_xact_lock(hashtext('invigil-admin-role-change'))")
+            .execute(&mut *tx)
+            .await?;
+        let others: i64 = sqlx::query_scalar("select count(*) from users where role='admin' and status='active' and deleted_at is null and id<>$1")
+            .bind(id).fetch_one(&mut *tx).await?;
+        if others == 0 {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "The last active administrator cannot be reset.",
+            ));
+        }
+    }
+    let (token, hash) = kernel::crypto::new_token();
+    sqlx::query("update users set password_hash=null,password_changed_at=now() where id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("update sessions set revoked_at=now() where user_id=$1 and revoked_at is null")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("update account_invites set used_at=now() where user_id=$1 and used_at is null")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    let expires: time::OffsetDateTime = sqlx::query_scalar("insert into account_invites(token_hash,user_id,invited_by,expires_at) values($1,$2,$3,now()+interval '72 hours') returning expires_at")
+        .bind(hash.as_slice()).bind(id).bind(viewer.id).fetch_one(&mut *tx).await?;
+    audit::audit_before_after(
+        &mut tx,
+        &meta,
+        &viewer,
+        "admin.reset_access",
+        ("user", &id.to_string()),
+        json!({}),
+        json!({"accessReset":true}),
+    )
+    .await?;
+    tx.commit().await?;
+    let expires_at = expires
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(AppError::internal)?;
+    Ok(Json(
+        json!({"data":{"inviteUrl":format!("{}/invite/{token}",state.config.app_origin),"expiresAt":expires_at}}),
+    ))
+}
 async fn mutate(
     state: AppState,
     meta: RequestMeta,

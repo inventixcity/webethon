@@ -173,6 +173,7 @@ pub fn router_with_catalog(catalog: payments_catalog::Catalog) -> Router<AppStat
         .route("/users/{id}/unsuspend", post(users::unsuspend))
         .route("/users/{id}/role", post(users::role))
         .route("/users/{id}/sessions/revoke", post(users::revoke))
+        .route("/users/{id}/reset-access", post(users::reset_access))
         .route("/users/{id}/mfa/reset", post(users::reset_mfa))
         .route("/users/{id}/delete", post(users::delete))
         .route("/users/{id}/restore", post(users::restore))
