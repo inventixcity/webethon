@@ -4,7 +4,6 @@ import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import { Toaster, ToastProvider } from "@/components/feedback/toaster";
 import { ThemeScript } from "@/components/theme/theme-script";
 import { siteConfig } from "@/config/site";
-import { FlagsProvider } from "@/lib/flags";
 import "./globals.css";
 
 const display = Bricolage_Grotesque({
@@ -37,9 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <ToastProvider>
-          <FlagsProvider>
-            {children}
-          </FlagsProvider>
+          {children}
           <Toaster />
         </ToastProvider>
       </body>

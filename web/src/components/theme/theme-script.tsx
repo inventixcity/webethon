@@ -31,6 +31,10 @@ export function ThemeScript({ nonce }: { nonce?: string }) {
     () => true,
   );
   useLayoutEffect(applySavedTheme, []);
-  // The nonce lets this inline script run under the CSP, which has no 'unsafe-inline' for scripts.
-  return inServerHtml ? <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} /> : null;
+  // The nonce lets this inline script run under the CSP, which has no 'unsafe-inline' for scripts. Browsers hide
+  // the nonce attribute from the DOM once the page loads (so it reads ""), which React would report as a hydration
+  // mismatch; that difference is expected, so it is suppressed on this one element.
+  return inServerHtml ? (
+    <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: script }} />
+  ) : null;
 }
