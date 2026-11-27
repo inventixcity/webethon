@@ -1,5 +1,6 @@
 "use client";
 
+import { setSimulatedOffline } from "@/lib/exam/network";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PageLoader } from "@/components/loaders/page-loader";
@@ -14,9 +15,17 @@ import type { AttemptPayload, ExamSettings } from "@/lib/exam/types";
 import { AnnouncementsPanel, useAnnouncementToasts } from "./announcements";
 import { Palette, PaletteTrigger, type PaletteItem } from "./palette";
 import { PrefsDrawer } from "./prefs-drawer";
-import { NetworkBanners } from "./network-banner";
+import { ConnectionBanner, JournalRejectedNotice } from "./network-banner";
 import { Question, questionDomId } from "./question";
-import { emptyResponse, isAnswered, type AttemptView } from "./model";
+import {
+  effectiveState,
+  emptyResponse,
+  isAnswered,
+  parseRejectedReasons,
+  summarizeSaves,
+  type AttemptView,
+  type JournalRejectReason,
+} from "./model";
 import { usePrefs } from "./use-prefs";
 import { WorkspaceRootContext } from "./drawer";
 import { Scratchpad } from "./scratchpad";
@@ -64,7 +73,15 @@ function Workspace({
   const [submitOpen, setSubmitOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [takingOver, setTakingOver] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [rejectionDismissed, setRejectionDismissed] = useState<string | null>(null);
+  // Demo aid for sandbox attempts (5.3). useAttempt does not expose a simulate-offline hook yet, so this stays
+  // false and the toggle does nothing. Wire it to the engine hook when that lands.
+  const [simulated, setSimulated] = useState(false);
+  // Never leave the simulated outage on after leaving the workspace.
+  useEffect(() => () => setSimulatedOffline(false), []);
   const scrollRef = useRef<HTMLElement>(null);
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -111,13 +128,27 @@ function Workspace({
 
   const paletteItems: PaletteItem[] = items.map((item, position) => {
     const entry = attempt.answers[item.id];
+    const state = entry ? effectiveState(entry.state, attempt.pendingCount) : null;
     return {
       id: item.id,
       index: position,
       answered: isAnswered(entry?.response),
       flagged: entry?.flagged ?? false,
+      failed: entry?.state === "error",
+      queued: state === "queued" || state === "offline",
     };
   });
+  const answeredCount = paletteItems.filter((item) => item.answered).length;
+  const saves = summarizeSaves(attempt.answers, attempt.pendingCount, !network.online, submitting);
+
+  // Journal entries the server refused (5.3). Prefer the hook's structured list; fall back to its error text.
+  const rejected = attempt.journalRejected ?? [];
+  const rejectedReasons: JournalRejectReason[] =
+    rejected.length > 0 ? [...new Set(rejected.map((entry) => entry.reason))] : parseRejectedReasons(attempt.error);
+  const rejectedQuestions = [
+    ...new Set(rejected.map((entry) => items.findIndex((item) => item.id === entry.itemId)).filter((index) => index >= 0)),
+  ].sort((a, b) => a - b);
+  const rejectionKey = `${rejectedReasons.join(",")}|${rejectedQuestions.join(",")}`;
 
   const goTo = useCallback(
     (next: number) => {
@@ -135,19 +166,53 @@ function Workspace({
   );
 
   // Alt+N, Alt+P and Alt+F work in both layouts. Codes are used, so the shortcuts hold on any keyboard layout.
+  // The remaining shortcuts are the ones listed in the help popover: Alt+J palette, Alt+S scratchpad,
+  // Alt+R review, Alt+K help, and "?" outside a text field.
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (!event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.ctrlKey || event.metaKey) return;
+      if (!event.altKey) {
+        if (event.key === "?" && !isEditableTarget(event.target)) {
+          event.preventDefault();
+          setHelpOpen(true);
+        }
+        return;
+      }
       const item = items[safeIndex];
-      if (event.code === "KeyN") {
-        event.preventDefault();
-        goTo(safeIndex + 1);
-      } else if (event.code === "KeyP") {
-        event.preventDefault();
-        goTo(safeIndex - 1);
-      } else if (event.code === "KeyF" && item) {
-        event.preventDefault();
-        toggleFlag(item.id);
+      switch (event.code) {
+        case "KeyN":
+          event.preventDefault();
+          goTo(safeIndex + 1);
+          break;
+        case "KeyP":
+          event.preventDefault();
+          goTo(safeIndex - 1);
+          break;
+        case "KeyF":
+          if (!item) break;
+          event.preventDefault();
+          toggleFlag(item.id);
+          break;
+        case "KeyJ": {
+          event.preventDefault();
+          // The side palette is always visible on large screens, so focus it there; otherwise open the sheet.
+          const current = document.querySelector<HTMLElement>('aside[aria-label="Question palette"] [data-current="true"]');
+          if (current && current.offsetParent !== null) current.focus();
+          else setSheetOpen(true);
+          break;
+        }
+        case "KeyS":
+          event.preventDefault();
+          setScratchOpen(true);
+          break;
+        case "KeyR":
+          event.preventDefault();
+          setSubmitOpen(true);
+          break;
+        case "KeyK":
+          event.preventDefault();
+          setHelpOpen((open) => !open);
+          break;
       }
     }
     window.addEventListener("keydown", onKey);
@@ -194,14 +259,24 @@ function Workspace({
     }
   }, [attempt.error]);
   const { submit: submitAttempt } = attempt;
-  const submitExam = useCallback(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        submitWaiter.current = { resolve, reject, errorAtStart: attempt.error };
-        void submitAttempt();
-      }),
-    [attempt.error, submitAttempt],
-  );
+  const submitExam = useCallback(() => {
+    setSubmitting(true);
+    return new Promise<void>((resolve, reject) => {
+      submitWaiter.current = { resolve, reject, errorAtStart: attempt.error };
+      void submitAttempt();
+    }).finally(() => setSubmitting(false));
+  }, [attempt.error, submitAttempt]);
+
+  // The timer's total is the span from the server's start to its deadline (accommodations included).
+  const totalMs = Math.max(0, Date.parse(payload.deadlineAt) - Date.parse(payload.startedAt));
+
+  // Sandbox-only demo of 5.3: drives the same offline journal and reconnect paths as a real outage.
+  function toggleSimulation() {
+    if (!payload.sandbox) return;
+    const next = !simulated;
+    setSimulated(next);
+    setSimulatedOffline(next);
+  }
 
   async function takeOver() {
     setTakingOver(true);
@@ -297,22 +372,46 @@ function Workspace({
           title={payload.examTitle}
           sandbox={payload.sandbox}
           remainingMs={attempt.remainingMs}
+          totalMs={totalMs}
           timerStyle={prefs.timerStyle}
-          saveState={attempt.saveState}
-          pendingCount={attempt.pendingCount}
-          quality={network.quality}
+          saveState={saves.state}
+          queued={saves.queued}
+          failed={saves.failed.length}
+          answered={answeredCount}
+          total={count}
+          simulated={simulated}
+          helpOpen={helpOpen}
+          onHelpOpenChange={setHelpOpen}
+          onToggleSimulation={toggleSimulation}
           onScratchpad={() => setScratchOpen(true)}
           onPreferences={() => setPrefsOpen(true)}
           onReview={() => setSubmitOpen(true)}
         />
-        <NetworkBanners quality={network.quality} />
+        <ConnectionBanner
+          mode={network.quality === "good" ? "online" : network.quality}
+          journalEnabled={payload.journal.enabled}
+          simulated={simulated}
+          onReconnect={toggleSimulation}
+        />
+        {rejectedReasons.length > 0 && rejectionKey !== rejectionDismissed && (
+          <JournalRejectedNotice
+            reasons={rejectedReasons}
+            questions={rejectedQuestions}
+            onDismiss={() => setRejectionDismissed(rejectionKey)}
+          />
+        )}
         <AnnouncementsPanel items={attempt.announcements} />
         <div className="flex min-h-0 flex-1">
           {prefs.paletteSide === "left" && palette}
           <main id="ws-questions" ref={scrollRef} aria-label="Questions" className="min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 lg:py-10" style={{ zoom: prefs.fontScale }}>
               <div className="mb-6 lg:hidden">
-                <PaletteTrigger currentIndex={safeIndex} total={count} onOpen={() => setSheetOpen(true)} />
+                <PaletteTrigger
+                  currentIndex={safeIndex}
+                  total={count}
+                  answered={answeredCount}
+                  onOpen={() => setSheetOpen(true)}
+                />
               </div>
               {count === 0 ? (
                 <p className="font-sans text-base text-ink-soft">This exam has no questions.</p>
@@ -426,6 +525,11 @@ function Workspace({
       </div>
     </WorkspaceRootContext.Provider>
   );
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 function StatePanel({

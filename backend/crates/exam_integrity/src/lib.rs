@@ -37,6 +37,7 @@ struct EventBatch {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EventInput {
     kind: String,
+    #[serde(with = "time::serde::rfc3339")]
     client_at: time::OffsetDateTime,
     #[serde(default)]
     duration_ms: Option<i32>,

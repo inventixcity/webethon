@@ -10,6 +10,7 @@ GROUP="${2:-invigil-rg}"
 SUFFIX="${3:-$(printf '%s' "$GROUP" | sha256sum | cut -c1-8)}"
 REGISTRY="invigilacr${SUFFIX}"
 : "${DATABASE_URL:?required}" "${PROXY_SECRET:?required}" "${CODE_PEPPER:?required}" "${EXAM_LEASE_KEY:?required}" "${RESULT_SIGNING_KEY:?required}" "${MFA_ENCRYPTION_KEY:?required}" "${EMAIL_FROM:?required}"
+[[ -n "${SMTP_URL:-}${RESEND_API_KEY:-}" ]] || { echo "Set SMTP_URL or RESEND_API_KEY in .env.production" >&2; exit 1; }
 RG=(--resource-group "$GROUP")
 az group create "${RG[@]}" --location "$LOCATION" --output none
 az provider register --namespace Microsoft.App --wait

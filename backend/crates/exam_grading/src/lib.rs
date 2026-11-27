@@ -51,6 +51,7 @@ struct GradingItem {
     word_count: usize,
     manual_marks: Option<f64>,
     feedback: String,
+    #[serde(with = "time::serde::rfc3339::option")]
     graded_at: Option<time::OffsetDateTime>,
 }
 
@@ -328,27 +329,16 @@ async fn publish_results(
         let attempt_id: Uuid = candidate.try_get("id")?;
         let score: f64 = candidate.try_get("total_score")?;
         let display_name: String = candidate.try_get("display_name")?;
-        let words: Vec<&str> = display_name.split_whitespace().collect();
-        let first = words
-            .first()
-            .and_then(|word| word.chars().next())
-            .unwrap_or('X');
-        let last = words
-            .last()
-            .and_then(|word| word.chars().next())
-            .unwrap_or('X');
-        let last_end = words
-            .last()
-            .and_then(|word| word.chars().last())
-            .unwrap_or('X');
-        let verify_code = new_verify_code();
-        let issued = time::OffsetDateTime::now_utc();
-        let statement = json!({"certificateId":verify_code,"examTitle":exam_title,"candidate":format!("{first}. {last}****{last_end}"),"percent":round2(score / total_marks * 100.0),"passed":score >= pass_marks,"issuedAt":issued,"issuer":"Inventix Invigil"});
-        let hash =
-            examcore::kernel::crypto::sha256(examcore::canonical_json(&statement).as_bytes());
-        let (signature, key_id) = examcore::signer::sign(&hash);
-        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id,issued_at) values($1,$2,$3,$4,$5,$6,$7) on conflict(attempt_id) where revoked_at is null do nothing")
-            .bind(attempt_id).bind(verify_code).bind(statement).bind(hash.to_vec()).bind(signature.to_vec()).bind(key_id).bind(issued).execute(&mut *tx).await?;
+        issue_certificate(
+            &mut *tx,
+            attempt_id,
+            &exam_title,
+            &display_name,
+            score,
+            total_marks,
+            pass_marks,
+        )
+        .await?;
     }
     tx.commit().await?;
     audit(
@@ -364,6 +354,78 @@ async fn publish_results(
     )
     .await;
     Ok(examcore::ok(results_value(&state, exam_id).await?))
+}
+
+async fn issue_certificate(
+    conn: &mut PgConnection,
+    attempt_id: Uuid,
+    exam_title: &str,
+    display_name: &str,
+    score: f64,
+    total_marks: f64,
+    pass_marks: f64,
+) -> AppResult<String> {
+    let existing = sqlx::query(
+        "select verify_code,revoked_at from result_certificates where attempt_id=$1 for update",
+    )
+    .bind(attempt_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let (verify_code, needs_reissue, has_existing) = if let Some(row) = existing {
+        let verify_code: String = row.try_get("verify_code")?;
+        let revoked_at: Option<time::OffsetDateTime> = row.try_get("revoked_at")?;
+        (verify_code, revoked_at.is_some(), true)
+    } else {
+        (new_verify_code(), true, false)
+    };
+    if !needs_reissue {
+        return Ok(verify_code);
+    }
+
+    let name_parts: Vec<&str> = display_name.split_whitespace().collect();
+    let first_initial = name_parts
+        .first()
+        .and_then(|word| word.chars().next())
+        .unwrap_or('X');
+    let last_name = name_parts.last().copied().unwrap_or("X");
+    let last_initial = last_name.chars().next().unwrap_or('X');
+    let last_character = last_name.chars().last().unwrap_or('X');
+    let issued_at = time::OffsetDateTime::now_utc();
+    let statement = json!({
+        "certificateId": verify_code,
+        "examTitle": exam_title,
+        "candidate": format!("{first_initial}. {last_initial}****{last_character}"),
+        "percent": round2(score / total_marks * 100.0),
+        "passed": score >= pass_marks,
+        "issuedAt": issued_at,
+        "issuer": "Inventix Invigil"
+    });
+    let statement_hash =
+        examcore::kernel::crypto::sha256(examcore::canonical_json(&statement).as_bytes());
+    let (signature, key_id) = examcore::signer::sign(&statement_hash);
+    if has_existing {
+        sqlx::query("update result_certificates set statement=$2,statement_hash=$3,signature=$4,key_id=$5,issued_at=$6,revoked_at=null where attempt_id=$1")
+            .bind(attempt_id)
+            .bind(statement)
+            .bind(statement_hash.to_vec())
+            .bind(signature.to_vec())
+            .bind(key_id)
+            .bind(issued_at)
+            .execute(&mut *conn)
+            .await?;
+    } else {
+        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id,issued_at,revoked_at) values($1,$2,$3,$4,$5,$6,$7,null)")
+            .bind(attempt_id)
+            .bind(&verify_code)
+            .bind(statement)
+            .bind(statement_hash.to_vec())
+            .bind(signature.to_vec())
+            .bind(key_id)
+            .bind(issued_at)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(verify_code)
 }
 
 fn new_verify_code() -> String {
@@ -429,7 +491,11 @@ async fn verify_certificate(
         },
     )
     .await?;
-    let canonical = canonical_verify_code(&code);
+    let Some(canonical) = canonical_verify_code(&code) else {
+        return Ok(examcore::ok(
+            json!({"valid":false,"revoked":false,"statement":null,"signature":null}),
+        ));
+    };
     let row = sqlx::query("select statement,statement_hash,signature,key_id,revoked_at from result_certificates where verify_code=$1")
         .bind(canonical).fetch_optional(&state.db).await?;
     let Some(row) = row else {
@@ -457,26 +523,27 @@ async fn verify_certificate(
     ))
 }
 
-fn canonical_verify_code(code: &str) -> String {
+fn canonical_verify_code(code: &str) -> Option<String> {
     let normalized: String = code
         .chars()
         .filter(|character| !character.is_whitespace() && *character != '-')
         .map(|character| character.to_ascii_uppercase())
         .take(64)
         .collect();
-    let valid_shape = normalized.len() == 12
+    let valid_shape = normalized.chars().count() == 12
+        && normalized.len() == 12
         && normalized
             .bytes()
             .all(|byte| b"0123456789ABCDEFGHJKMNPQRSTVWXYZ".contains(&byte));
     if valid_shape {
-        format!(
+        Some(format!(
             "{}-{}-{}",
             &normalized[0..4],
             &normalized[4..8],
             &normalized[8..12]
-        )
+        ))
     } else {
-        normalized
+        None
     }
 }
 
@@ -534,7 +601,7 @@ async fn attempt_report(
     viewer: examcore::Viewer,
     Path(attempt_id): Path<Uuid>,
 ) -> examcore::ApiJson {
-    let row = sqlx::query("select a.exam_id,a.candidate_id,a.status,a.sandbox,a.total_score::float8 as total_score,a.submitted_at,u.display_name,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,c.verify_code,c.revoked_at from attempts a join users u on u.id=a.candidate_id join exams e on e.id=a.exam_id left join result_certificates c on c.attempt_id=a.id and c.revoked_at is null where a.id=$1")
+    let row = sqlx::query("select a.exam_id,a.candidate_id,a.status,a.sandbox,a.total_score::float8 as total_score,a.submitted_at,u.display_name,e.title,e.total_marks::float8 as total_marks,e.pass_marks::float8 as pass_marks,e.results_published_at,e.settings,c.verify_code,c.revoked_at from attempts a join users u on u.id=a.candidate_id join exams e on e.id=a.exam_id left join result_certificates c on c.attempt_id=a.id and c.revoked_at is null where a.id=$1")
         .bind(attempt_id).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
     let exam_id: Uuid = row.try_get("exam_id")?;
     let candidate_id: Uuid = row.try_get("candidate_id")?;
@@ -554,16 +621,25 @@ async fn attempt_report(
     if row.try_get::<bool, _>("sandbox")? {
         return Err(AppError::not_found());
     }
-    let questions = sqlx::query("select i.position,i.stem,i.marks::float8 as marks,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks,a.feedback from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
-        .bind(attempt_id).fetch_all(&state.db).await?;
-    let items = questions.into_iter().map(|answer| {
-        let position: i32 = answer.try_get("position")?;
-        let stem: String = answer.try_get("stem")?;
-        let marks: f64 = answer.try_get("marks")?;
-        let awarded = answer.try_get::<Option<f64>,_>("manual_marks")?.or(answer.try_get("auto_marks")?).unwrap_or(0.0);
-        let feedback: Option<String> = answer.try_get("feedback")?;
-        Ok(json!({"position":position,"stem":stem,"marks":marks,"awarded":awarded,"feedback":feedback.unwrap_or_default()}))
-    }).collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let settings: Value = row.try_get("settings")?;
+    let show_breakdown = settings
+        .get("showBreakdown")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let items = if should_include_attempt_report_breakdown(is_owner, show_breakdown) {
+        let questions = sqlx::query("select i.position,i.stem,i.marks::float8 as marks,a.auto_marks::float8 as auto_marks,a.manual_marks::float8 as manual_marks,a.feedback from attempts t join exam_items i on i.id=any(t.item_order) and i.exam_id=t.exam_id left join answers a on a.attempt_id=t.id and a.item_id=i.id where t.id=$1 order by array_position(t.item_order,i.id)")
+            .bind(attempt_id).fetch_all(&state.db).await?;
+        questions.into_iter().map(|answer| {
+            let position: i32 = answer.try_get("position")?;
+            let stem: String = answer.try_get("stem")?;
+            let marks: f64 = answer.try_get("marks")?;
+            let awarded = answer.try_get::<Option<f64>,_>("manual_marks")?.or(answer.try_get("auto_marks")?).unwrap_or(0.0);
+            let feedback: Option<String> = answer.try_get("feedback")?;
+            Ok(json!({"position":position,"stem":stem,"marks":marks,"awarded":awarded,"feedback":feedback.unwrap_or_default()}))
+        }).collect::<Result<Vec<_>, sqlx::Error>>()?
+    } else {
+        Vec::new()
+    };
     let display_name: String = row.try_get("display_name")?;
     let title: String = row.try_get("title")?;
     let total_marks: f64 = row.try_get("total_marks")?;
@@ -579,6 +655,10 @@ async fn attempt_report(
     Ok(examcore::ok(
         json!({"attemptId":attempt_id,"candidate":display_name,"examTitle":title,"date":submitted_at,"score":total_score,"totalMarks":total_marks,"percent":round2(total_score/total_marks*100.0),"passed":total_score>=pass_marks,"items":items,"verifyCode":code,"verifyUrl":format!("{}/verify/{}",state.config.app_origin,code)}),
     ))
+}
+
+fn should_include_attempt_report_breakdown(is_owner: bool, show_breakdown: bool) -> bool {
+    is_owner || show_breakdown
 }
 
 async fn exam_report(
@@ -680,8 +760,26 @@ mod tests {
 
     #[test]
     fn malformed_unicode_verification_codes_do_not_slice_or_panic() {
-        assert_eq!(canonical_verify_code("abcd efgh jkmp"), "ABCD-EFGH-JKMP");
-        assert_eq!(canonical_verify_code("éééééééééééé"), "éééééééééééé");
+        assert_eq!(
+            canonical_verify_code("abcd efgh jkmp"),
+            Some("ABCD-EFGH-JKMP".to_owned())
+        );
+        assert_eq!(canonical_verify_code("éééééééééééé"), None);
+        assert_eq!(canonical_verify_code("ABCD-EFGH-JKPU"), None);
+        assert_eq!(canonical_verify_code("ABCD-EFGH-JK"), None);
+    }
+
+    #[test]
+    fn successful_json_payloads_use_data_envelope() {
+        let response = examcore::ok(json!({"count":3}));
+        assert_eq!(response.0, json!({"data":{"count":3}}));
+    }
+
+    #[test]
+    fn candidate_report_breakdown_obeys_exam_setting_and_owner_access() {
+        assert!(!should_include_attempt_report_breakdown(false, false));
+        assert!(should_include_attempt_report_breakdown(false, true));
+        assert!(should_include_attempt_report_breakdown(true, false));
     }
 
     #[sqlx::test(migrations = "../../migrations")]
@@ -783,28 +881,45 @@ mod tests {
             &tampered.try_get::<Vec<u8>, _>("statement_hash")?,
             &tampered.try_get::<Vec<u8>, _>("signature")?,
         ));
-        sqlx::query("update result_certificates set revoked_at=now() where attempt_id=$1")
+        sqlx::query("update result_certificates set revoked_at=now(),issued_at=now()-interval '1 day' where attempt_id=$1")
             .bind(attempt_id)
             .execute(&db)
             .await?;
-        let replacement = json!({"certificateId":"LMNP-QRST-VWXY","examTitle":"Certificate test"});
-        let replacement_hash = sha256(examcore::canonical_json(&replacement).as_bytes());
-        let (replacement_signature, replacement_key) = examcore::signer::sign(&replacement_hash);
-        sqlx::query("insert into result_certificates(attempt_id,verify_code,statement,statement_hash,signature,key_id) values($1,'LMNP-QRST-VWXY',$2,$3,$4,$5) on conflict(attempt_id) where revoked_at is null do nothing")
-            .bind(attempt_id)
-            .bind(replacement)
-            .bind(replacement_hash.to_vec())
-            .bind(replacement_signature.to_vec())
-            .bind(replacement_key)
-            .execute(&db)
-            .await?;
-        let (history_count, active_count): (i64, i64) = sqlx::query_as(
-            "select count(*),count(*) filter(where revoked_at is null) from result_certificates where attempt_id=$1",
+        let mut tx = db.begin().await?;
+        let reissued_code = issue_certificate(
+            &mut tx,
+            attempt_id,
+            "Certificate test",
+            "Candidate Name",
+            8.0,
+            10.0,
+            5.0,
         )
-        .bind(attempt_id)
-        .fetch_one(&db)
-        .await?;
-        assert_eq!((history_count, active_count), (2, 1));
+        .await
+        .map_err(|_| sqlx::Error::Protocol("certificate reissue failed".into()))?;
+        tx.commit().await?;
+        assert_eq!(reissued_code, "ABCD-EFGH-JKMP");
+        let reissued = sqlx::query("select verify_code,statement,statement_hash,signature,revoked_at,issued_at from result_certificates where attempt_id=$1")
+            .bind(attempt_id)
+            .fetch_one(&db)
+            .await?;
+        assert_eq!(
+            reissued.try_get::<Option<time::OffsetDateTime>, _>("revoked_at")?,
+            None
+        );
+        assert!(
+            reissued.try_get::<time::OffsetDateTime, _>("issued_at")?
+                > time::OffsetDateTime::now_utc() - time::Duration::minutes(1)
+        );
+        assert!(verify_statement(
+            &reissued.try_get("statement")?,
+            &reissued.try_get::<Vec<u8>, _>("statement_hash")?,
+            &reissued.try_get::<Vec<u8>, _>("signature")?,
+        ));
+        assert_eq!(
+            reissued.try_get::<String, _>("verify_code")?,
+            "ABCD-EFGH-JKMP"
+        );
         Ok(())
     }
 

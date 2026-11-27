@@ -13,6 +13,6 @@ export function useAuthRoutes() {
     forgot: `${base}/forgot-password`,
     reset: `${base}/reset-password`,
     verify: (email: string, next?: "reset") =>
-      `${base}/verify?email=${encodeURIComponent(email)}${next ? `&next=${next}` : ""}`,
+      `${base}/verify-code?email=${encodeURIComponent(email)}${next ? `&next=${next}` : ""}`,
   };
 }

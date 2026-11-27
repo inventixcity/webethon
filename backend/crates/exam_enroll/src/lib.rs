@@ -57,6 +57,7 @@ pub struct Enrollment {
     invited: bool,
     activated: bool,
     attempt: Option<AttemptSummary>,
+    #[serde(with = "time::serde::rfc3339")]
     created_at: time::OffsetDateTime,
 }
 #[derive(Serialize)]

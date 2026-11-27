@@ -68,7 +68,9 @@ pub struct Question {
     pub observed_facility: Option<f64>,
     pub observed_count: i32,
     pub version: i32,
+    #[serde(with = "time::serde::rfc3339")]
     pub created_at: time::OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub updated_at: time::OffsetDateTime,
 }
 #[derive(Serialize)]

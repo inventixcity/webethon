@@ -78,7 +78,9 @@ impl Default for ExamSettings {
 pub struct ExamInput {
     pub title: String,
     pub instructions: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub starts_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
     pub ends_at: OffsetDateTime,
     pub duration_minutes: i32,
     pub total_marks: f64,
@@ -91,7 +93,9 @@ pub struct ExamInput {
 pub struct ExamPatch {
     pub title: Option<String>,
     pub instructions: Option<String>,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub starts_at: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub ends_at: Option<OffsetDateTime>,
     pub duration_minutes: Option<i32>,
     pub total_marks: Option<f64>,

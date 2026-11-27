@@ -12,7 +12,7 @@ pub fn router() -> Router<AppState> {
         .route("/questions/{id}/stats", get(question_stats))
 }
 
-#[derive(FromRow)]
+#[derive(Clone, FromRow)]
 struct Attempt {
     id: Uuid,
     candidate: String,
@@ -32,7 +32,7 @@ struct Item {
     difficulty: i16,
     stem: String,
 }
-#[derive(FromRow)]
+#[derive(Clone, FromRow)]
 struct Answer {
     attempt_id: Uuid,
     item_id: Uuid,
@@ -56,9 +56,8 @@ async fn exam_analytics(
         return Err(AppError::not_found());
     }
     let items: Vec<Item> = sqlx::query_as("select id,question_id,topic,kind,marks::float8 marks,correct,options,position,difficulty,stem from exam_items where exam_id=$1 and not sandbox order by position").bind(id).fetch_all(&s.db).await?;
-    let mut attempts: Vec<Attempt> = sqlx::query_as("select a.id,u.display_name candidate,a.total_score::float8 score,a.status from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status in ('submitted','expired')  and a.total_score is not null order by a.started_at desc,a.id limit 501").bind(id).fetch_all(&s.db).await?;
+    let attempts: Vec<Attempt> = sqlx::query_as("select a.id,u.display_name candidate,a.total_score::float8 score,a.status from attempts a join users u on u.id=a.candidate_id where a.exam_id=$1 and not a.sandbox and a.status in ('submitted','expired')  and a.total_score is not null order by a.started_at desc,a.id").bind(id).fetch_all(&s.db).await?;
     let capped = attempts.len() > 500;
-    attempts.truncate(500);
     let ids: Vec<Uuid> = attempts.iter().map(|a| a.id).collect();
     let answers: Vec<Answer> = if ids.is_empty() {
         vec![]
@@ -197,7 +196,14 @@ async fn exam_analytics(
         }
         topics.push(json!({"topic":topic,"meanPercent":if n>0.{sum/n}else{0.},"items":its.len()}));
     }
-    let pairs = collusion(&attempts, &items, &answers);
+    let pair_attempts = attempts.iter().take(500).cloned().collect::<Vec<_>>();
+    let pair_ids = pair_attempts.iter().map(|a| a.id).collect::<Vec<_>>();
+    let pair_answers = answers
+        .iter()
+        .filter(|answer| pair_ids.contains(&answer.attempt_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let pairs = collusion(&pair_attempts, &items, &pair_answers);
     let reliability = reliability(&attempts, &items, &answers);
     update_bank(&s, &items).await?;
     let histogram: Vec<Value> = histogram
@@ -206,7 +212,7 @@ async fn exam_analytics(
         .map(|(i, count)| json!({"from":i*10,"to":(i+1)*10,"count":count}))
         .collect();
     Ok(examcore::ok(
-        json!({"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted").count(),"attemptsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":"Indicators for review, not evidence. Analysis capped at 500 attempts."}),
+        json!({"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted").count(),"attemptsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":if capped {"Indicators for review, not evidence. Pair analysis capped at 500 attempts."} else {"Indicators for review, not evidence."}}),
     ))
 }
 
@@ -425,6 +431,16 @@ mod tests {
             Some(1.)
         );
         assert_eq!(discrimination(&[(1., 0.), (1., 1.), (1., 2.)]), None);
+    }
+
+    #[test]
+    fn ten_mark_item_discrimination_compares_normalized_facility() {
+        let awarded_scores = [(10., 4.), (10., 3.), (0., 2.), (0., 1.)];
+        let normalized = awarded_scores
+            .iter()
+            .map(|(awarded, total)| (awarded / 10., *total))
+            .collect::<Vec<_>>();
+        assert_eq!(discrimination(&normalized), Some(1.));
     }
     #[test]
     fn collusion_fixture_detects_identical_wrong_choices() {

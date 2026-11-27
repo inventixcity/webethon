@@ -22,6 +22,9 @@ use uuid::Uuid;
 
 use exam_attempts::JOURNAL_GRACE_SECS;
 
+// The journal's receipt grace is deliberately shorter than the attempt finalizer grace.
+const JOURNAL_RECEIPT_GRACE_SECS: i64 = 90;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/attempts/{id}/heartbeat", post(heartbeat))
@@ -218,7 +221,10 @@ async fn heartbeat(
 /// elapsed time and the attempt deadline. The hash chain detects corruption and reordering, not
 /// malicious client execution: it is unkeyed. A modified client can backdate within a valid lease;
 /// neither the monotonic timer nor a hash proves when a human typed. Receipt is independently
-/// bounded by deadline + grace, so this residual risk never grants an unbounded extension.
+/// bounded by a 90-second receipt grace and accepted after the deadline only when no heartbeat
+/// was recorded during the final 30 seconds before it. Therefore the maximum fabricated gain is
+/// 90 seconds, and only for a device verifiably offline at the deadline; a lease/hash cannot prove
+/// when a human typed.
 async fn journal(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
@@ -240,6 +246,13 @@ async fn journal(
         .await?;
     let mut status: String = row.try_get("status")?;
     let deadline: OffsetDateTime = row.try_get("deadline_at")?;
+    let offline_at_deadline: bool = sqlx::query_scalar(
+        "select not exists(select 1 from attempt_heartbeats where attempt_id=$1 and at >= $2 - interval '30 seconds' and at <= $2)",
+    )
+    .bind(id)
+    .bind(deadline)
+    .fetch_one(&mut *tx)
+    .await?;
     if !row
         .try_get::<Value, _>("settings")?
         .get("allowOfflineJournal")
@@ -266,6 +279,7 @@ async fn journal(
     let mut seq: i64 = row.try_get("journal_seq")?;
     let mut accepted = Vec::new();
     let mut rejected = Vec::new();
+    let mut late_synced = 0_usize;
     let mut chain_broken = false;
     for entry in input.entries {
         let mut reason: Option<&str> = None;
@@ -273,7 +287,7 @@ async fn journal(
             && entry.elapsed_ms >= 0
             && Some(entry.written_at) == entry.lease.issued_at.checked_add(entry.elapsed_ms)
             && changed.is_none_or(|at| entry.lease.issued_at >= examcore::unix_ms(at));
-        if now > deadline + time::Duration::seconds(JOURNAL_GRACE_SECS)
+        if now > deadline + time::Duration::seconds(JOURNAL_RECEIPT_GRACE_SECS)
             // A candidate's own submit is final (the client syncs its journal before submitting).
             // Only a timer expiry keeps the grace window open for entries written before the deadline.
             || !matches!(status.as_str(), "in_progress" | "expired")
@@ -288,6 +302,8 @@ async fn journal(
         } else if entry.written_at > examcore::unix_ms(deadline)
             || entry.written_at > entry.lease.deadline_at
         {
+            reason = Some("late");
+        } else if now > deadline && !offline_at_deadline {
             reason = Some("late");
         } else if entry.seq <= seq {
             reason = Some("stale");
@@ -352,6 +368,9 @@ async fn journal(
         .to_vec();
         seq = entry.seq;
         accepted.push(entry.seq);
+        if now > deadline {
+            late_synced += 1;
+        }
     }
     if status == "in_progress" && now > deadline {
         exam_attempts::finalize(&mut tx, id, "timer").await?;
@@ -370,7 +389,7 @@ async fn journal(
             .execute(&mut *tx)
             .await?;
     }
-    sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'journal_synced',$2,$3)").bind(id).bind(if rejected.is_empty(){"info"}else{"notice"}).bind(json!({"accepted":accepted.len(),"rejected":rejected.len()})).execute(&mut *tx).await?;
+    sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'journal_synced',$2,$3)").bind(id).bind(if rejected.is_empty() && late_synced == 0 {"info"} else {"notice"}).bind(json!({"accepted":accepted.len(),"rejected":rejected.len(),"lateSynced":late_synced})).execute(&mut *tx).await?;
     if status != "in_progress" && !accepted.is_empty() {
         exam_grading::autograde_attempt(&mut tx, id).await?;
     }

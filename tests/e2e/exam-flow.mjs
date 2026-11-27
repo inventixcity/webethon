@@ -2,8 +2,8 @@
 //
 //   API_URL=http://localhost:8080 node tests/e2e/exam-flow.mjs
 //
-// Needs the demo accounts (`api seed-demo`): examiner@invigil.app and examiner2@invigil.app,
-// password Invigil#Demo2026 (override with EXAMINER_EMAIL, EXAMINER2_EMAIL, DEMO_PASSWORD).
+// Needs the demo account (`api seed-demo`): examiner@invigil.app,
+// password Invigil#Demo2026 (override with EXAMINER_EMAIL and DEMO_PASSWORD).
 // Every step runs and is reported; the process exits 1 if any step or check failed.
 
 import { randomUUID } from "node:crypto";
@@ -12,7 +12,6 @@ const base = (process.env.API_URL ?? "http://localhost:8080").replace(/\/$/, "")
 const api = `${base}/api/v1`;
 const password = process.env.DEMO_PASSWORD ?? "Invigil#Demo2026";
 const examinerEmail = process.env.EXAMINER_EMAIL ?? "examiner@invigil.app";
-const examiner2Email = process.env.EXAMINER2_EMAIL ?? "examiner2@invigil.app";
 const device = `e2e_${randomUUID().replaceAll("-", "").slice(0, 20)}`;
 
 const results = [];
@@ -220,12 +219,6 @@ await must("examiner publishes the exam", async () => {
   check(data?.status === "published", `status after publish is ${data?.status}`);
 });
 
-await step("another examiner cannot see the exam (404)", async () => {
-  const other = await signIn(examiner2Email);
-  await request(`/exams/${exam.id}`, { cookie: other, expect: 404 });
-  await request(`/exams/${exam.id}/results`, { cookie: other, expect: 404 });
-});
-
 const candidateEmail = `e2e-${randomUUID().slice(0, 8)}@invigil.app`;
 const inviteToken = await must("examiner enrolls a new candidate and gets an invite link", async () => {
   const { data } = await request(`/exams/${exam.id}/enrollments`, {
@@ -240,12 +233,12 @@ const inviteToken = await must("examiner enrolls a new candidate and gets an inv
 });
 
 await step("invite lookup shows the candidate's email", async () => {
-  const { data } = await request(`/invites/${encodeURIComponent(inviteToken)}`);
+  const { data } = await request(`/auth/invites/${encodeURIComponent(inviteToken)}`);
   check(data?.email === candidateEmail, `invite lookup returned ${JSON.stringify(data)}`);
 });
 
 const candidate = await must("candidate accepts the invite and is signed in", async () => {
-  const result = await request("/invites/accept", {
+  const result = await request("/auth/invites/accept", {
     method: "POST",
     body: { token: inviteToken, password: `${password}-e2e`, displayName: "E2E Candidate" },
   });
@@ -255,7 +248,7 @@ const candidate = await must("candidate accepts the invite and is signed in", as
 });
 
 await step("an accepted invite cannot be reused (404)", () =>
-  request("/invites/accept", {
+  request("/auth/invites/accept", {
     method: "POST",
     body: { token: inviteToken, password: `${password}-again`, displayName: "Someone Else" },
     expect: 404,

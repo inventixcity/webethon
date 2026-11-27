@@ -305,6 +305,44 @@ async fn voluntary_submit_is_final_but_timer_expiry_allows_grace_recovery(
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn post_deadline_journal_requires_offline_proof_and_is_visible(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    let lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
+    let deadline = examcore::from_unix_ms(lease.issued_at).ok_or("timestamp")?;
+    sqlx::query("update attempts set deadline_at=$2 where id=$1")
+        .bind(f.id)
+        .bind(deadline)
+        .execute(&f.state.db)
+        .await?;
+    let entry1 = entry(&f, 1, &[7; 32], lease.clone(), 0, json!({"selected":["a"]}));
+    // With no heartbeat in the final 30 seconds, receipt within the local 90-second bound is accepted.
+    let result = send(&f, vec![entry1]).await?;
+    assert_eq!(result["accepted"], json!([1]));
+    let detail: Value = sqlx::query_scalar("select detail from attempt_events where attempt_id=$1 and kind='journal_synced' order by recorded_at desc limit 1")
+        .bind(f.id).fetch_one(&f.state.db).await?;
+    assert_eq!(detail["lateSynced"], 1);
+
+    // A fresh attempt with a heartbeat immediately before its deadline cannot use post-deadline grace.
+    let lease2 = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));
+    let deadline2 = examcore::from_unix_ms(lease2.issued_at).ok_or("timestamp")?;
+    sqlx::query("update attempts set deadline_at=$2,journal_seq=0,journal_head=null,status='in_progress' where id=$1")
+        .bind(f.id).bind(deadline2).execute(&f.state.db).await?;
+    sqlx::query(
+        "insert into attempt_heartbeats(attempt_id,at) values($1,$2 - interval '10 seconds')",
+    )
+    .bind(f.id)
+    .bind(deadline2)
+    .execute(&f.state.db)
+    .await?;
+    let entry2 = entry(&f, 1, &[7; 32], lease2, 0, json!({"selected":["a"]}));
+    assert_eq!(
+        send(&f, vec![entry2]).await?["rejected"][0]["reason"],
+        "late"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn heartbeat_announcements_verified_outages_and_strict_inputs(db: PgPool) -> TestResult {
     let f = fixture(db).await?;
     let path = format!("/attempts/{}/heartbeat", f.id);

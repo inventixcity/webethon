@@ -374,8 +374,8 @@ async fn seed_demo_exams(
     .await?;
     exam_authoring::publish_tx(tx, exam_b).await?;
 
-    let c_start = now - time::Duration::hours(27);
-    let c_end = now - time::Duration::hours(25);
+    let c_start = now - time::Duration::minutes(30);
+    let c_end = now + time::Duration::hours(2);
     let exam_c = create_seed_exam(
         tx,
         owner,
@@ -387,10 +387,7 @@ async fn seed_demo_exams(
         total(&c_ids),
     )
     .await?;
-    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id where eq.exam_id=$1 order by eq.position")
-        .bind(exam_c).execute(&mut **tx).await?;
-    sqlx::query("update exams set status='completed',published_at=$2,completed_at=$3,updated_at=$3 where id=$1")
-        .bind(exam_c).bind(c_start).bind(now).execute(&mut **tx).await?;
+    exam_authoring::publish_tx(tx, exam_c).await?;
 
     let exam_d = create_seed_exam(
         tx,
@@ -435,6 +432,8 @@ async fn seed_demo_exams(
             .fetch_one(&mut **tx)
             .await?;
     seed_attempt(tx, exam_c, featured, owner, &items, 24, false).await?;
+    sqlx::query("update exams set starts_at=$2,ends_at=$3,status='completed',completed_at=now(),updated_at=now() where id=$1")
+        .bind(exam_c).bind(now - time::Duration::hours(27)).bind(now - time::Duration::hours(25)).execute(&mut **tx).await?;
     publish_seed_results(tx, exam_c).await?;
     let _ = exam_d;
     Ok(())
@@ -487,11 +486,10 @@ async fn seed_attempt(
     profile: usize,
     identical_wrong: bool,
 ) -> anyhow::Result<()> {
-    let item_order: Vec<sqlx::types::Uuid> = items.iter().map(|item| item.0).collect();
-    let genesis = kernel::crypto::new_token().1.to_vec();
-    let attempt: sqlx::types::Uuid = sqlx::query_scalar("insert into attempts(exam_id,candidate_id,status,finalized_by,started_at,deadline_at,seed,item_order,journal_genesis) values($1,$2,'in_progress',null,now()-interval '1 day',now()-interval '1 day',$3,$4,$5) returning id")
-        .bind(exam).bind(candidate).bind(profile as i64 + 10).bind(&item_order).bind(genesis)
-        .fetch_one(&mut **tx).await?;
+    let attempt =
+        exam_attempts::start_attempt_tx(tx, exam, candidate, Some("demo-device-1234")).await?;
+    sqlx::query("update attempts set started_at=now()-interval '1 day',deadline_at=now()-interval '23 hours' where id=$1")
+        .bind(attempt).execute(&mut **tx).await?;
     let strength = if profile == 24 {
         100
     } else {
@@ -546,7 +544,8 @@ async fn seed_attempt(
         sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'focus_lost','notice',$2),($1,'paste','warning',$2)")
             .bind(attempt).bind(serde_json::json!({"count":1})).execute(&mut **tx).await?;
     }
-    exam_attempts::finalize(&mut **tx, attempt, "examiner").await?;
+    exam_attempts::submit_tx(&mut **tx, attempt).await?;
+    exam_grading::autograde_attempt(&mut **tx, attempt).await?;
     Ok(())
 }
 
