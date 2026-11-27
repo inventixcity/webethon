@@ -54,7 +54,7 @@ export function DemoAccounts() {
         </p>
       </div>
 
-      <ul className="grid gap-3 md:grid-cols-3">
+      <ul className="grid gap-3 lg:grid-cols-3">
         {ACCOUNTS.map((account) => (
           <li key={account.role} className="grid min-w-0 gap-2">
             <div className="grid min-w-0 gap-0.5">
@@ -65,11 +65,12 @@ export function DemoAccounts() {
               type="button"
               variant="secondary"
               size="sm"
-              className="w-full"
+              className="h-auto min-h-9 w-full whitespace-normal py-2 text-center leading-tight"
+              aria-label={`Sign in as ${account.role}`}
               title={account.summary}
               onClick={() => signInAs(account.email)}
             >
-              Sign in as {account.role}
+              {account.role}
             </Button>
           </li>
         ))}

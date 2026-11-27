@@ -121,7 +121,7 @@ export function ToastStack({ className }: { className?: string }) {
         // Escape dismisses the front toast. Focus is inside the stack when this fires.
         if (event.key === "Escape" && toasts[0]) api.dismiss(toasts[0].id);
       }}
-      className={cn("fixed top-4 right-4 z-50 w-[min(23rem,calc(100vw-2rem))]", className)}
+      className={cn("fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 w-[min(23rem,calc(100vw-2rem))]", className)}
     >
       <AnimatePresence initial={false}>
         {toasts.map((toast, index) => (

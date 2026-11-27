@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "radix-ui";
 import { api } from "@/lib/api/client";
@@ -269,7 +270,12 @@ export function QuestionBank() {
       </div>
 
       <aside aria-label="Question preview" className="grid content-start gap-4 lg:sticky lg:top-6">
-        {selected ? <BankPreview question={selected} /> : <p className="border border-rule p-5 text-sm text-ink-muted">Select a question to preview it.</p>}
+        {selected ? <BankPreview question={selected} /> : (
+          <section aria-label="Question preview idle" className="grid min-h-72 content-center justify-items-start gap-4 border border-rule bg-paper-raised p-6">
+            <SharedEmptyState art="empty-questions" eyebrow="Question preview / 00" title="Nothing to preview yet." description={hasFilters ? "Clear the filters to find a question, then select it to see the answer key." : "Select a question from the bank to review its options, marks and answer key."} />
+            {hasFilters ? <Button variant="secondary" onClick={clearFilters}>Clear filters</Button> : null}
+          </section>
+        )}
       </aside>
 
       <DeleteDialog
@@ -364,18 +370,20 @@ function QuestionRow({
         </dl>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <Button asChild variant="ghost" size="sm">
+        <Button asChild variant="secondary" size="sm">
           <Link href={href} aria-label={`Edit question: ${stem.slice(0, 60)}`}>
+            <Pencil aria-hidden="true" />
             Edit
           </Link>
         </Button>
         <Button
-          variant="ghost"
+          variant="secondary"
           size="sm"
-          className="text-vermilion-deep"
+          className="border-vermilion-deep text-vermilion-deep before:bg-vermilion-deep hover:text-paper"
           aria-label={`Delete question: ${stem.slice(0, 60)}`}
           onClick={onDelete}
         >
+          <Trash2 aria-hidden="true" />
           Delete
         </Button>
       </div>

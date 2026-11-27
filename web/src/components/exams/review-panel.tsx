@@ -84,12 +84,10 @@ export function ReviewPanel({ examId }: { examId: string }) {
           </div>
           <p className="text-sm text-ink-soft">{formatWindow(exam.startsAt, exam.endsAt)}</p>
         </div>
-        <div className="flex flex-wrap items-start gap-3 md:col-span-5 md:justify-end">
-          <Button variant="secondary" loading={previewing} onClick={preview}>
-            Preview as candidate
-          </Button>
-          {isDraft ? (
-            canPublish ? (
+        {isDraft ? (
+          <div className="flex flex-wrap items-start gap-3 md:col-span-5 md:justify-end">
+            <Button variant="secondary" loading={previewing} onClick={preview}>Preview as candidate</Button>
+            {canPublish ? (
               <HoldButton
                 key={holdKey}
                 label="Hold to publish"
@@ -99,20 +97,16 @@ export function ReviewPanel({ examId }: { examId: string }) {
               />
             ) : (
               <Button disabled>Publish paper</Button>
-            )
-          ) : null}
-        </div>
+            )}
+          </div>
+        ) : null}
       </section>
 
       {!isDraft ? (
-        <p className="grid max-w-prose gap-2 border-l-2 border-ink pl-5 text-ink-soft">
-          <span className="font-mono text-[11px] tracking-[0.14em] text-ink uppercase">Already published</span>
-          This paper is frozen. Follow the exam on the{" "}
-          <Link href={`/app/examiner/exams/${encodeURIComponent(exam.id)}/monitor`} className="underline underline-offset-4 hover:text-ink">
-            Monitor tab
-          </Link>
-          .
-        </p>
+        <section aria-label="Published exam actions" className="grid gap-5 border border-cobalt bg-paper-raised p-5 sm:flex sm:items-center sm:justify-between sm:p-6">
+          <div className="grid gap-2"><p className="font-mono text-[11px] tracking-[0.14em] text-cobalt-deep uppercase">Published · paper frozen</p><p className="text-sm text-ink-soft">Candidates receive this fixed question set and mark scheme.</p></div>
+          <div className="flex flex-wrap gap-3"><Button asChild variant="secondary"><Link href={`/app/examiner/exams/${encodeURIComponent(exam.id)}/monitor`}>Open monitor</Link></Button><Button variant="secondary" loading={previewing} onClick={preview}>Preview as candidate</Button></div>
+        </section>
       ) : null}
 
       <section aria-labelledby="checklist-heading" className="grid gap-6">
@@ -262,11 +256,10 @@ function CheckRow({ check }: { check: ExamReview["checks"][number] }) {
  */
 function Tick({ draw }: { draw: boolean }) {
   const reduced = useReducedMotion() ?? false;
-  if (!draw) return <span className="size-2 bg-amber" />;
   return (
     <svg viewBox="0 0 16 16" className="size-4">
       <motion.path
-        d="M3 8.5 L6.5 12 L13 4.5"
+        d={draw ? "M3 8.5 L6.5 12 L13 4.5" : "M4 4 L12 12 M12 4 L4 12"}
         fill="none"
         stroke="currentColor"
         strokeWidth={2.4}

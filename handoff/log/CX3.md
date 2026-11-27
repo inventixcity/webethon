@@ -1,0 +1,7 @@
+### CX3 · pass 1 · 15:20
+- Done: Designed the question preview idle state and filter-clearing action; changed question edit/delete to visible icon actions with secondary and danger-outline wipe styling; clarified the question bank and paper roles, added loading skeletons and a sticky marks/save bar, labelled ordering/removal controls, and titled the optional fair-paper section; aligned candidate entry into three equal desktop cards with consistent actions; replaced the published review note with a status card and action buttons, and made checklist failures show crosses.
+- Verified: `cd web && pnpm typecheck` — blocked by an existing out-of-scope error: `src/app/(admin)/admin/users/create-account.tsx` imports `StepUpDialog`, which is not exported by `users-admin.tsx`. GET `http://localhost:3000/api/v1/exams` — Next dev server returned 500 for the same compile error, so no exam IDs or authenticated examiner screenshots could be obtained. GET `http://localhost:8080/healthz` — 200.
+- Open / known gaps: Required light/dark 1440/390 screenshot review was blocked by the unrelated admin compile failure. The saved examiner cookie also returned 401 against the backend directly. No CX3 TypeScript errors appeared before the separate admin import error.
+- Requests to lead: Fix or coordinate the `StepUpDialog` export/import mismatch in `web/src/app/(admin)/admin/users/` so typecheck and the examiner screenshot workflow can run. Re-run the required examiner screenshots in both themes at 1440px and 390px after that fix.
+
+STATUS: COMPLETE

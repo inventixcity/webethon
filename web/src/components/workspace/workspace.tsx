@@ -158,7 +158,8 @@ function Workspace({
       requestAnimationFrame(() => {
         const element = document.getElementById(questionDomId(target));
         const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        element?.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+        const container = document.getElementById("ws-questions");
+        if (container && element) scrollWithin(container, element, reduced ? "auto" : "smooth");
         element?.focus({ preventScroll: true });
       });
     },
@@ -221,7 +222,7 @@ function Workspace({
     const container = scrollRef.current;
     if (!container) return;
     const current = document.getElementById(questionDomId(indexRef.current));
-    current?.scrollIntoView({ block: "start" });
+    if (current) scrollWithin(container, current, "auto");
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -541,6 +542,16 @@ function StatePanel({
       </div>
     </main>
   );
+}
+
+/** Scroll only the question pane. Element.scrollIntoView can also move the document and hide the top bar. */
+function scrollWithin(container: HTMLElement, element: HTMLElement, behavior: ScrollBehavior): void {
+  const containerTop = container.getBoundingClientRect().top;
+  const elementTop = element.getBoundingClientRect().top;
+  container.scrollTo({
+    top: container.scrollTop + elementTop - containerTop,
+    behavior,
+  });
 }
 
 function LoadError({ error }: { error: unknown }) {

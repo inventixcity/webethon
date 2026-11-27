@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, RotateCcw, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, RotateCcw, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,14 @@ function signature(rows: PaperRow[]): string {
 /** The Questions tab. Remounts with fresh data whenever the exam version changes. */
 export function QuestionsEditor({ examId }: { examId: string }) {
   const { data: exam, loading, error, reload } = useExam(examId);
-  if (loading && !exam) return <LoadingState label="Loading paper" rows={4} />;
+  if (loading && !exam) return (
+    <div className="grid gap-8 py-10" aria-busy="true" aria-label="Loading question bank and paper">
+      <SectionIntro eyebrow="Questions / 01" title="Paper" summary="Choose questions from the bank, put them in order and set the marks. The total must match the exam." />
+      <div className="grid gap-10 lg:grid-cols-12">
+        {["Question bank", "Paper"].map((title, index) => <section key={title} className={cn("grid content-start gap-5", index === 0 ? "lg:col-span-5" : "lg:col-span-7")}><div className="grid gap-2"><h2 className="font-mono text-[11px] tracking-[0.14em] uppercase">0{index + 1} / {title}</h2><div className="h-4 w-4/5 animate-pulse bg-paper-sunk motion-reduce:animate-none" /></div><div className="grid gap-3" aria-hidden="true">{[1, 2, 3].map((row) => <div key={row} className="h-24 animate-pulse border border-rule bg-paper-raised motion-reduce:animate-none" />)}</div></section>)}
+      </div>
+    </div>
+  );
   if (!exam) return <ErrorState error={error} onRetry={reload} />;
   return <PaperEditor key={exam.version} exam={exam} />;
 }
@@ -193,23 +200,15 @@ function PaperEditor({ exam }: { exam: Exam }) {
       <div className="grid gap-10 lg:grid-cols-12">
         {editable ? (
           <section aria-labelledby="bank-heading" className="grid content-start gap-6 lg:col-span-5">
-            <h2 id="bank-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">
-              01 / Question bank
-            </h2>
+            <div className="grid gap-2 border-b border-ink pb-4"><h2 id="bank-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">01 / Question bank</h2><p className="text-sm text-ink-soft">Pick questions to add to this exam.</p></div>
             <Bank inPaper={inPaper} disabled={rows.length >= MAX_ITEMS} onAdd={addQuestion} />
           </section>
         ) : null}
 
         <section aria-labelledby="paper-heading" className={cn("grid content-start gap-6", editable ? "lg:col-span-7" : "lg:col-span-12")}>
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink pb-4">
-            <h2 id="paper-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">
-              {editable ? "02 / Paper" : "Paper"} <span className="text-ink-muted">({rows.length} questions)</span>
-            </h2>
-            <p className="font-mono text-[11px] tracking-[0.12em] uppercase" aria-live="polite">
-              <span className="text-ink-muted">Total </span>
-              <span className="tabular-nums">{formatMarks(total)}</span>
-              <span className="text-ink-muted"> of {formatMarks(exam.totalMarks)} marks</span>
-            </p>
+          <div className="grid gap-3 border-b border-ink pb-4 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="grid gap-2"><h2 id="paper-heading" className="font-mono text-[11px] tracking-[0.14em] uppercase">{editable ? "02 / Paper" : "Paper"} <span className="text-ink-muted">({rows.length} questions)</span></h2><p className="max-w-prose text-sm text-ink-soft">The questions candidates will get, in order, with marks.</p></div>
+            <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Exam total {formatMarks(exam.totalMarks)} marks</p>
           </div>
 
           <Meter
@@ -255,7 +254,8 @@ function PaperEditor({ exam }: { exam: Exam }) {
           )}
 
           {editable ? (
-            <div className="grid gap-4 border-t border-ink pt-6">
+            <div className="sticky bottom-0 z-10 -mx-2 grid gap-4 border-y border-ink bg-paper px-3 py-4 sm:mx-0 sm:flex sm:items-center sm:justify-between sm:px-4">
+              <p className={cn("font-mono text-sm tracking-[0.08em] uppercase tabular-nums", mismatch ? "text-amber-deep" : "text-cobalt-deep")} aria-live="polite">Total {formatMarks(total)} of {formatMarks(exam.totalMarks)} marks</p>
               {saveError ? (
                 <p role="alert" className="text-sm text-vermilion-deep">
                   {saveError}
@@ -503,7 +503,7 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
                     onClick={() => onAdd(question)}
                     aria-label={added ? `Already on the paper: ${question.stem.slice(0, 40)}` : `Add to paper: ${question.stem.slice(0, 40)}`}
                   >
-                    {added ? "Added" : "Add"}
+                    {added ? <><Check aria-hidden="true" /> Added</> : "Add"}
                   </Button>
                 </div>
               </li>

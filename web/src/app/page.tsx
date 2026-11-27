@@ -421,14 +421,28 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-ink px-5 py-6 font-mono text-[11px] tracking-[0.12em] uppercase md:px-8">
-        <span className="flex items-center gap-3">
-          <span aria-hidden="true" className="grid size-6 place-items-center bg-fill text-[11px] font-bold text-on-fill">
-            {siteConfig.mark}
+      <footer className="grid gap-10 border-t border-ink px-5 py-10 font-mono text-[11px] tracking-[0.12em] uppercase md:grid-cols-3 md:px-8">
+        <div className="grid content-start gap-4">
+          <span className="flex items-center gap-3">
+            <span aria-hidden="true" className="grid size-6 place-items-center bg-fill text-[11px] font-bold text-on-fill">
+              {siteConfig.mark}
+            </span>
+            <span>Inventix Invigil · {siteConfig.tagline}</span>
           </span>
-          <span>Inventix Invigil · {siteConfig.tagline}</span>
-        </span>
-        <nav aria-label="Footer" className="flex items-center gap-6">
+          <p className="max-w-[40ch] leading-relaxed text-ink-muted">
+            Built by the Inventix Invigil team · Technoverse 5.0 Web-e-Thon, COMSATS University Lahore
+          </p>
+          <p className="text-ink-muted">© 2026 Inventix Invigil</p>
+        </div>
+        <section aria-labelledby="footer-contact" className="grid content-start gap-3">
+          <h2 id="footer-contact">Contact</h2>
+          <a className="w-fit text-ink-soft hover:text-ink" href={`mailto:${siteConfig.contact.email}`}>
+            {siteConfig.contact.email}
+          </a>
+          <p className="max-w-[32ch] leading-relaxed text-ink-soft">{siteConfig.contact.address}</p>
+          <p className="text-ink-muted">{siteConfig.contact.hours}</p>
+        </section>
+        <nav aria-label="Footer" className="flex items-start gap-6">
           <Link href="/verify" className="inline-flex min-h-6 items-center py-1 text-ink-soft hover:text-ink">
             Verify
           </Link>

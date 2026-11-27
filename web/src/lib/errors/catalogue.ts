@@ -117,8 +117,8 @@ export const CATALOGUE: Readonly<Record<CatalogueKey, CatalogueEntry>> = {
     message: "Someone else changed it while you were editing. Reload to see the latest version.",
   },
   PRECONDITION_REQUIRED: {
-    title: "Reload to continue",
-    message: "We couldn't check this change against the latest version. Reload the page and try again.",
+    title: "Confirm your identity",
+    message: "Confirm your password to continue.",
   },
   IDEMPOTENCY_MISMATCH: {
     title: "Request already used",

@@ -87,8 +87,8 @@ export function CandidatesPanel({ examId }: { examId: string }) {
         <h2 id="add-heading" className="border-b border-ink pb-4 font-mono text-[11px] tracking-[0.14em] uppercase">
           02 / Add candidates
         </h2>
-        <QuickEmails enrolled={data ?? []} onAdd={queue} />
-        <div className="grid gap-12 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-3">
+          <QuickEmails enrolled={data ?? []} onAdd={queue} />
           <ManualForm enrolled={data ?? []} onAdd={queue} />
           <CsvForm onAdd={queue} queuedCount={pending.length} />
         </div>
@@ -405,9 +405,9 @@ function QuickEmails({ enrolled, onAdd }: { enrolled: Enrollment[]; onAdd: (rows
   }
 
   return (
-    <div className="grid gap-5 border-t border-rule pt-8">
+    <section className="grid content-start gap-5 border border-rule bg-paper-raised p-5 lg:min-h-[30rem]">
       <div id={`${idPrefix}-hint`} className="grid gap-1">
-        <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Quick add by email</h3>
+        <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">01 / Quick add by email</h3>
         <p className="text-sm text-ink-soft">Type or paste an address, then press Enter or comma. Names are filled in from the address.</p>
       </div>
       <TokenInput
@@ -416,14 +416,14 @@ function QuickEmails({ enrolled, onAdd }: { enrolled: Enrollment[]; onAdd: (rows
         onChange={setTokens}
         placeholder="maya.lin@example.com, then Enter"
       />
-      <div className="flex flex-wrap items-center gap-4">
-        <Button variant="secondary" disabled={tokens.length === 0} onClick={addAll}>
+      <div className="mt-auto grid gap-3">
+        <Button disabled={tokens.length === 0} onClick={addAll}>
           Add {tokens.length > 0 ? tokens.length : ""} to list
         </Button>
         {note ? <p role="status" className="text-sm text-ink-soft">{note}</p> : null}
       </div>
       {error ? <p role="alert" className="text-sm text-vermilion-deep">{error}</p> : null}
-    </div>
+    </section>
   );
 }
 
@@ -450,10 +450,8 @@ function ManualForm({ enrolled, onAdd }: { enrolled: Enrollment[]; onAdd: (rows:
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid content-start gap-6" aria-labelledby={`${idPrefix}-title`}>
-      <h3 id={`${idPrefix}-title`} className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-        Add one candidate
-      </h3>
+    <form onSubmit={submit} noValidate className="grid content-start gap-5 border border-rule bg-paper-raised p-5 lg:min-h-[30rem]" aria-labelledby={`${idPrefix}-title`}>
+      <div className="grid gap-1"><h3 id={`${idPrefix}-title`} className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">02 / Add one candidate</h3><p className="text-sm text-ink-soft">Enter a name and email to add one person to the enrolment list.</p></div>
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-name`}>Name</Label>
         <Input id={`${idPrefix}-name`} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} autoComplete="off" aria-invalid={errors.name ? true : undefined} aria-describedby={errors.name ? `${idPrefix}-name-error` : undefined} />
@@ -465,7 +463,7 @@ function ManualForm({ enrolled, onAdd }: { enrolled: Enrollment[]; onAdd: (rows:
         {errors.email ? <p id={`${idPrefix}-email-error`} role="alert" className="text-sm text-vermilion-deep">{errors.email}</p> : null}
       </div>
       <div>
-        <Button type="submit" variant="secondary">
+        <Button type="submit" className="w-full">
           Add to list
         </Button>
       </div>
@@ -520,8 +518,8 @@ function CsvForm({ onAdd, queuedCount }: { onAdd: (rows: PendingRow[]) => void; 
   }
 
   return (
-    <div className="grid content-start gap-6">
-      <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Import CSV</h3>
+    <div className="grid content-start gap-5 border border-rule bg-paper-raised p-5 lg:min-h-[30rem]">
+      <div className="grid gap-1"><h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">03 / Import CSV</h3><p className="text-sm text-ink-soft">Add a prepared list of candidates in one step.</p></div>
       <p className="text-sm text-ink-soft">
         Columns: <span className="font-mono">email, displayName, extraMinutes</span>. Extra minutes is optional. Up to {MAX_ROWS} rows.
       </p>
@@ -549,8 +547,8 @@ function CsvForm({ onAdd, queuedCount }: { onAdd: (rows: PendingRow[]) => void; 
       </div>
       {error ? <p id={`${idPrefix}-error`} role="alert" className="text-sm text-vermilion-deep">{error}</p> : null}
       {count !== null ? <p role="status" className="text-sm text-ink-soft">{count} rows added. {queuedCount} waiting to enrol.</p> : null}
-      <div>
-        <Button variant="secondary" onClick={parse}>
+      <div className="mt-auto">
+        <Button className="w-full" onClick={parse}>
           Add rows from CSV
         </Button>
       </div>

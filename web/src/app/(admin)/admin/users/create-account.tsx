@@ -9,7 +9,8 @@ import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROLE_CHOICES, ROLE_LABEL, toApiRole, type UserRole } from "./roles";
+import { needsStepUp, ROLE_CHOICES, ROLE_LABEL, toApiRole, type UserRole } from "./roles";
+import { StepUpDialog } from "./step-up-dialog";
 
 const selectClass =
   "h-12 w-full border border-rule bg-paper-raised px-3 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion";
@@ -32,6 +33,7 @@ export function CreateAccount({ onCreated }: { onCreated: () => void }) {
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [stepUp, setStepUp] = useState(false);
   const toast = useToast();
   const ids = useId();
 
@@ -51,25 +53,30 @@ export function CreateAccount({ onCreated }: { onCreated: () => void }) {
     setErrors(problems);
     if (Object.keys(problems).length > 0) return;
 
-    setBusy(true);
     setLink(null);
+    await createAccount({ email: email.trim(), displayName: displayName.trim(), role });
+  }
+
+  async function createAccount(details: { email: string; displayName: string; role: UserRole }) {
+    setBusy(true);
     try {
       const result = await api<CreateResult>("/admin/users", {
-        body: { email: email.trim(), displayName: displayName.trim(), role: toApiRole(role) },
+        body: { email: details.email, displayName: details.displayName, role: toApiRole(details.role) },
       });
       const url = result?.inviteUrl ?? result?.inviteLink ?? null;
       setLink(url);
       setEmail("");
       setDisplayName("");
       setErrors({});
-      toast.success(`${ROLE_LABEL[role]} account created.`);
+      toast.success(`${ROLE_LABEL[details.role]} account created.`);
       onCreated();
     } catch (cause) {
-      const named = namedFieldError(cause, FIELDS);
-      if (named) {
-        setErrors({ [named.field]: named.message });
+      if (needsStepUp(cause)) {
+        setStepUp(true);
       } else {
-        toast.error(describeError(cause, { context: "action" }));
+        const named = namedFieldError(cause, FIELDS);
+        if (named) setErrors({ [named.field]: named.message });
+        else toast.error(describeError(cause, { context: "action" }));
       }
     } finally {
       setBusy(false);
@@ -157,6 +164,16 @@ export function CreateAccount({ onCreated }: { onCreated: () => void }) {
           </div>
           <p className="text-xs text-ink-muted">This link is shown once. Create a new account to get another.</p>
         </div>
+      )}
+
+      {stepUp && (
+        <StepUpDialog
+          onCancel={() => setStepUp(false)}
+          onVerified={() => {
+            setStepUp(false);
+            void createAccount({ email: email.trim(), displayName: displayName.trim(), role });
+          }}
+        />
       )}
     </section>
   );

@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { ErrorPage } from "@/components/errors/error-page";
-import { ToastProvider } from "@/components/feedback/toaster";
+import { ToastStoreProvider } from "@/components/effects/toast-stack";
 import { requireUser } from "@/features/auth/require-user";
 import { isServiceUnavailable } from "@/lib/api/server";
 
@@ -18,11 +18,7 @@ export default async function ExamLayout({ children }: { children: React.ReactNo
     if (isServiceUnavailable(error)) return <ErrorPage code={503} />;
     throw error;
   }
-  // The workspace keeps its own toast store, and renders the stack inside its fullscreen root, so notices and errors
-  // stay visible to the candidate in fullscreen.
-  return (
-    <ToastProvider>
-      <div className="flex min-h-dvh flex-col bg-paper text-ink">{children}</div>
-    </ToastProvider>
-  );
+  // Keep the workspace on its own toast store. Its Toaster is mounted inside the fullscreen root, so notices
+  // follow the candidate's theme and remain visible in fullscreen. This route's child owns the viewport height.
+  return <ToastStoreProvider>{children}</ToastStoreProvider>;
 }

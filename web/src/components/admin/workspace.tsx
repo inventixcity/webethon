@@ -6,18 +6,21 @@ import { useToast } from "@/components/feedback/toaster";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { hasArt } from "@/components/ui/art";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { actionToast, namedFieldError } from "@/features/admin/errors";
 import { adminApi, adminList, isStepUpRequired, queryString, type Row } from "@/features/admin/client";
 import { describeError } from "@/lib/errors";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 const input = "min-h-10 border border-ink bg-paper px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion";
 // Actions that remove access, content or a record are danger buttons. "Unsuspend" and "Unhide" are not.
 export const isDestructive = (title: string) => /^(delete|suspend|revoke|reset|hide|cancel)/i.test(title);
 const STEP_UP_FIELDS = ["password", "code"] as const;
 const text = (v: unknown): string => v == null ? "?" : typeof v === "object" ? "See details" : String(v);
-const label = (key: string) => key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
-export function PageHeading({ title, description }: { title: string; description: string }) { return <PageHeader eyebrow="Administration" title={title} description={description} banner="bg-admin" className="mb-8" />; }
+const label = (key: string) => key === "aiUsage" || key === "ai_usage" ? "AI usage" : key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+export function PageHeading({ title, description }: { title: string; description: string }) { const page = title.toLowerCase(); const key = page === "users" ? "users" : page === "audit" ? "audit" : page === "system" ? "system" : "admin"; const requested = `bg-${key}` as "bg-admin" | "bg-users" | "bg-audit" | "bg-system"; const banner = hasArt(requested) ? requested : "bg-admin"; const caption = page === "overview" ? "FIG. 01 / OVERVIEW" : page === "users" ? "FIG. 01 / USERS" : page === "audit" ? "FIG. 01 / AUDIT" : page === "system" ? "FIG. 01 / SYSTEM" : undefined; return <PageHeader eyebrow="Administration" title={title} description={description} banner={banner} bannerCaption={caption} className="mb-8" />; }
 export function Status({ loading, error, empty, onRetry }: { loading?: boolean; error?: unknown; empty?: boolean; onRetry?: () => void }) { if (loading) return <div className="py-8"><BrailleSpinner label="Loading results" className="text-ink" /></div>; if (error) return <LoadError error={error} onRetry={onRetry}/>; if (empty) return <EmptyState art="empty-results" eyebrow="No results / 00" title="No results found." description="Try changing the filters." />; return null; }
 /** A load failure replaces its section with the error page for its code, inside the admin layout. */
 function LoadError({ error, onRetry }: { error: unknown; onRetry?: () => void }) { const view = describeError(error, { context: "page" }); return <ErrorPage code={view.page} requestId={view.requestId} retryAfterSeconds={view.retryAfterSeconds} onRetry={onRetry} as="div"/>; }
@@ -65,15 +68,15 @@ function FilterControl({ field, value, onChange }: { field: [string,string,strin
   const id = useId();
   const [key, name, options] = field;
   return (
-    <div className="grid gap-1 text-sm">
-      <label htmlFor={id}>{name}</label>
+    <div className="grid min-w-0 gap-2 text-sm">
+      <Label htmlFor={id}>{name}</Label>
       {options ? (
         <select id={id} className={input} value={value} onChange={e => onChange(e.target.value)}>
           <option value="">Any</option>
           {options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       ) : (
-        <input id={id} className={input} type={key === "from" || key === "to" ? "datetime-local" : "text"} value={value} onChange={e => onChange(e.target.value)}/>
+        <Input id={id} variant="box" inputSize="sm" type={key === "from" || key === "to" ? "datetime-local" : "text"} value={value} onChange={e => onChange(e.target.value)}/>
       )}
     </div>
   );
@@ -93,7 +96,7 @@ export function Filters({ fields, onApply }: { fields: [string,string,string[]?]
     </form>
   );
 }
-function ListPage({ kind }: { kind: "users" | "audit" }) { const [filters,setFilters]=useState<Record<string,string>>({}); const [cursors,setCursors]=useState<string[]>([""]); const [index,setIndex]=useState(0); const [rows,setRows]=useState<Row[]>([]); const [next,setNext]=useState<string|null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState<unknown>(); const [selected,setSelected]=useState<Row|null>(null); const [version,setVersion]=useState(0); const path = `/admin/${kind}`; useEffect(() => { let live=true; setLoading(true); setError(undefined); adminList(path,{...filters,limit:"25",cursor:cursors[index]}).then(v => { if(live) {setRows(v.data); setNext(v.meta.nextCursor);} }).catch(e => {if(live) setError(e);}).finally(() => {if(live) setLoading(false);}); return () => {live=false;}; },[path,filters,cursors,index,version]); const apply = (f: Record<string,string>) => {setFilters(f);setCursors([""]);setIndex(0);}; return <><PageHeading title={kind === "users" ? "Users" : "Audit"} description={kind === "users" ? "Find accounts and manage access." : "Review recorded administrative activity."}/><Filters fields={kind === "users" ? userFilters : auditFilters} onApply={apply}/>{kind === "audit" && <a className="mb-5 inline-block underline underline-offset-4" href={`/api/v1/admin/audit/export${queryString(filters)}`} download>Download CSV</a>}<Status loading={loading} error={error} empty={!loading && !error && rows.length === 0} onRetry={() => setVersion(v => v+1)}/>{!loading && !error && rows.length > 0 && <><DataTable rows={rows} onSelect={kind === "users" ? setSelected : undefined}/><Pagination previous={index>0} next={!!next} onPrevious={() => setIndex(index-1)} onNext={() => {if(next) {setCursors([...cursors.slice(0,index+1),next]);setIndex(index+1);}}}/></>}{selected && <UserDrawer row={selected} onClose={() => setSelected(null)} onChanged={() => setVersion(v => v+1)}/>}</>; }
+function ListPage({ kind }: { kind: "users" | "audit" }) { const [filters,setFilters]=useState<Record<string,string>>({}); const [cursors,setCursors]=useState<string[]>([""]); const [index,setIndex]=useState(0); const [rows,setRows]=useState<Row[]>([]); const [next,setNext]=useState<string|null>(null); const [loading,setLoading]=useState(true); const [error,setError]=useState<unknown>(); const [selected,setSelected]=useState<Row|null>(null); const [version,setVersion]=useState(0); const path = `/admin/${kind}`; useEffect(() => { let live=true; setLoading(true); setError(undefined); adminList(path,{...filters,limit:"25",cursor:cursors[index]}).then(v => { if(live) {setRows(v.data); setNext(v.meta.nextCursor);} }).catch(e => {if(live) setError(e);}).finally(() => {if(live) setLoading(false);}); return () => {live=false;}; },[path,filters,cursors,index,version]); const apply = (f: Record<string,string>) => {setFilters(f);setCursors([""]);setIndex(0);}; return <><PageHeading title={kind === "users" ? "Users" : "Audit"} description={kind === "users" ? "Find accounts and manage access." : "Review recorded administrative activity."}/><Filters fields={kind === "users" ? userFilters : auditFilters} onApply={apply}/>{kind === "audit" && <Button asChild variant="secondary" size="sm" className="mb-5"><a href={`/api/v1/admin/audit/export${queryString(filters)}`} download>Download CSV</a></Button>}<Status loading={loading} error={error} empty={!loading && !error && rows.length === 0} onRetry={() => setVersion(v => v+1)}/>{!loading && !error && rows.length > 0 && <><DataTable rows={rows} onSelect={kind === "users" ? setSelected : undefined}/><Pagination previous={index>0} next={!!next} onPrevious={() => setIndex(index-1)} onNext={() => {if(next) {setCursors([...cursors.slice(0,index+1),next]);setIndex(index+1);}}}/></>}{selected && <UserDrawer row={selected} onClose={() => setSelected(null)} onChanged={() => setVersion(v => v+1)}/>}</>; }
 export function UsersPage() { return <ListPage kind="users"/>; }
 export function AuditPage() { return <ListPage kind="audit"/>; }
 

@@ -48,6 +48,8 @@
 }
 
 .shark-404-code {
+  color: var(--ink);
+  mix-blend-mode: normal;
   font-size: clamp(160px, 27vw, 400px);
   font-weight: 600;
   line-height: 0.83;

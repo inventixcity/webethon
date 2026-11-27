@@ -6,6 +6,8 @@ import { requireUser } from "@/features/auth/require-user";
 import { ManageLinks } from "@/components/shares/manage-links";
 import { WebhooksPanel } from "@/components/webhooks/webhooks-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { describeError } from "@/lib/errors/describe";
+import { SettingsLoadError } from "./settings-load-error";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -13,7 +15,18 @@ export const metadata: Metadata = { title: "Settings", robots: { index: false, f
 export default async function SettingsPage() {
   // Redirects to sign-in when there's no session. The layout checks too, so this is a cheap second look.
   await requireUser();
-  const profile = await getProfile();
+  let profile;
+  try {
+    profile = await getProfile();
+  } catch (cause) {
+    const view = describeError(cause, { context: "action" });
+    return (
+      <main className="mx-auto grid min-h-dvh w-full max-w-6xl content-start gap-8 px-5 py-8 md:px-8">
+        <PageHeader index="01" eyebrow="Account" title="Settings" description="Your profile, sign-in and security, plus the integrations and share links you manage." />
+        <SettingsLoadError code={String(view.code ?? view.page)} requestId={view.requestId} message={view.message} />
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-dvh flex-col">

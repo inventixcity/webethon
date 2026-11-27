@@ -44,8 +44,8 @@ export function BlueprintEditor({ examId }: { examId: string }) {
 
   const intro = (
     <SectionIntro
-      eyebrow="Questions / 02"
-      title="Fair papers"
+      eyebrow="Questions / 03"
+      title="Fair papers (optional)"
       summary="Each candidate gets a different paper drawn from the same blueprint. Every paper is set to the same difficulty, so no one is handed an easier set."
     />
   );
