@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Exams", robots: { index: false, foll
 export default function ExamsPage() {
   return (
     <div className="grid gap-10 pb-10">
-      <PageHeader index="02" eyebrow="Exams" title="Exams" description="Every exam you run, by phase. Open one to set up its paper, candidates and results." />
+      <PageHeader index="02" eyebrow="Exams" banner="bg-examiner" title="Exams" description="Every exam you run, by phase. Open one to set up its paper, candidates and results." />
       <ExamList />
     </div>
   );

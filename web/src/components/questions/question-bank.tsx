@@ -335,6 +335,7 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
   if (hasFilters) {
     return (
       <SharedEmptyState
+        art="empty-questions"
         eyebrow="No matches / 00"
         title="No questions match these filters."
         actions={
@@ -347,6 +348,7 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
   }
   return (
     <SharedEmptyState
+      art="empty-questions"
       eyebrow="Empty bank / 00"
       title="Your bank is empty."
       description="Create a question or import a batch."

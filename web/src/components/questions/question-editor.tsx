@@ -245,6 +245,7 @@ export function QuestionEditor({ questionId }: { questionId?: string }) {
       <PageHeader
         index="02"
         eyebrow={editing ? "Edit question" : "New question"}
+        banner="bg-examiner"
         title={editing ? "Edit question." : "New question."}
         breadcrumb={[{ label: "Question bank", href: "/app/examiner/questions" }, { label: editing ? "Edit" : "New" }]}
       />

@@ -211,7 +211,7 @@ function PaperEditor({ exam }: { exam: Exam }) {
           ) : null}
 
           {rows.length === 0 ? (
-            <EmptyState title="No questions on the paper yet.">
+            <EmptyState art="empty-questions" title="No questions on the paper yet.">
               {editable ? "Choose questions from the bank. They are added in the order you pick them." : "This exam has no questions."}
             </EmptyState>
           ) : (
@@ -452,7 +452,7 @@ function Bank({ inPaper, disabled, onAdd }: { inPaper: Set<string>; disabled: bo
       {!loading && error ? <ErrorState error={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
 
       {!loading && !error && items.length === 0 ? (
-        <EmptyState title={filtersActive ? "No questions match these filters." : "The question bank is empty."}>
+        <EmptyState art="empty-questions" title={filtersActive ? "No questions match these filters." : "The question bank is empty."}>
           {filtersActive ? "Clear a filter to see more." : "Create questions in the question bank first, then come back to build the paper."}
         </EmptyState>
       ) : null}

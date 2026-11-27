@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { type RadarStatus, RadarScene } from "@/components/ascii/scenes/radar";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ const linkStyle = "underline underline-offset-4 hover:text-vermilion-deep";
  * The public certificate check. The radar is the visual while a code is typed or checked. It locks on a valid
  * certificate, and shows a no-match burst for an invalid or revoked one. The result card is shown in full.
  */
-export function CertificateCheck({ code }: { code?: string }) {
+export function CertificateCheck({ code, background }: { code?: string; background?: ReactNode }) {
   const [radar] = useState(() => new RadarScene());
   const [value, setValue] = useState(mask(code ?? ""));
   const [result, setResult] = useState<VerificationResult | null>(null);
@@ -97,7 +97,8 @@ export function CertificateCheck({ code }: { code?: string }) {
   const state = result?.valid ? "VALID CERTIFICATE" : result?.revoked ? "REVOKED CERTIFICATE" : "INVALID CERTIFICATE";
 
   return (
-    <main className="min-h-screen bg-paper px-5 py-12 text-ink sm:px-10">
+    <main className="relative isolate min-h-screen overflow-hidden bg-paper px-5 py-12 text-ink sm:px-10">
+      {background ? <div className="pointer-events-none absolute inset-0 -z-10 opacity-70">{background}</div> : null}
       <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,6fr)] lg:gap-16">
         <div>
           <div className="mb-12 h-0.5 w-16 bg-vermilion" />

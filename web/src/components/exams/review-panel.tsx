@@ -153,7 +153,7 @@ export function ReviewPanel({ examId }: { examId: string }) {
           04 / Paper preview <span className="text-ink-muted">(answer keys visible to you only)</span>
         </h2>
         {exam.questions.length === 0 ? (
-          <EmptyState title="The paper is empty.">Add questions on the Questions tab before reviewing.</EmptyState>
+          <EmptyState art="empty-questions" title="The paper is empty.">Add questions on the Questions tab before reviewing.</EmptyState>
         ) : (
           <ol aria-label="Paper with answer keys" className="grid">
             {exam.questions.map((item, index) => (

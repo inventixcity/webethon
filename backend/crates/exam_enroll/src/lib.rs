@@ -485,7 +485,7 @@ async fn lookup_invite(
     )
     .await?;
     let hash = crypto::hash_token(&token).ok_or_else(AppError::not_found)?;
-    let row:Option<(String,String)>=sqlx::query_as("select u.email::text,u.display_name from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.role='user' and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
+    let row:Option<(String,String)>=sqlx::query_as("select u.email::text,u.display_name from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
     let (email, display) = row.ok_or_else(AppError::not_found)?;
     Ok(examcore::ok(json!({"email":email,"displayName":display})))
 }
@@ -501,7 +501,7 @@ async fn accept(
     )
     .await?;
     let hash = crypto::hash_token(&input.token).ok_or_else(AppError::not_found)?;
-    let email:Option<String>=sqlx::query_scalar("select u.email::text from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.role='user' and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
+    let email:Option<String>=sqlx::query_scalar("select u.email::text from account_invites i join users u on u.id=i.user_id where i.token_hash=$1 and i.used_at is null and i.expires_at>now() and u.deleted_at is null and u.password_hash is null and u.status='active'").bind(hash.as_slice()).fetch_optional(&state.db).await?;
     let email = email.ok_or_else(AppError::not_found)?;
     auth::password::policy(&state, &email, &input.password).await?;
     if !(1..=120).contains(&input.display_name.trim().chars().count()) {
@@ -511,7 +511,7 @@ async fn accept(
     let mut tx = state.db.begin().await?;
     let uid:Option<Uuid>=sqlx::query_scalar("update account_invites set used_at=now() where token_hash=$1 and used_at is null and expires_at>now() returning user_id").bind(hash.as_slice()).fetch_optional(&mut *tx).await?;
     let uid = uid.ok_or_else(AppError::not_found)?;
-    let updated=sqlx::query("update users set password_hash=$1,email_verified_at=now(),display_name=$2 where id=$3 and role='user' and status='active' and deleted_at is null and password_hash is null").bind(password).bind(input.display_name.trim()).bind(uid).execute(&mut *tx).await?;
+    let updated=sqlx::query("update users set password_hash=$1,email_verified_at=now(),display_name=$2 where id=$3 and status='active' and deleted_at is null and password_hash is null").bind(password).bind(input.display_name.trim()).bind(uid).execute(&mut *tx).await?;
     if updated.rows_affected() != 1 {
         return Err(AppError::not_found());
     }

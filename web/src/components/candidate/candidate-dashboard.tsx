@@ -166,6 +166,7 @@ export function CandidateDashboard() {
       <PageHeader
         index="01"
         eyebrow="My exams"
+        banner="bg-candidate"
         title="Your exams."
         description={
           total === 0

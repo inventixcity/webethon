@@ -13,6 +13,7 @@ export default function QuestionBankPage() {
       <PageHeader
         index="01"
         eyebrow="Question bank"
+        banner="bg-examiner"
         title="Questions"
         description="Every question you can draw on, across all exams. Filter, edit or import in bulk."
         actions={

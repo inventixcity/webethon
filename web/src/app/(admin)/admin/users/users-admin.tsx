@@ -99,6 +99,7 @@ export function UsersAdmin() {
       <PageHeader
         index="01"
         eyebrow="Administration"
+        banner="bg-admin"
         title="Users"
         description="Create accounts and set roles. Candidates take exams, examiners run them and admins manage everyone."
       />

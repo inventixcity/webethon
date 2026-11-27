@@ -6,6 +6,7 @@ import type { ExamAnalytics } from "@/lib/exam/types";
 import { BarChart } from "@/components/charts";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
+import { Stat, StatGrid } from "@/components/ui/stat";
 import { formatMarks, formatPercent, messageOf } from "./format";
 import { ItemAnalysis } from "./item-analysis";
 
@@ -77,13 +78,19 @@ export function AnalyticsView({ examId }: { examId: string }) {
   }
 
   const passing = passPercent(data.passRate);
-  const kpis: Array<[string, string, string?]> = [
-    ["Attempts", String(data.attempts), `${data.submitted} submitted`],
-    ["Mean", formatPercent(data.mean, 1)],
-    ["Median", formatPercent(data.median, 1)],
-    ["Std dev", formatMarks(data.stdDev), "Spread of percentages"],
-    ["Pass rate", formatPercent(passing, 0)],
-    ["Reliability", data.reliability === null ? "—" : data.reliability.toFixed(2)],
+  // Pass rate is informational cobalt. Reliability below 0.7 is a number that needs a look, so it takes amber.
+  const kpis: Array<[string, string, string | undefined, "info" | "caution" | undefined]> = [
+    ["Attempts", String(data.attempts), `${data.submitted} submitted`, undefined],
+    ["Mean", formatPercent(data.mean, 1), undefined, undefined],
+    ["Median", formatPercent(data.median, 1), undefined, undefined],
+    ["Std dev", formatMarks(data.stdDev), "Spread of percentages", undefined],
+    ["Pass rate", formatPercent(passing, 0), undefined, "info"],
+    [
+      "Reliability",
+      data.reliability === null ? "—" : data.reliability.toFixed(2),
+      undefined,
+      data.reliability !== null && data.reliability < 0.7 ? "caution" : undefined,
+    ],
   ];
 
   return (
@@ -96,15 +103,11 @@ export function AnalyticsView({ examId }: { examId: string }) {
       </header>
 
       <section aria-label="Summary" className="grid gap-6">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-6 lg:grid-cols-6">
-          {kpis.map(([label, value, note]) => (
-            <div key={label} className="border-t border-rule pt-3">
-              <dt className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">{label}</dt>
-              <dd className="mt-1 text-3xl font-medium tabular-nums">{value}</dd>
-              {note && <dd className="mt-1 font-mono text-[11px] text-ink-muted">{note}</dd>}
-            </div>
+        <StatGrid columns={6}>
+          {kpis.map(([label, value, note, tone]) => (
+            <Stat key={label} label={label} value={value} note={note} tone={tone} />
           ))}
-        </dl>
+        </StatGrid>
         <p className="max-w-prose text-sm text-ink-soft">{reliabilityNote(data.reliability)}</p>
         <p className="font-mono text-[11px] text-ink-muted">
           Highest {formatPercent(data.highest, 1)} · Lowest {formatPercent(data.lowest, 1)}
@@ -116,7 +119,12 @@ export function AnalyticsView({ examId }: { examId: string }) {
           <h3 className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">Distribution</h3>
           <BarChart
             label="Number of candidates by percentage band"
-            data={data.histogram.map((bucket) => ({ key: `${bucket.from}–${bucket.to}%`, value: bucket.count }))}
+            data={data.histogram.map((bucket) => ({
+              key: `${bucket.from}–${bucket.to}%`,
+              value: bucket.count,
+              // The band the mean falls in is the highlight; the rest of the distribution stays ink.
+              tone: data.mean >= bucket.from && data.mean < bucket.to ? "info" : undefined,
+            }))}
             formatValue={(value) => `${value} candidates`}
           />
         </section>

@@ -1,36 +1,23 @@
-import fs from "node:fs";
-import path from "node:path";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import manifest from "@/generated/art-manifest.json";
 import { cn } from "@/lib/utils";
 
 /*
- * Image slots for the editorial art. Files live in public/images and are added by hand. Each name is checked on
- * the server, so a missing file renders its fallback and never requests a URL that would 404.
+ * Image slots for the editorial art. Files live in public/images and are added by hand. The manifest in
+ * src/generated/art-manifest.json lists the files that exist (scripts/art-manifest.mjs writes it before dev and
+ * build). Lookups are plain object reads, so this module runs on the server and in the browser alike, and a
+ * missing file renders its fallback without requesting a URL.
  */
 
-const EXTENSIONS = [".webp", ".png", ".jpg"] as const;
-const IMAGE_DIR = path.join(process.cwd(), "public", "images");
-const NAME = /^[a-z0-9-]+$/;
-const production = process.env.NODE_ENV === "production";
-const cache = new Map<string, string | null>();
+const files: Record<string, string> = manifest;
 
-/** The public URL of an image named in public/images, or null when no file exists for it. */
+/** The public URL of an image in public/images, or null when no file exists for it. */
 export function artSrc(name: string): string | null {
-  if (!NAME.test(name)) return null;
-  if (production && cache.has(name)) return cache.get(name) ?? null;
-  let found: string | null = null;
-  for (const ext of EXTENSIONS) {
-    if (fs.existsSync(path.join(IMAGE_DIR, name + ext))) {
-      found = `/images/${name}${ext}`;
-      break;
-    }
-  }
-  if (production) cache.set(name, found);
-  return found;
+  return Object.prototype.hasOwnProperty.call(files, name) ? files[name] : null;
 }
 
-/** True when public/images holds a file for this name (with .webp, .png or .jpg). */
+/** True when public/images holds a file for this name (.webp, .png or .jpg). */
 export function hasArt(name: string): boolean {
   return artSrc(name) !== null;
 }
@@ -42,7 +29,7 @@ type ArtProps = {
   alt: string;
   /** Optional dark-mode file, for example "hero-dark". The page swaps between the two with the dark variant. */
   darkName?: string;
-  /** Sizes and layout of the frame. The frame is positioned and clipped, so give it a size or an aspect ratio. */
+  /** Size and clipping of the frame. The frame is positioned, so give it a size or an aspect ratio. */
   className?: string;
   /** The image's sizes hint for next/image. */
   sizes?: string;
@@ -50,15 +37,15 @@ type ArtProps = {
   priority?: boolean;
   /** Ink treatment: greyscale and extra contrast, so the image reads as one ink tone with the palette. */
   duotone?: boolean;
-  /** Shown in place of the image when no file exists. Absolutely fills the frame. */
+  /** Shown in place of the image when no file exists. Fills the frame. */
   fallback?: ReactNode;
   /** Image position inside the frame, for example "object-right". */
   position?: string;
 };
 
 /**
- * A server component. It renders next/image when the file exists, and the fallback when it doesn't. The frame is
- * square-cornered and clipped. Dark mode is picked with CSS, so the page never loads both images in one mode.
+ * Renders next/image when the file exists, and the fallback when it doesn't. The frame is square-cornered and
+ * clipped. Dark mode is picked with CSS, so both files are never shown in the same mode.
  */
 export function Art({
   name,

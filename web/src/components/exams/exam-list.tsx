@@ -107,6 +107,7 @@ export function ExamList() {
 
       {!loading && !error && items.length === 0 ? (
         <EmptyState
+          art="empty-exams"
           title={status === "all" ? "No exams yet." : `No ${STATUS_LABEL[status].toLowerCase()} exams.`}
           action={
             status === "all" ? (

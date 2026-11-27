@@ -65,6 +65,7 @@ export function ExamHeader({ examId }: { examId: string }) {
     <PageHeader
       index="03"
       eyebrow="Exam"
+      banner="bg-examiner"
       title={exam.title}
       breadcrumb={[{ label: "Exams", href: "/app/examiner/exams" }, { label: STATUS_LABEL[exam.status] }]}
       actions={

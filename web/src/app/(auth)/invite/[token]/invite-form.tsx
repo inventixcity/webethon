@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { AuthHeader } from "@/components/auth/auth-header";
 import { Field, PasswordField } from "@/components/auth/field";
 import { PasswordLock, type PasswordLockState } from "@/components/auth/password-lock";
@@ -14,7 +14,7 @@ type Invite = { email: string; displayName: string };
 const EXPIRED = "This invitation has expired or was already used. Ask your examiner for a new invite.";
 const UNREACHABLE = "We couldn't reach the service. Check your connection and try again.";
 
-export function InviteForm({ token }: { token: string }) {
+export function InviteForm({ token, side }: { token: string; side?: ReactNode }) {
   const router = useRouter();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -75,9 +75,10 @@ export function InviteForm({ token }: { token: string }) {
   const lockState: PasswordLockState = pending ? "pending" : "idle";
 
   return (
-    <main className="min-h-screen bg-paper text-ink">
+    <main className="flex min-h-screen flex-col bg-paper text-ink">
       <AuthHeader index="06" section="Invitation" />
-      <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl content-center gap-10 px-5 py-12 md:grid-cols-12 md:px-8">
+      <div className="flex flex-1 flex-col lg:flex-row">
+      <section className="mx-auto grid min-h-[calc(100vh-4rem)] w-full min-w-0 max-w-6xl flex-1 content-center gap-10 px-5 py-12 md:grid-cols-12 md:px-8">
         <div className="md:col-span-5">
           <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">Account access / 01</p>
           <h1 className="mt-5 text-[clamp(2.5rem,7vw,5.5rem)] leading-[0.94] font-semibold tracking-[-0.04em]">
@@ -134,6 +135,8 @@ export function InviteForm({ token }: { token: string }) {
           )}
         </div>
       </section>
+      {side ? <aside className="hidden border-l border-ink lg:block lg:w-[min(30vw,26rem)] lg:shrink-0">{side}</aside> : null}
+      </div>
     </main>
   );
 }

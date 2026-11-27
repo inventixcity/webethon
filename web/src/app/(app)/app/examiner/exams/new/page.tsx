@@ -10,6 +10,7 @@ export default function NewExamPage() {
       <PageHeader
         index="01"
         eyebrow="Create"
+        banner="bg-examiner"
         title="New exam"
         breadcrumb={[{ label: "Exams", href: "/app/examiner/exams" }, { label: "New" }]}
         description="Set the basics now. The paper, candidates and publishing come next, and you can change most settings until the exam is published."

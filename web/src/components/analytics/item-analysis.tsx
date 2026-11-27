@@ -3,6 +3,7 @@
 import { Fragment, useId, useState } from "react";
 import type { ItemAnalytics } from "@/lib/exam/types";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { formatPercent } from "./format";
 
 const FLAG_INFO: Record<ItemAnalytics["flags"][number], { label: string; help: string }> = {
@@ -14,6 +15,15 @@ const FLAG_INFO: Record<ItemAnalytics["flags"][number], { label: string; help: s
   },
   often_skipped: { label: "Often skipped", help: "More than a quarter of candidates left this item blank." },
   dead_distractor: { label: "Dead option", help: "A wrong option was never chosen. It may not be doing its job." },
+};
+
+/** Flags are review prompts: too easy is informational cobalt, every other flag needs a look and takes amber. */
+const FLAG_TONE: Record<ItemAnalytics["flags"][number], string> = {
+  too_easy: "border-cobalt text-cobalt-deep",
+  too_hard: "border-amber bg-amber text-ink",
+  negative_discrimination: "border-amber bg-amber text-ink",
+  often_skipped: "border-amber bg-amber text-ink",
+  dead_distractor: "border-amber bg-amber text-ink",
 };
 
 const TEXT_LIMIT = 90;
@@ -79,7 +89,7 @@ export function ItemAnalysis({ items }: { items: ItemAnalytics[] }) {
                             <span
                               tabIndex={0}
                               title={FLAG_INFO[flag].help}
-                              className="inline-block cursor-help border border-ink px-2 py-0.5 font-mono text-[11px] tracking-[0.06em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion"
+                              className={cn("inline-block cursor-help border px-2 py-0.5 font-mono text-[11px] tracking-[0.06em] uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion", FLAG_TONE[flag])}
                             >
                               {FLAG_INFO[flag].label}
                               <span className="sr-only">: {FLAG_INFO[flag].help}</span>

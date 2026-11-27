@@ -86,6 +86,7 @@ export function ResultsView({ examId }: { examId: string }) {
       <PageHeader
         level={2}
         eyebrow="Results"
+        banner="bg-results"
         title={published ? "Published" : "Not published"}
         description={
           <span className="font-mono text-xs">

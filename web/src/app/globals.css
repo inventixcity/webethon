@@ -296,6 +296,15 @@
   }
 }
 
+/*
+ * Optional paper texture for a surface. The page sets the image URL inline, and only when the file exists
+ * (see Art in components/ui/art.tsx), so no request is made for a missing texture.
+ */
+.bg-texture {
+  background-size: 480px 480px;
+  background-repeat: repeat;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

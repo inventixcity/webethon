@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import type { GradingItem } from "@/lib/exam/types";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import { formatPercent, messageOf } from "@/components/analytics/format";
 import { GradeCard } from "./grade-card";
@@ -154,13 +155,17 @@ export function GradingView({ examId }: { examId: string }) {
       )}
 
       {all && visible.length === 0 && (
-        <p className="border border-rule p-6 text-ink-muted">
-          {total === 0
-            ? "No written answers from finalized attempts yet."
-            : mode === "pending"
-              ? "Every written answer in this view is graded."
-              : "No written answers match this question."}
-        </p>
+        <EmptyState
+          art="empty-results"
+          eyebrow={total === 0 ? "Queue empty / 00" : "Queue clear / 00"}
+          title={
+            total === 0
+              ? "No written answers from finalized attempts yet."
+              : mode === "pending"
+                ? "Every written answer in this view is graded."
+                : "No written answers match this question."
+          }
+        />
       )}
 
       {visible.length > 0 && (

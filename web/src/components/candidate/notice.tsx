@@ -1,5 +1,6 @@
 import { GridPulse } from "@/components/loaders/shape-loaders";
 import { Button } from "@/components/ui/button";
+import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
 
 /** The loading state for a candidate panel. The loader is one status region for screen readers. */
 export function PanelLoading({ label }: { label: string }) {
@@ -34,5 +35,5 @@ export function PanelError({ title, message, onRetry }: { title: string; message
 
 /** A quiet empty state for a list with nothing in it. */
 export function EmptyState({ children }: { children: React.ReactNode }) {
-  return <p className="border-t border-rule py-8 text-base text-ink-soft">{children}</p>;
+  return <SharedEmptyState variant="inline" title={children} className="py-8" />;
 }

@@ -47,7 +47,7 @@ function Mark({ filled }: { filled: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={filled ? "mt-2.5 size-1.5 shrink-0 bg-ink" : "mt-2.5 size-1.5 shrink-0 border border-ink"}
+      className={filled ? "mt-2.5 size-1.5 shrink-0 bg-amber" : "mt-2.5 size-1.5 shrink-0 border border-amber-deep"}
     />
   );
 }
@@ -99,6 +99,7 @@ export function ExamLobby({ examId }: { examId: string }) {
       <PageHeader
         index="02"
         eyebrow="Exam lobby"
+        banner="bg-candidate"
         title={lobby.title}
         breadcrumb={[{ label: "My exams", href: "/app/candidate" }, { label: lobby.title }]}
       >

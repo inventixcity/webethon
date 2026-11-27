@@ -87,6 +87,7 @@ export function ResultView({ attemptId }: { attemptId: string }) {
       <PageHeader
         index="03"
         eyebrow="Your result"
+        banner="bg-results"
         title={result.examTitle}
         breadcrumb={[{ label: "My exams", href: "/app/candidate" }, { label: "Result" }]}
       />

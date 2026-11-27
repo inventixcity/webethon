@@ -10,6 +10,7 @@ export default function ImportQuestionsPage() {
       <PageHeader
         index="03"
         eyebrow="Import"
+        banner="bg-examiner"
         title="Import questions"
         breadcrumb={[{ label: "Question bank", href: "/app/examiner/questions" }, { label: "Import" }]}
         description="Bring questions in from a spreadsheet or file. You review every row before anything is saved."

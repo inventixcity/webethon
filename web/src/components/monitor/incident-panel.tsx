@@ -164,6 +164,7 @@ export function IncidentPanel({
                   {report.indicators.map((indicator) => (
                     <li key={indicator.key} className="grid gap-1 py-3">
                       <p className="font-medium">
+                        <span aria-hidden="true" className="mr-2 inline-block size-1.5 bg-amber align-middle" />
                         {indicator.label}
                         <span className="ml-2 font-mono text-[11px] text-ink-muted">×{indicator.count}</span>
                       </p>
@@ -176,6 +177,7 @@ export function IncidentPanel({
 
             <section aria-labelledby={`${titleId}-outages`} className="grid gap-4">
               <h3 id={`${titleId}-outages`} className="font-mono text-[11px] tracking-[0.12em] uppercase">
+                <span aria-hidden="true" className="mr-2 inline-block size-1.5 bg-cobalt align-middle" />
                 Verified connection outages
               </h3>
               <p className="text-sm text-ink-soft">
@@ -193,7 +195,9 @@ export function IncidentPanel({
                           {formatDateTime(outage.from)} to {formatDateTime(outage.to)}
                         </p>
                         <p className="font-mono text-xs text-ink-soft">
-                          {formatSeconds(outage.seconds)} · {outage.credited ? "Credited" : "Not credited"}
+                          <span className={outage.credited ? "text-cobalt-deep" : undefined}>
+                            {formatSeconds(outage.seconds)} · {outage.credited ? "Credited" : "Not credited"}
+                          </span>
                         </p>
                       </div>
                       {!outage.credited && creditOutage !== outage && (

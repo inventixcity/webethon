@@ -6,6 +6,7 @@ import type { ExamMonitor, MonitorRow, ReviewPriority } from "@/lib/exam/types";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import { formatAge, formatClock, messageOf } from "@/components/analytics/format";
 import { cn } from "@/lib/utils";
@@ -135,9 +136,9 @@ export function MonitorView({ examId }: { examId: string }) {
           </h3>
 
           {data.rows.length === 0 ? (
-            <p className="border border-rule p-6 text-ink-muted">No candidate has started this exam yet.</p>
+            <EmptyState art="offline" eyebrow="No attempts / 00" title="No candidate has started this exam yet." />
           ) : rows.length === 0 ? (
-            <p className="border border-rule p-6 text-ink-muted">No attempts match these filters.</p>
+            <EmptyState eyebrow="No matches / 00" title="No attempts match these filters." variant="inline" />
           ) : (
             <div className="overflow-x-auto border border-rule">
               <table className="w-full min-w-[880px] text-left text-sm">
@@ -197,9 +198,14 @@ export function MonitorView({ examId }: { examId: string }) {
                           <span className="inline-flex items-center gap-2">
                             <span
                               aria-hidden="true"
-                              className={cn("size-2 border border-ink", row.online ? "bg-ink" : "bg-transparent")}
+                              className={cn(
+                                "size-2 border",
+                                row.online ? "border-cobalt bg-cobalt" : "border-ink-muted bg-transparent",
+                              )}
                             />
-                            <span>{row.online ? "Online" : "Offline"}</span>
+                            <span className={row.online ? "text-cobalt-deep" : "text-ink-muted"}>
+                              {row.online ? "Online" : "Offline"}
+                            </span>
                           </span>
                           <span className="block font-mono text-[11px] text-ink-muted">
                             {lastSeen === null ? "No heartbeat yet" : `Last heartbeat ${formatAge(lastSeen)} ago`}

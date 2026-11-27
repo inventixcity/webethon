@@ -28,6 +28,7 @@ export function ExaminerHome() {
       <PageHeader
         index="01"
         eyebrow="Examiner"
+        banner="bg-examiner"
         title="Your exams"
         actions={
           <>
@@ -54,6 +55,7 @@ export function ExaminerHome() {
 
       {exams.length === 0 ? (
         <EmptyState
+          art="empty-exams"
           eyebrow="Empty exams / 00"
           title="No exams yet."
           action={

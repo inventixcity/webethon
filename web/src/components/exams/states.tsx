@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EmptyState as SharedEmptyState } from "@/components/ui/empty-state";
+import { EmptyState as SharedEmptyState, type EmptyArt } from "@/components/ui/empty-state";
 import { ErrorState as SharedErrorState, LoadingState } from "@/components/ui/state";
 
 export { LoadingState };
@@ -21,13 +21,24 @@ export function EmptyState({
   children,
   action,
   eyebrow,
+  art,
   variant = "panel",
 }: {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
   eyebrow?: string;
+  art?: EmptyArt;
   variant?: "panel" | "inline";
 }) {
-  return <SharedEmptyState title={title} description={children} actions={action} eyebrow={eyebrow} variant={variant} />;
+  return (
+    <SharedEmptyState
+      title={title}
+      description={children}
+      actions={action}
+      eyebrow={eyebrow}
+      art={art}
+      variant={variant}
+    />
+  );
 }

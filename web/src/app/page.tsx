@@ -4,12 +4,23 @@ import { LandingOwl } from "@/components/app-shell/landing-owl";
 import { WaveText } from "@/components/effects/wave-text";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Ticker } from "@/components/motion/ticker";
+import { Art, artSrc, hasArt } from "@/components/ui/art";
 import { Button } from "@/components/ui/button";
+import { DriftField } from "@/components/ui/empty-state";
 import { siteConfig } from "@/config/site";
+import { cn } from "@/lib/utils";
+
+// Resolved once on the server. Without the file, the metadata simply carries no image.
+const ogImage = artSrc("og-image");
 
 export const metadata: Metadata = {
   title: { absolute: "Inventix Invigil: Exams that hold up." },
   description: siteConfig.description,
+  openGraph: {
+    title: "Inventix Invigil: Exams that hold up.",
+    description: siteConfig.description,
+    ...(ogImage ? { images: [{ url: ogImage, width: 1200, height: 630, alt: "Inventix Invigil" }] } : {}),
+  },
 };
 
 const METHOD = [
@@ -98,6 +109,17 @@ const ROLES = [
   },
 ] as const;
 
+const LIVE = [
+  {
+    title: "Watch every seat at once",
+    text: "Progress, answers and connection status update live for the whole room. One announcement reaches every candidate at the same moment.",
+  },
+  {
+    title: "Results that explain themselves",
+    text: "Objective marks are calculated on the server. Written answers are graded against the rubric, and each mark carries feedback the candidate can read.",
+  },
+] as const;
+
 const NAV = [
   { href: "#method", label: "Method" },
   { href: "#resilience", label: "Resilience" },
@@ -116,7 +138,45 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * An editorial figure: a square-cornered frame with a numbered mono caption. Without its file it shows the ASCII
+ * field, so the section still moves.
+ */
+function Figure({
+  name,
+  alt,
+  num,
+  caption,
+  ratio = "aspect-[4/3]",
+  className,
+}: {
+  name: string;
+  alt: string;
+  num: string;
+  caption: string;
+  ratio?: string;
+  className?: string;
+}) {
+  return (
+    <figure className={cn("grid gap-3", className)}>
+      <Art
+        name={name}
+        alt={alt}
+        sizes="(min-width: 768px) 42vw, 100vw"
+        className={cn("w-full border border-ink", ratio)}
+        fallback={<DriftField className="size-full" />}
+      />
+      <figcaption className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+        <span className="text-ink tabular-nums">FIG. {num}</span>
+        <span>{caption}</span>
+      </figcaption>
+    </figure>
+  );
+}
+
 export default function LandingPage() {
+  const paperTexture = artSrc("bg-paper");
+
   return (
     <div className="min-h-dvh min-w-0 bg-paper text-ink">
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-ink bg-paper px-5 font-mono text-[11px] tracking-[0.14em] uppercase md:px-8">
@@ -142,13 +202,6 @@ export default function LandingPage() {
       </header>
 
       <main>
-        {/*
-          Image slots (add the files, then swap in an <img> beside the matching copy):
-          - /images/hero.webp: hero backdrop, beside the owl section below
-          - /images/feature-resilience.webp: the resilience section (section 02)
-          - /images/feature-integrity.webp: the integrity section (section 03)
-          Until those files exist, the ASCII owl and the wave carry the page.
-        */}
         <WaveText
           eyebrow="Inventix Invigil"
           edition="Secure online examinations"
@@ -162,6 +215,23 @@ export default function LandingPage() {
           amplitude={120}
           direction="left"
         />
+
+        <figure className="grid gap-3 px-5 pb-16 md:px-8 md:pb-24">
+          <Art
+            name="hero"
+            darkName="hero-dark"
+            alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
+            priority
+            sizes="100vw"
+            className="aspect-[4/3] w-full border border-ink md:aspect-[21/9]"
+            position="object-right"
+            fallback={<DriftField className="size-full" />}
+          />
+          <figcaption className="flex flex-wrap justify-between gap-x-6 gap-y-1 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+            <span className="text-ink tabular-nums">FIG. 00</span>
+            <span>Answer paper, ink and light</span>
+          </figcaption>
+        </figure>
 
         <Ticker
           items={["Failure-resilient", "AI-era integrity", "Server time only", "Verifiable results"]}
@@ -182,7 +252,19 @@ export default function LandingPage() {
           <LandingOwl className="relative h-[52dvh] min-h-80 overflow-hidden border border-rule md:col-span-7 md:h-[68dvh]" />
         </section>
 
-        <section id="method" aria-labelledby="method-heading" className="grid gap-12 border-t border-ink px-5 py-16 md:px-8 md:py-24">
+        <section
+          id="method"
+          aria-labelledby="method-heading"
+          className="relative isolate grid gap-12 overflow-hidden border-t border-ink px-5 py-16 md:px-8 md:py-24"
+        >
+          {hasArt("bg-grid") ? (
+            <Art
+              name="bg-grid"
+              alt=""
+              sizes="100vw"
+              className="pointer-events-none absolute inset-0 -z-10 opacity-50"
+            />
+          ) : null}
           <div className="grid gap-5 md:grid-cols-12">
             <div className="md:col-span-12">
               <Eyebrow>01 / Method</Eyebrow>
@@ -203,17 +285,27 @@ export default function LandingPage() {
         </section>
 
         <section id="resilience" aria-labelledby="resilience-heading" className="grid gap-12 border-t border-ink bg-paper-raised px-5 py-16 md:px-8 md:py-24">
-          <div className="grid gap-6 md:grid-cols-12">
-            <div className="md:col-span-12">
-              <Eyebrow>02 / Failure-resilient</Eyebrow>
+          <div className="grid gap-12 md:grid-cols-12 md:items-center md:gap-8">
+            <div className="grid gap-6 md:col-span-7">
+              <div>
+                <Eyebrow>02 / Failure-resilient</Eyebrow>
+              </div>
+              <h2 id="resilience-heading" className="text-[clamp(2.5rem,7vw,6.25rem)] leading-[0.92] font-medium tracking-[-0.045em]">
+                Pull the plug. Lose nothing. Gain nothing.
+              </h2>
+              <p className="max-w-[60ch] text-lg leading-relaxed text-ink-soft">
+                A candidate can lose the connection, the battery or the device and keep every answer. Nobody can use the
+                outage to buy time either: the deadline keeps running on the server, and it is never paused automatically.
+              </p>
             </div>
-            <h2 id="resilience-heading" className="text-[clamp(2.5rem,7vw,6.25rem)] leading-[0.92] font-medium tracking-[-0.045em] md:col-span-11">
-              Pull the plug. Lose nothing. Gain nothing.
-            </h2>
-            <p className="max-w-[60ch] text-lg leading-relaxed text-ink-soft md:col-span-7">
-              A candidate can lose the connection, the battery or the device and keep every answer. Nobody can use the
-              outage to buy time either: the deadline keeps running on the server, and it is never paused automatically.
-            </p>
+            <Figure
+              name="feature-resilience"
+              alt="An unplugged network cable lying in a curve beside a neat stack of index cards"
+              num="01"
+              caption="Calm. Nothing is broken."
+              ratio="aspect-square"
+              className="md:col-span-5"
+            />
           </div>
           <ul className="grid gap-px border-y border-rule md:grid-cols-3">
             {RESILIENCE.map((item, index) => (
@@ -229,13 +321,23 @@ export default function LandingPage() {
         </section>
 
         <section id="integrity" aria-labelledby="integrity-heading" className="grid gap-12 border-t border-ink px-5 py-16 md:px-8 md:py-24">
-          <div className="grid gap-6 md:grid-cols-12">
-            <div className="md:col-span-12">
-              <Eyebrow>03 / AI-era integrity</Eyebrow>
+          <div className="grid gap-12 md:grid-cols-12 md:items-center md:gap-8">
+            <Figure
+              name="feature-integrity"
+              alt="A magnifying glass over pale ink hatching, with one hidden dot pattern showing through"
+              num="02"
+              caption="Faint marks, found on review"
+              ratio="aspect-square"
+              className="md:col-span-5 md:order-first"
+            />
+            <div className="grid gap-6 md:col-span-7">
+              <div>
+                <Eyebrow>03 / AI-era integrity</Eyebrow>
+              </div>
+              <h2 id="integrity-heading" className="text-[clamp(2.25rem,6vw,5.25rem)] leading-[0.95] font-medium tracking-[-0.04em]">
+                Built for a room where AI is in every pocket.
+              </h2>
             </div>
-            <h2 id="integrity-heading" className="text-[clamp(2.25rem,6vw,5.25rem)] leading-[0.95] font-medium tracking-[-0.04em] md:col-span-10">
-              Built for a room where AI is in every pocket.
-            </h2>
           </div>
           <ul className="grid gap-px border-y border-rule sm:grid-cols-2">
             {INTEGRITY.map((item, index) => (
@@ -250,10 +352,54 @@ export default function LandingPage() {
           </ul>
         </section>
 
-        <section id="security" aria-labelledby="security-heading" className="grid gap-12 border-t border-ink px-5 py-16 md:px-8 md:py-24">
+        <section id="live" aria-labelledby="live-heading" className="grid gap-16 border-t border-ink px-5 py-16 md:px-8 md:py-24">
           <div className="grid gap-5 md:grid-cols-12">
             <div className="md:col-span-12">
-              <Eyebrow>04 / Security</Eyebrow>
+              <Eyebrow>04 / Live and graded</Eyebrow>
+            </div>
+            <h2 id="live-heading" className="text-[clamp(2.25rem,6vw,5.25rem)] leading-[0.95] font-medium tracking-[-0.04em] md:col-span-10">
+              See the room as it works. Grade without guessing.
+            </h2>
+          </div>
+          <div className="grid gap-12 md:grid-cols-12 md:items-center md:gap-10">
+            <Figure
+              name="feature-monitoring"
+              alt="A grid of square cards, most with a dim status dot and a few marked for attention"
+              num="03"
+              caption="The room, live"
+              ratio="aspect-[16/10]"
+              className="md:col-span-7"
+            />
+            <div className="grid content-start gap-4 md:col-span-5">
+              <h3 className="text-2xl font-medium tracking-[-0.02em]">{LIVE[0].title}</h3>
+              <p className="text-base leading-relaxed text-ink-soft">{LIVE[0].text}</p>
+            </div>
+          </div>
+          <div className="grid gap-12 md:grid-cols-12 md:items-center md:gap-10">
+            <div className="grid content-start gap-4 md:col-span-5">
+              <h3 className="text-2xl font-medium tracking-[-0.02em]">{LIVE[1].title}</h3>
+              <p className="text-base leading-relaxed text-ink-soft">{LIVE[1].text}</p>
+            </div>
+            <Figure
+              name="feature-analytics"
+              alt="Printed bar charts and a histogram in solid ink, with one cobalt and one amber bar"
+              num="04"
+              caption="Marks, counted and checked"
+              ratio="aspect-[16/10]"
+              className="md:col-span-7"
+            />
+          </div>
+        </section>
+
+        <section
+          id="security"
+          aria-labelledby="security-heading"
+          className={cn("grid gap-12 border-t border-ink bg-paper px-5 py-16 md:px-8 md:py-24", paperTexture && "bg-texture")}
+          style={paperTexture ? { backgroundImage: `url(${paperTexture})` } : undefined}
+        >
+          <div className="grid gap-5 md:grid-cols-12">
+            <div className="md:col-span-12">
+              <Eyebrow>05 / Security</Eyebrow>
             </div>
             <h2 id="security-heading" className="text-[clamp(2.25rem,5.5vw,4.5rem)] leading-[0.95] font-medium tracking-[-0.04em] md:col-span-9">
               Secure by default, checked on the server.
@@ -272,7 +418,7 @@ export default function LandingPage() {
         <section id="roles" aria-labelledby="roles-heading" className="grid gap-12 border-t border-ink px-5 py-16 md:px-8 md:py-24">
           <div className="grid gap-5 md:grid-cols-12">
             <div className="md:col-span-12">
-              <Eyebrow>05 / Roles</Eyebrow>
+              <Eyebrow>06 / Roles</Eyebrow>
             </div>
             <h2 id="roles-heading" className="text-[clamp(2.25rem,5.5vw,4.5rem)] leading-[0.95] font-medium tracking-[-0.04em] md:col-span-9">
               Three roles. Each sees only its own work.
@@ -290,7 +436,7 @@ export default function LandingPage() {
 
         <section aria-labelledby="verify-heading" className="grid gap-8 border-t border-ink px-5 py-16 md:grid-cols-12 md:items-end md:px-8 md:py-24">
           <div className="grid gap-5 md:col-span-7">
-            <Eyebrow>06 / Verify a result</Eyebrow>
+            <Eyebrow>07 / Verify a result</Eyebrow>
             <h2 id="verify-heading" className="text-[clamp(2.25rem,5vw,4rem)] leading-[0.98] font-medium tracking-[-0.035em]">
               Check a result with its code.
             </h2>
@@ -299,10 +445,19 @@ export default function LandingPage() {
               the minimum facts are shown.
             </p>
           </div>
-          <div className="md:col-span-5 md:justify-self-end">
-            <Button asChild variant="secondary" size="lg">
-              <Link href="/verify">Verify a result</Link>
-            </Button>
+          <div className="grid gap-5 md:col-span-5 md:justify-self-end">
+            <Figure
+              name="feature-verify"
+              alt="A certificate card with a square code grid and a vermilion wax seal"
+              num="05"
+              caption="Signed, and checkable"
+              ratio="aspect-[16/10]"
+            />
+            <div className="md:justify-self-end">
+              <Button asChild variant="secondary" size="lg">
+                <Link href="/verify">Verify a result</Link>
+              </Button>
+            </div>
           </div>
         </section>
 

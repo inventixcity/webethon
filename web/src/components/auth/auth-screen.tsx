@@ -1,8 +1,10 @@
 import dynamic from "next/dynamic";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { AuthScreenId, AuthSetId } from "@/config/kit";
+import { Art } from "@/components/ui/art";
+import { DriftField } from "@/components/ui/empty-state";
 
-type ScreenProps = { email?: string; next?: string };
+type ScreenProps = { email?: string; next?: string; side?: ReactNode };
 
 // Each screen loads on its own, so a page never carries the code for the other sets.
 const screens: Record<AuthSetId, Record<AuthScreenId, ComponentType<ScreenProps>>> = {
@@ -52,5 +54,16 @@ const screens: Record<AuthSetId, Record<AuthScreenId, ComponentType<ScreenProps>
 
 export function AuthScreen({ set, screen, ...props }: { set: AuthSetId; screen: AuthScreenId } & ScreenProps) {
   const Screen = screens[set][screen];
-  return <Screen {...props} />;
+  // The editorial side panel for the set 1 sign-in. It shows only on wide screens, and falls back to the ASCII field.
+  const side =
+    set === 1 && screen === "login" ? (
+      <Art
+        name="login-side"
+        alt=""
+        sizes="(min-width: 1024px) 34vw, 0px"
+        className="h-full min-h-full w-full"
+        fallback={<DriftField className="size-full" />}
+      />
+    ) : undefined;
+  return <Screen side={side} {...props} />;
 }
