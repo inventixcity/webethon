@@ -1018,6 +1018,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "exam_assist"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "examcore",
+ "kernel",
+ "rand 0.8.8",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "exam_attempts"
 version = "0.1.0"
 dependencies = [
@@ -1048,6 +1068,27 @@ dependencies = [
  "serde_json",
  "sqlx",
  "time",
+ "uuid",
+]
+
+[[package]]
+name = "exam_disputes"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "exam_grading",
+ "examcore",
+ "kernel",
+ "rand 0.8.8",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
+ "tower",
+ "tracing",
  "uuid",
 ]
 
@@ -3532,8 +3573,10 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "exam_analytics",
+ "exam_assist",
  "exam_attempts",
  "exam_authoring",
+ "exam_disputes",
  "exam_enroll",
  "exam_grading",
  "exam_integrity",

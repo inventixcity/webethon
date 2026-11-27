@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/examcore", "crates/exam_questions", "crates/exam_authoring", "crates/exam_enroll", "crates/exam_grading", "crates/exam_attempts", "crates/exam_resilience", "crates/exam_integrity", "crates/exam_analytics", "crates/flags", "crates/shares", "crates/transfer", "crates/webhooks", "crates/jobs", "crates/admin", "crates/kernel", "crates/auth", "crates/records", "crates/files", "crates/realtime", "crates/ai", "crates/analytics", "crates/assist", "crates/social", "crates/teams", "crates/payments", "crates/booking", "crates/places", "crates/server"]
+members = ["crates/examcore", "crates/exam_disputes", "crates/exam_assist", "crates/exam_questions", "crates/exam_authoring", "crates/exam_enroll", "crates/exam_grading", "crates/exam_attempts", "crates/exam_resilience", "crates/exam_integrity", "crates/exam_analytics", "crates/flags", "crates/shares", "crates/transfer", "crates/webhooks", "crates/jobs", "crates/admin", "crates/kernel", "crates/auth", "crates/records", "crates/files", "crates/realtime", "crates/ai", "crates/analytics", "crates/assist", "crates/social", "crates/teams", "crates/payments", "crates/booking", "crates/places", "crates/server"]
 
 [workspace.package]
 edition = "2024"
@@ -23,6 +23,8 @@ oauth2 = { version = "5.0.0", default-features = false }
 object_store = { version = "0.14.2", features = ["aws"] }
 kernel = { path = "crates/kernel" }
 examcore = { path = "crates/examcore" }
+exam_disputes = { path = "crates/exam_disputes" }
+exam_assist = { path = "crates/exam_assist" }
 exam_questions = { path = "crates/exam_questions" }
 exam_authoring = { path = "crates/exam_authoring" }
 exam_enroll = { path = "crates/exam_enroll" }

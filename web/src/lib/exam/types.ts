@@ -479,3 +479,75 @@ export type AdminUser = {
   status: "active" | "suspended";
   createdAt: string;
 };
+
+// ================================================================== PHASE 2 (27 Nov afternoon)
+
+// ------------------------------------------------------------------ 5.2 fair randomised papers
+/** One blueprint row: draw `count` questions of this topic within a difficulty band from the exam's pool. */
+export type BlueprintRow = { topic: string; minDifficulty: number; maxDifficulty: number; count: number; marksEach: number };
+export type Blueprint = {
+  enabled: boolean;
+  rows: BlueprintRow[];
+  /** Allowed spread of predicted difficulty between any two papers (0..1 on the facility scale). */
+  tolerance: number;
+};
+/** GET /exams/{id}/blueprint/preview: simulated papers before publish. */
+export type BlueprintPreview = {
+  feasible: boolean;
+  problems: string[];
+  poolSize: number;
+  paperSize: number;
+  totalMarks: number;
+  /** Predicted mean facility per simulated paper (higher = easier), for 50 simulated candidates. */
+  simulated: number[];
+  spread: number;
+  fairnessScore: number;
+};
+/** GET /exams/{id}/fairness: after attempts exist. */
+export type FairnessReport = {
+  papers: number;
+  meanPredicted: number;
+  spread: number;
+  /** 0..100: 100 = every candidate got an equally difficult paper. */
+  fairnessScore: number;
+  rows: Array<{ attemptId: string; candidate: string; predictedFacility: number; observedPercent: number | null }>;
+};
+
+// ------------------------------------------------------------------ 5.4 disputes
+export type DisputeStatus = "open" | "accepted" | "rejected";
+export type DisputeResolution = "none" | "regrade" | "void_item" | "accept_alternative";
+export type Dispute = {
+  id: string;
+  attemptId: string;
+  itemId: string;
+  position: number;
+  stem: string;
+  /** Candidate's reason, 10–2000 chars. */
+  reason: string;
+  status: DisputeStatus;
+  resolution: DisputeResolution;
+  response: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  /** Examiner view only. Blind by default: "Script 07". */
+  scriptLabel?: string;
+  /** Score before and after resolution, when it changed. */
+  scoreBefore: number | null;
+  scoreAfter: number | null;
+};
+
+// ------------------------------------------------------------------ AI grading assistant (optional)
+export type GradingSuggestion = {
+  suggestedMarks: number;
+  maxMarks: number;
+  /** Short rationale tied to rubric points. */
+  rationale: string;
+  rubricHits: string[];
+  model: string;
+};
+
+// ------------------------------------------------------------------ live room
+/** Server-sent event payload on GET /exams/{id}/monitor/stream (event: "snapshot"). */
+export type MonitorSnapshotEvent = ExamMonitor;
+/** POST /exams/{id}/outage-credit result. */
+export type BulkCreditResult = { credited: number; skipped: number; secondsTotal: number };

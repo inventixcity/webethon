@@ -203,6 +203,18 @@ Examiner exam pages share a tab bar component `web/src/components/exams/exam-tab
 
 
 
+
+## PHASE 2 (27 Nov, afternoon): extra features. Contract: types in web/src/lib/exam/types.ts "PHASE 2"
+
+| Feature | Endpoints (all `{data}` envelopes, `/api/v1`) | Backend owner | Web owner |
+|---|---|---|---|
+| 5.2 Fair papers | GET/PUT `/exams/{id}/blueprint` (Blueprint, draft only) · GET `/exams/{id}/blueprint/preview` (BlueprintPreview) · GET `/exams/{id}/fairness` (FairnessReport). When enabled, `POST /me/exams/{examId}/attempt` draws a per-candidate paper from the published pool, satisfying the blueprint and the tolerance. | C13 (exam_authoring, exam_attempts) | H26 |
+| 5.4 Disputes | POST `/attempts/{id}/disputes` {itemId, reason} (candidate, own, results published, within 7 days, one per item) · GET `/me/disputes` · GET `/exams/{id}/disputes` (owner) · POST `/disputes/{id}/resolve` {status, resolution, response, marks?} (owner; regrade or void recomputes every affected attempt and re-signs certificates; audited) | C14 (new crate exam_disputes; voided-item support in exam_grading) | H27 |
+| AI grading assistant | POST `/attempts/{attemptId}/answers/{itemId}/suggest` → GradingSuggestion (exam owner; written items; no candidate identity sent; rate limited; 404 NOT_CONFIGURED when no AI key) | C15 (new crate exam_assist) | H28 |
+| Live room | GET `/exams/{id}/monitor/stream` SSE `snapshot` events every 3 s (owner) · POST `/exams/{id}/outage-credit` {from, to, reason} → BulkCreditResult (credits every in-progress attempt with a verified outage overlapping the window; audited) | C16 (exam_integrity stream; exam_resilience bulk credit) | H28 |
+| Accessibility | WCAG 2.2 AA pass across all screens | none | H25 |
+Migration ranges: C13 `20261127002000_*`, C14 `2100`, C15 `2200`, C16 `2300`. The USER UI RULES apply.
+
 ### USER UI RULES (apply everywhere, 27 Nov)
 - NO scrolling or marquee tickers (velocity-marquee and similar) anywhere.
 - NO wiggling or pointer-following buttons (magnetic). Standard Button components only, with decent hovers: colour or background change, a cobalt underline or a left bar. No movement or lift.
