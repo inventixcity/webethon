@@ -3,6 +3,7 @@
   "bg-candidate": "/images/bg-candidate.webp",
   "bg-dark-texture": "/images/bg-dark-texture.webp",
   "bg-examiner": "/images/bg-examiner.webp",
+  "bg-grid": "/images/bg-grid.webp",
   "bg-paper": "/images/bg-paper.webp",
   "bg-results": "/images/bg-results.webp",
   "empty-exams": "/images/empty-exams.webp",
@@ -10,6 +11,7 @@
   "empty-results": "/images/empty-results.webp",
   "favicon-mark": "/images/favicon-mark.webp",
   "feature-analytics": "/images/feature-analytics.webp",
+  "feature-integrity": "/images/feature-integrity.webp",
   "feature-monitoring": "/images/feature-monitoring.webp",
   "feature-resilience": "/images/feature-resilience.webp",
   "feature-verify": "/images/feature-verify.webp",
@@ -17,6 +19,7 @@
   "hero-dark": "/images/hero-dark.webp",
   "invite-side": "/images/invite-side.webp",
   "login-side": "/images/login-side.webp",
+  "offline": "/images/offline.webp",
   "og-image": "/images/og-image.webp",
   "verify-bg": "/images/verify-bg.webp"
 }
