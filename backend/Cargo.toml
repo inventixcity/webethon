@@ -35,7 +35,7 @@ exam_resilience = { path = "crates/exam_resilience" }
 exam_integrity = { path = "crates/exam_integrity" }
 exam_analytics = { path = "crates/exam_analytics" }
 exam_contact = { path = "crates/exam_contact" }
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
 admin = { path = "crates/admin" }
 places = { path = "crates/places" }
 payments = { path = "crates/payments" }
