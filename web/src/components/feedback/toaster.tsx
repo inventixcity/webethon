@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Button } from "@/components/ui/button";
 import type { ErrorView } from "@/lib/errors/types";
 import { cn } from "@/lib/utils";
 
@@ -197,22 +198,18 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
           <p className={cn("font-sans text-sm text-ink-soft", toast.title !== undefined && "mt-1")}>{toast.message}</p>
           {toast.requestId !== undefined && <RequestReference id={toast.requestId} />}
           {action !== undefined && (
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant={isError ? "danger" : "secondary"}
+              className="mt-3"
               onClick={() => {
                 action.onClick();
                 onDismiss();
               }}
-              className={cn(
-                "mt-3 cursor-pointer border px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] uppercase transition-colors duration-200 motion-reduce:transition-none",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vermilion",
-                isError
-                  ? "border-vermilion-deep text-vermilion-deep hover:bg-vermilion-deep hover:text-paper"
-                  : "border-ink text-ink hover:bg-ink hover:text-paper",
-              )}
             >
               {action.label}
-            </button>
+            </Button>
           )}
         </div>
         <button

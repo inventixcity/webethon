@@ -7,7 +7,7 @@ import { Check } from "lucide-react";
 import { useTick } from "@/components/candidate/clock";
 import { formatCountdown } from "@/components/candidate/format";
 import { useToast } from "@/components/feedback/toaster";
-import { MagneticCta } from "@/components/app-shell/magnetic-cta";
+import { CtaLink } from "@/components/app-shell/cta-link";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { api } from "@/lib/api/client";
@@ -93,7 +93,7 @@ export function ExaminerHome() {
         description="What is running, what is coming, and what still needs you."
         actions={
           <>
-            <MagneticCta href="/app/examiner/exams/new">New exam</MagneticCta>
+            <CtaLink href="/app/examiner/exams/new">New exam</CtaLink>
             <Button asChild variant="secondary">
               <Link href="/app/examiner/questions">Question bank</Link>
             </Button>

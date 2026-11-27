@@ -1,6 +1,7 @@
 "use client";
 
 import { Shark404 } from "@/components/effects/shark-404";
+import { Button } from "@/components/ui/button";
 import { ErrorPage } from "@/components/errors/error-page";
 import { readErrorDetails } from "@/components/errors/read-error";
 import { ERROR_SCENES } from "@/components/errors/scenes";
@@ -34,9 +35,9 @@ export default function AppError({ error, retry }: { error: unknown; retry: () =
       description="The service may be busy or briefly unreachable. Try again in a moment."
       sharks={ERROR_SCENES[500]}
       actions={
-        <button type="button" className="shark-404-action" onClick={retry}>
+        <Button type="button" size="lg" onClick={retry}>
           Try again
-        </button>
+        </Button>
       }
     />
   );

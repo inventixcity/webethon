@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import type { CandidateDashboard as Dashboard, CandidateExamCard, CandidateResult } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { useApiData } from "./use-api-data";
-import { MagneticCta } from "@/components/app-shell/magnetic-cta";
+import { CtaLink } from "@/components/app-shell/cta-link";
 import { useTick, serverOffset } from "./clock";
 import { ACCESS_LABEL, describeError, formatClock, formatCountdown, formatDuration, formatWindow } from "./format";
 import { EmptyState, PanelError, PanelLoading } from "./notice";
@@ -81,9 +81,9 @@ function NextUp({ card, serverNow }: { card: CandidateExamCard; serverNow: numbe
   const startClock = new Date(card.startsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const cta =
     card.access === "in_progress" && card.attemptId ? (
-      <MagneticCta href={`/exam/${encodeURIComponent(card.attemptId)}`} tone="vermilion" className="w-full sm:w-auto">Resume exam</MagneticCta>
+      <CtaLink href={`/exam/${encodeURIComponent(card.attemptId)}`} tone="vermilion" className="w-full sm:w-auto">Resume exam</CtaLink>
     ) : card.access === "available" ? (
-      <MagneticCta href={lobby} tone="vermilion" className="w-full sm:w-auto">Start exam</MagneticCta>
+      <CtaLink href={lobby} tone="vermilion" className="w-full sm:w-auto">Start exam</CtaLink>
     ) : (
       <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
         <Link href={lobby}>Open lobby</Link>

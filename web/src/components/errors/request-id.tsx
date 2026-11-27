@@ -53,9 +53,9 @@ export function SharkRequestId({ id }: { id: string }) {
     <>
       <span className="shark-404-details-label">Request id</span>
       <code className="shark-404-details-id">{id}</code>
-      <button type="button" className="shark-404-copy" onClick={copy}>
+      <Button type="button" variant="secondary" size="sm" onClick={copy}>
         {copied ? "Copied" : "Copy"}
-      </button>
+      </Button>
       <span role="status" className="sr-only">
         {copied ? "Request id copied to the clipboard" : ""}
       </span>

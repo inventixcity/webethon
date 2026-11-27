@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Shark404 } from "@/components/effects/shark-404";
+import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme/theme";
 import type { ErrorPageCode } from "@/lib/errors/types";
 import { SharkRequestId } from "./request-id";
@@ -43,21 +44,23 @@ function ErrorPageView(props: ErrorPageProps) {
     let primary: ReactNode;
     if (copy.action.kind === "signin") {
       primary = (
-        <Link className="shark-404-action" href={signInHref} prefetch={false}>
-          {copy.action.label}
-        </Link>
+        <Button asChild size="lg">
+          <Link href={signInHref} prefetch={false}>
+            {copy.action.label}
+          </Link>
+        </Button>
       );
     } else if (copy.action.kind === "back") {
       primary = (
-        <button type="button" className="shark-404-action" onClick={() => window.history.back()}>
+        <Button type="button" size="lg" onClick={() => window.history.back()}>
           {copy.action.label}
-        </button>
+        </Button>
       );
     } else {
       primary = (
-        <button type="button" className="shark-404-action" disabled={disabled} onClick={retry}>
+        <Button type="button" size="lg" disabled={disabled} onClick={retry}>
           {copy.action.label}
-        </button>
+        </Button>
       );
     }
     actions = (
