@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
 import { Toaster, ToastProvider } from "@/components/feedback/toaster";
-import { KitNav } from "@/components/kit/kit-nav";
 import { ThemeScript } from "@/components/theme/theme-script";
 import { siteConfig } from "@/config/site";
 import { FlagsProvider } from "@/lib/flags";
@@ -36,7 +35,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <FlagsProvider>
             {children}
-            {process.env.NODE_ENV === "development" && <KitNav />}
           </FlagsProvider>
           <Toaster />
         </ToastProvider>

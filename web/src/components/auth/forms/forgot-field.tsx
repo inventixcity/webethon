@@ -95,7 +95,7 @@ export function ForgotField({ onType, onSent, onError, submitLabel = "Send reset
         label="Email"
         type="email"
         autoComplete="email"
-        placeholder="you@studio.com"
+        placeholder="you@institution.edu"
         error={errors.email?.message ?? fieldErrors.email}
         {...emailField}
         onChange={(event) => {

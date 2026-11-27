@@ -15,3 +15,5 @@ Snapshot around 11:13. The question and grading envelopes, invite token exposure
 Verification: `cd backend && bash scripts/cargo.sh test -p exam_resilience` passed 7 tests; `cd web && pnpm typecheck` failed with the four workspace errors listed above. Earlier `bash scripts/cargo.sh check -p exam_resilience` passed with two then-current crate warnings; source has changed since that check.
 
 Update (11:17): C6 reports the candidate report now honors `showBreakdown`, with a regression test; current source contains the setting check. Recheck the complete integration after the concurrent edits settle.
+
+Update (11:27): analytics no longer limits the aggregate attempt query to 500; pair analysis remains capped. The workspace integration has been revised, and will be rechecked in pass 4.

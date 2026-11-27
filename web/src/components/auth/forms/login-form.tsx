@@ -93,7 +93,7 @@ export function LoginForm({
         label="Email"
         type="email"
         autoComplete="email"
-        placeholder="you@studio.com"
+        placeholder="you@institution.edu"
         error={errors.email?.message ?? fieldErrors.email}
         {...emailField}
         onChange={(event) => {

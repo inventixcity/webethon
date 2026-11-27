@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ScrambleLabel } from "@/components/loaders/text-loaders";
 import { Skeleton } from "@/components/loaders/shape-loaders";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -9,9 +10,8 @@ import { cn } from "@/lib/utils";
 export function LoadingState({ label = "Loading", rows = 3, className }: { label?: string; rows?: number; className?: string }) {
   return (
     <div role="status" aria-label={label} className={cn("grid gap-3 py-6", className)}>
-      <div className="flex items-center gap-3 pb-2">
-        <span aria-hidden="true" className="size-1.5 animate-blink bg-vermilion motion-reduce:animate-none" />
-        <span className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">{label}</span>
+      <div className="flex items-center gap-3 pb-2 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
+        <ScrambleLabel text={label} />
       </div>
       {Array.from({ length: rows }, (_, index) => (
         <Skeleton key={index} className={cn("h-14 w-full", rows > 1 && index === rows - 1 && "w-3/4")} />
@@ -76,7 +76,7 @@ export function Notice({
       role="status"
       className={cn(
         "border-l-2 py-1 pl-4 text-sm",
-        tone === "warning" ? "border-vermilion-deep text-ink" : "border-ink text-ink-soft",
+        tone === "warning" ? "border-amber text-ink" : "border-cobalt text-ink-soft",
         className,
       )}
     >

@@ -4,6 +4,6 @@ export const siteConfig = {
   mark: "I",
   description: "Inventix Invigil: secure, failure-resilient online examinations.",
   tagline: "Exams that hold up.",
-  /** Which screens the real routes like /login use: 1 Editorial, 2 Living, 3 Mechanical. */
-  authSet: 2,
+  /** Which screens the real routes like /login use: 1 Editorial (padlock that follows the password), 2 Living, 3 Mechanical. */
+  authSet: 1,
 } as const;

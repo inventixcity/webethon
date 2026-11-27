@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { AccountSettings } from "@/features/account/components/account-settings";
 import { SettingsCard } from "@/features/account/components/settings-card";
 import { getProfile } from "@/features/account/server";
 import { requireUser } from "@/features/auth/require-user";
 import { ManageLinks } from "@/components/shares/manage-links";
 import { WebhooksPanel } from "@/components/webhooks/webhooks-panel";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -18,21 +17,14 @@ export default async function SettingsPage() {
 
   return (
     <main className="flex min-h-dvh flex-col">
-      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-12 px-5 py-10 md:px-8 md:py-16">
-        <section className="grid gap-6">
-          <Link
-            href="/app"
-            className="inline-flex w-fit items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase transition-colors duration-(--duration-fast) hover:text-vermilion-deep"
-          >
-            <ArrowLeft aria-hidden="true" className="size-3.5" />
-            Home
-          </Link>
-          <p className="flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">
-            <span aria-hidden="true" className="size-1.5 bg-vermilion" />
-            01 / Account
-          </p>
-          <h1 className="text-[clamp(2.25rem,5vw,4rem)] leading-[1.02] font-medium tracking-[-0.035em]">Settings.</h1>
-        </section>
+      <div className="mx-auto grid w-full max-w-6xl flex-1 content-start gap-12 px-5 pb-10 md:px-8 md:pb-16">
+        <PageHeader
+          index="01"
+          eyebrow="Account"
+          title="Settings"
+          breadcrumb={[{ label: "Home", href: "/app" }, { label: "Settings" }]}
+          description="Your profile, sign-in and security, plus the integrations and share links you manage."
+        />
 
         <AccountSettings profile={profile} />
 

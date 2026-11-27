@@ -10,6 +10,7 @@ import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/ui/page-header";
 import { formatDateTime, messageOf } from "@/components/analytics/format";
 import { CreateAccount } from "./create-account";
 import {
@@ -95,13 +96,12 @@ export function UsersAdmin() {
 
   return (
     <div className="grid gap-12">
-      <header className="grid gap-3 border-b border-ink pb-6">
-        <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">Administration</p>
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Users</h1>
-        <p className="max-w-prose text-sm text-ink-soft">
-          Create accounts and set roles. Candidates take exams, examiners run them and admins manage everyone.
-        </p>
-      </header>
+      <PageHeader
+        index="01"
+        eyebrow="Administration"
+        title="Users"
+        description="Create accounts and set roles. Candidates take exams, examiners run them and admins manage everyone."
+      />
 
       <CreateAccount onCreated={() => setVersion((value) => value + 1)} />
 
@@ -384,7 +384,7 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
             Recent activity
           </h3>
           {detailError && <p className="text-sm text-vermilion-deep">{detailError}</p>}
-          {!detail && !detailError && <p role="status" className="text-sm text-ink-muted">Loading activity</p>}
+          {!detail && !detailError && <BrailleSpinner label="Loading activity" className="text-sm text-ink-muted" />}
           {detail && (
             <>
               <p className="text-sm text-ink-soft">

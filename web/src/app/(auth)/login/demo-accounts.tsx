@@ -79,10 +79,6 @@ export function DemoAccounts() {
             </p>
           )}
         </div>
-
-        <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-          Accounts are created by your institution.
-        </p>
       </div>
     </section>
   );

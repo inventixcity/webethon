@@ -255,17 +255,26 @@ await step("an accepted invite cannot be reused (404)", () =>
   }),
 );
 
-await step("candidate cannot read examiner endpoints (403/404)", async () => {
-  await request("/questions", { cookie: candidate, expect: [403, 404] });
-  await request(`/exams/${exam.id}`, { cookie: candidate, expect: [403, 404] });
-  await request(`/exams/${exam.id}/grading`, { cookie: candidate, expect: [403, 404] });
-  await request(`/exams/${exam.id}/questions`, {
+await step("candidate cannot list examiner questions (404)", () =>
+  request("/questions", { cookie: candidate, expect: 404 }),
+);
+
+await step("candidate cannot read examiner exam detail (404)", () =>
+  request(`/exams/${exam.id}`, { cookie: candidate, expect: 404 }),
+);
+
+await step("candidate cannot read examiner grading queue (404)", () =>
+  request(`/exams/${exam.id}/grading`, { cookie: candidate, expect: 404 }),
+);
+
+await step("candidate cannot modify examiner question assignments (404)", () =>
+  request(`/exams/${exam.id}/questions`, {
     method: "PUT",
     cookie: candidate,
     body: { items: [] },
-    expect: [403, 404],
-  });
-});
+    expect: 404,
+  }),
+);
 
 await step("candidate dashboard lists the exam as available", async () => {
   const { data } = await request("/me/exams", { cookie: candidate });

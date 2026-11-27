@@ -1,6 +1,6 @@
 # Design rules: Ivory & Ink
 
-This file is the single source of truth for how the kit looks. Every page and component must follow it.
+This file is the single source of truth for how the product looks. Every page and component must follow it.
 
 ## Character
 
@@ -32,10 +32,25 @@ Defined in `src/app/globals.css`.
 | `--ink-muted` | `#6B6759` | Tertiary text and captions, meets AA on paper |
 | `--vermilion` | `#D23A1C` | The accent: large shapes, focal marks |
 | `--vermilion-deep` | `#B92D13` | Accent for small text and hover fills, meets AA with paper |
+| `--cobalt` | `#2B4FD8` | Informational accent: info, online, sync and live states. Meets AA on paper (5.6:1) |
+| `--cobalt-deep` | `#1E3BB0` | Cobalt for small text, links and hover, 7.9:1 on paper |
+| `--amber` | `#E0862C` | Caution accent: integrity indicators, warnings, needs review. Use as a fill with ink text (6.9:1), not as text on paper |
+| `--amber-deep` | `#944E0E` | Amber for small text, 5.4:1 on paper and 4.9:1 on sunk. Darkened from `#A85A10`, which only reaches 4.4:1 |
 
-Tailwind classes: `bg-paper`, `bg-paper-raised`, `bg-paper-sunk`, `bg-ink`, `text-ink`, `text-ink-soft`, `text-ink-muted`, `text-paper`, `bg-vermilion`, `text-vermilion-deep`, `border-ink`, `border-rule`.
+Tailwind classes: `bg-paper`, `bg-paper-raised`, `bg-paper-sunk`, `bg-ink`, `text-ink`, `text-ink-soft`, `text-ink-muted`, `text-paper`, `bg-vermilion`, `text-vermilion-deep`, `border-ink`, `border-rule`, `bg-cobalt`, `text-cobalt-deep`, `border-cobalt`, `bg-amber`, `text-amber-deep`, `border-amber`.
+
+### Accent roles
+
+Three accents, each with one job. Use each sparingly, and only where its meaning is needed.
+
+- **Vermilion is the focal accent.** It is the one mark a view leads with: the focal stat, the focus ring, the page header rule and danger. Keep to one vermilion moment per view.
+- **Cobalt is for information and live status.** Use it for info badges, online and sync states, a running exam, and links on hover. Never for danger.
+- **Amber is for caution.** Use it for integrity indicators, warnings, and items that need review (review priority medium and high). Never for errors, which stay vermilion.
+- Dark mode lightens cobalt and amber so their text passes AA on the dark paper. Read the table above for each value.
 
 `--rule` is a hairline colour: ink at 16% opacity.
+
+The cobalt and amber rows use the light values above. Dark mode uses `#7C97FF` / `#A9BBFF` for cobalt and `#F0A85A` / `#F7C48A` for amber.
 
 ## Light and dark
 
@@ -44,7 +59,7 @@ Every screen must work in both modes. The hex values above are the light mode. D
 - Build pages from `bg-paper text-ink`. Never hard-code a dark page with `bg-ink text-paper`, because it inverts in dark mode.
 - `bg-ink text-paper` is right for small solid things like buttons, which should invert.
 - To keep one panel fixed in both modes, put `data-theme="dark"` or `data-theme="light"` on it and use normal tokens inside. The vermilion panels and the departure board do this.
-- A canvas must read tokens with `getComputedStyle` on its own element, so it picks up the panel's theme, and must recolour when `subscribeTheme` from `@/components/theme/theme` fires. Effects under `/kit/effects` restart on a mode change instead, so reading tokens once at start-up is fine there.
+- A canvas must read tokens with `getComputedStyle` on its own element, so it picks up the panel's theme, and must recolour when `subscribeTheme` from `@/components/theme/theme` fires. Effects demos restart on a mode change instead, so reading tokens once at start-up is fine there.
 
 ## Typography
 

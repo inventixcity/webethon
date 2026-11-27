@@ -44,11 +44,13 @@ type StatProps = {
   note?: ReactNode;
   /** Draws the one vermilion mark beside the label, for the number that matters most on this view. */
   focal?: boolean;
+  /** Colour of the mark when the stat is not the focal one: cobalt for live or informational numbers, amber for numbers that need a look. */
+  tone?: "info" | "caution";
   className?: string;
 };
 
 /** One KPI: a mono label over a large tabular number. Use inside StatGrid (a dl). */
-export function Stat({ label, value, format, note, focal = false, className }: StatProps) {
+export function Stat({ label, value, format, note, focal = false, tone, className }: StatProps) {
   const numeric = typeof value === "number" && Number.isFinite(value);
   const target = numeric ? (value as number) : 0;
   const tweened = useTweened(target);
@@ -59,7 +61,11 @@ export function Stat({ label, value, format, note, focal = false, className }: S
   return (
     <div className={cn("grid content-start gap-2 border-t border-rule py-5 pr-4", className)}>
       <dt className="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-        {focal ? <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" /> : null}
+        {focal ? (
+          <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
+        ) : tone ? (
+          <span aria-hidden="true" className={cn("size-1.5 shrink-0", tone === "info" ? "bg-cobalt" : "bg-amber")} />
+        ) : null}
         {label}
       </dt>
       <dd className="text-[clamp(1.75rem,3.2vw,2.5rem)] leading-none font-medium tracking-[-0.03em] tabular-nums">

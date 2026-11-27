@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ErrorPage } from "@/components/errors/error-page";
 import { ERROR_PAGE_CODES, type ErrorPageCode } from "@/lib/errors/types";
 
-/** Kit preview only. Linked from the kit index, never from the product. */
+/** Preview only. Linked from the error index, never from the product. */
 
 export const metadata: Metadata = { title: "Error pages" };
 

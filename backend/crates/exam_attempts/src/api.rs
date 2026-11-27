@@ -601,7 +601,7 @@ async fn get_scratch(State(s): State<AppState>, v: Viewer, Path(id): Path<Uuid>)
         None => (json!({"text": "", "sketch": null}), None),
     };
     Ok(ok(
-        json!({"text": content["text"].as_str().unwrap_or(""), "sketch": content["sketch"], "updatedAt": updated}),
+        json!({"text": content["text"].as_str().unwrap_or(""), "sketch": content["sketch"], "updatedAt": examcore::ts(updated)}),
     ))
 }
 

@@ -157,6 +157,46 @@ pub fn phase(status: &str, starts_at: OffsetDateTime, ends_at: OffsetDateTime, n
     }
 }
 
+/// RFC 3339 string for a timestamp. Use inside `json!()`: `OffsetDateTime`'s default serde form is an array.
+pub fn iso(t: OffsetDateTime) -> String {
+    t.format(&time::format_description::well_known::Rfc3339).unwrap_or_default()
+}
+
+/// [`iso`] for optional timestamps (`null` stays `null`).
+pub fn iso_opt(t: Option<OffsetDateTime>) -> Option<String> {
+    t.map(iso)
+}
+
+/// Anything that can appear as a timestamp field in a `json!()` response.
+pub trait IntoIso {
+    fn into_iso(self) -> Value;
+}
+impl IntoIso for OffsetDateTime {
+    fn into_iso(self) -> Value {
+        Value::String(iso(self))
+    }
+}
+impl IntoIso for Option<OffsetDateTime> {
+    fn into_iso(self) -> Value {
+        self.map_or(Value::Null, |t| Value::String(iso(t)))
+    }
+}
+impl IntoIso for String {
+    fn into_iso(self) -> Value {
+        Value::String(self)
+    }
+}
+impl IntoIso for Option<String> {
+    fn into_iso(self) -> Value {
+        self.map_or(Value::Null, Value::String)
+    }
+}
+
+/// Timestamp field value for `json!()`: always an RFC 3339 string or null, never serde's array form.
+pub fn ts(value: impl IntoIso) -> Value {
+    value.into_iso()
+}
+
 pub fn now() -> OffsetDateTime {
     OffsetDateTime::now_utc()
 }

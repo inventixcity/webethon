@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/monitor/confirm-dialog";
 import { PriorityChip } from "@/components/monitor/priority-chip";
 import { BrailleSpinner } from "@/components/loaders/text-loaders";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { formatDateTime, formatMarks, formatPercent, messageOf } from "@/components/analytics/format";
 import { downloadCsv, resultsToCsv } from "./csv";
 
@@ -82,36 +83,37 @@ export function ResultsView({ examId }: { examId: string }) {
 
   return (
     <div className="grid gap-10 px-4 py-8 md:px-8">
-      <header className="flex flex-wrap items-end justify-between gap-6 border-b border-ink pb-6">
-        <div className="grid gap-3">
-          <p className="font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase">Results</p>
-          <h2 className="text-3xl leading-none font-semibold tracking-tight md:text-4xl">
-            {published ? "Published" : "Not published"}
-          </h2>
-          <p className="font-mono text-xs text-ink-soft">
+      <PageHeader
+        level={2}
+        eyebrow="Results"
+        title={published ? "Published" : "Not published"}
+        description={
+          <span className="font-mono text-xs">
             {published
               ? `Published ${formatDateTime(data.resultsPublishedAt)}. Candidates can see their results.`
               : `Pass mark ${formatMarks(data.passMarks)} of ${formatMarks(data.totalMarks)}.`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          {published ? (
-            <Button variant="secondary" size="md" onClick={() => setAction("unpublish")}>
-              Unpublish results
+          </span>
+        }
+        actions={
+          <>
+            {published ? (
+              <Button variant="secondary" size="md" onClick={() => setAction("unpublish")}>
+                Unpublish results
+              </Button>
+            ) : (
+              <Button size="md" disabled={!data.canPublish} onClick={() => setAction("publish")}>
+                Publish results
+              </Button>
+            )}
+            <Button variant="secondary" size="md" onClick={exportCsv} disabled={data.rows.length === 0}>
+              Export CSV
             </Button>
-          ) : (
-            <Button size="md" disabled={!data.canPublish} onClick={() => setAction("publish")}>
-              Publish results
+            <Button variant="link" size="md" asChild>
+              <a href={`/api/reports/exam/${examId}`}>Download exam report (PDF)</a>
             </Button>
-          )}
-          <Button variant="secondary" size="md" onClick={exportCsv} disabled={data.rows.length === 0}>
-            Export CSV
-          </Button>
-          <Button variant="link" size="md" asChild>
-            <a href={`/api/reports/exam/${examId}`}>Download exam report (PDF)</a>
-          </Button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {notice && (
         <p role="status" className="border border-ink p-4 text-sm">

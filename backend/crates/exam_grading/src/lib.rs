@@ -75,7 +75,7 @@ async fn grading_list(
            select id, row_number() over (order by created_at, id) as script_no
            from attempts where exam_id=$1 and not sandbox and status <> 'in_progress'
          )
-         select a.id as attempt_id, i.id as item_id, s.script_no::int as script_no,
+         select t.id as attempt_id, i.id as item_id, s.script_no::int as script_no,
                 i.position, i.stem, i.rubric, i.marks::float8 as marks,
                 coalesce(a.response->>'text','') as answer_text,
                 a.manual_marks::float8 as manual_marks, a.feedback, a.graded_at
@@ -262,10 +262,10 @@ async fn results_value(state: &AppState, exam_id: Uuid) -> AppResult<Value> {
         let grading_status: String = row.try_get("grading_status")?;
         let review_priority: String = row.try_get("review_priority")?;
         let submitted_at: Option<time::OffsetDateTime> = row.try_get("submitted_at")?;
-        Ok(json!({"attemptId":attempt_id,"candidateId":candidate_id,"displayName":display_name,"email":email,"status":attempt_status,"autoScore":auto_score,"manualScore":manual_score,"totalScore":total_score,"percent":percent,"passed":passed,"gradingStatus":grading_status,"reviewPriority":review_priority,"submittedAt":submitted_at}))
+        Ok(json!({"attemptId":attempt_id,"candidateId":candidate_id,"displayName":display_name,"email":email,"status":attempt_status,"autoScore":auto_score,"manualScore":manual_score,"totalScore":total_score,"percent":percent,"passed":passed,"gradingStatus":grading_status,"reviewPriority":review_priority,"submittedAt":examcore::ts(submitted_at)}))
     }).collect::<Result<Vec<_>, sqlx::Error>>()?;
     Ok(
-        json!({"examId":exam_id,"totalMarks":total_marks,"passMarks":pass_marks,"resultsPublishedAt":published,"canPublish":blockers.is_empty(),"blockers":blockers,"rows":rows_json}),
+        json!({"examId":exam_id,"totalMarks":total_marks,"passMarks":pass_marks,"resultsPublishedAt":examcore::ts(published),"canPublish":blockers.is_empty(),"blockers":blockers,"rows":rows_json}),
     )
 }
 
@@ -397,7 +397,7 @@ async fn issue_certificate(
         "candidate": format!("{first_initial}. {last_initial}****{last_character}"),
         "percent": round2(score / total_marks * 100.0),
         "passed": score >= pass_marks,
-        "issuedAt": issued_at,
+        "issuedAt": examcore::ts(issued_at),
         "issuer": "Inventix Invigil"
     });
     let statement_hash =
@@ -592,7 +592,7 @@ async fn candidate_result(
     let submitted_at: Option<time::OffsetDateTime> = row.try_get("submitted_at")?;
     let verify_code: String = row.try_get("verify_code")?;
     Ok(examcore::ok(
-        json!({"attemptId":attempt_id,"examTitle":title,"totalMarks":total_marks,"passMarks":pass_marks,"totalScore":total_score,"percent":round2(total_score/total_marks*100.0),"passed":total_score>=pass_marks,"submittedAt":submitted_at,"publishedAt":published_at,"verifyCode":verify_code,"breakdown":breakdown}),
+        json!({"attemptId":attempt_id,"examTitle":title,"totalMarks":total_marks,"passMarks":pass_marks,"totalScore":total_score,"percent":round2(total_score/total_marks*100.0),"passed":total_score>=pass_marks,"submittedAt":examcore::ts(submitted_at),"publishedAt":examcore::ts(published_at),"verifyCode":verify_code,"breakdown":breakdown}),
     ))
 }
 

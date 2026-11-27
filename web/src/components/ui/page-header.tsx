@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { WaveText } from "@/components/effects/wave-text";
 import { cn } from "@/lib/utils";
 
 export type Crumb = { label: string; href?: string };
@@ -25,10 +26,21 @@ type PageHeaderProps = {
 };
 
 /** Mono, uppercase, tracked: the label voice of the product. */
-export function Eyebrow({ index, children, className }: { index?: string; children: ReactNode; className?: string }) {
+export function Eyebrow({
+  index,
+  children,
+  className,
+  tone = "accent",
+}: {
+  index?: string;
+  children: ReactNode;
+  className?: string;
+  /** accent: the vermilion focal mark. info: a cobalt rule mark for section headers. */
+  tone?: "accent" | "info";
+}) {
   return (
     <p className={cn("flex items-center gap-3 font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase", className)}>
-      <span aria-hidden="true" className="size-1.5 shrink-0 bg-vermilion" />
+      <span aria-hidden="true" className={cn("size-1.5 shrink-0", tone === "info" ? "bg-cobalt" : "bg-vermilion")} />
       <span>
         {index ? (
           <>
@@ -68,9 +80,24 @@ export function Breadcrumb({ items, className }: { items: Crumb[]; className?: s
   );
 }
 
+/*
+ * Compacts WaveText's full-screen hero into a header band. The overrides are !important because wave-text.css is
+ * unlayered, and it would otherwise win over Tailwind utilities.
+ */
+const WAVE_CLASS = cn(
+  "!min-h-0",
+  "[&_.wave-text-body]:!pt-8 [&_.wave-text-body]:!pb-6 md:[&_.wave-text-body]:!pt-10",
+  "[&_.wave-text-headline]:!mb-0 [&_.wave-text-headline]:!text-[clamp(2.5rem,6vw,4.5rem)] [&_.wave-text-headline]:!leading-[0.95]",
+  "[&_.wave-text-support]:!mt-0 [&_.wave-text-support]:!ml-0 [&_.wave-text-support]:!w-full",
+  "[&_.wave-text-support_p]:!max-w-[62ch]",
+  "[&_.wave-text-content]:!p-5 md:[&_.wave-text-content]:!p-8",
+);
+
 /**
  * The header every screen opens with: a numbered mono eyebrow, a large tight headline, one line of description and
- * the primary actions on the right. Level 2 is the smaller variant used for a section inside a page.
+ * the primary actions. A level 1 string title renders as a WaveText band, which keeps the headline as a real h1 and
+ * hides its water copy from assistive technology. Level 2 is the smaller plain variant for a section inside a page
+ * that already has its own h1.
  */
 export function PageHeader({
   index,
@@ -84,6 +111,32 @@ export function PageHeader({
   id,
   className,
 }: PageHeaderProps) {
+  const crumbs = breadcrumb && breadcrumb.length > 0 ? <Breadcrumb items={breadcrumb} /> : null;
+
+  if (level === 1 && typeof title === "string" && (description === undefined || typeof description === "string")) {
+    return (
+      <header className={cn("grid gap-6", className)}>
+        {crumbs}
+        <WaveText
+          headingAs="h1"
+          eyebrow={index ? `${index} / ${eyebrow}` : eyebrow}
+          edition=""
+          headline={title}
+          description={description ?? ""}
+          actionLabel=""
+          caption=""
+          waveHeight={0.3}
+          speed={0.6}
+          amplitude={36}
+          interactive={false}
+          className={WAVE_CLASS}
+        />
+        {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
+        {children}
+      </header>
+    );
+  }
+
   const Heading = level === 1 ? "h1" : "h2";
   return (
     <header
@@ -93,10 +146,12 @@ export function PageHeader({
         className,
       )}
     >
-      {breadcrumb && breadcrumb.length > 0 ? <Breadcrumb items={breadcrumb} /> : null}
+      {crumbs}
       <div className="grid gap-6 md:grid-cols-12 md:items-end md:gap-8">
         <div className={cn("grid min-w-0 gap-4", actions ? "md:col-span-8" : "md:col-span-12")}>
-          <Eyebrow index={index}>{eyebrow}</Eyebrow>
+          <Eyebrow index={index} tone={level === 1 ? "accent" : "info"}>
+            {eyebrow}
+          </Eyebrow>
           <Heading
             id={id}
             className={cn(
@@ -146,7 +201,7 @@ export function SectionHeading({
         <Tag id={id} className="font-mono text-[11px] tracking-[0.14em] uppercase">
           {index ? (
             <>
-              <span className="tabular-nums">{index}</span>
+              <span className="tabular-nums text-cobalt-deep">{index}</span>
               <span aria-hidden="true" className="text-ink-muted">
                 {" / "}
               </span>

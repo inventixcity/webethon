@@ -28,6 +28,12 @@
   --ink-muted: #6b6759;
   --vermilion: #d23a1c;
   --vermilion-deep: #b92d13;
+  /* Informational and live states. Cobalt text meets AA on paper (5.6:1) and on raised surfaces. */
+  --cobalt: #2b4fd8;
+  --cobalt-deep: #1e3bb0;
+  /* Integrity and caution. Amber-deep is darkened from #A85A10 so small text clears 4.5:1 on paper and sunk surfaces. */
+  --amber: #e0862c;
+  --amber-deep: #944e0e;
   --rule: rgb(18 17 14 / 0.16);
   /* Behind a modal: dims the page without inverting it in dark mode. */
   --scrim: rgb(18 17 14 / 0.42);
@@ -43,6 +49,11 @@
   --ink-muted: #9b9587;
   --vermilion: #e0492a;
   --vermilion-deep: #ef6a4c;
+  /* Lighter variants so text clears 4.5:1 on the dark paper (cobalt 6.9:1 and amber 9.4:1 on paper). */
+  --cobalt: #7c97ff;
+  --cobalt-deep: #a9bbff;
+  --amber: #f0a85a;
+  --amber-deep: #f7c48a;
   --rule: rgb(243 238 227 / 0.16);
   --scrim: rgb(0 0 0 / 0.62);
 }
@@ -51,7 +62,7 @@
 :root,
 [data-theme],
 [data-palette] {
-  /* Mapped to the names shadcn/ui components expect. */
+  /* Mapped to the token names the UI primitives expect. */
   --background: var(--paper);
   --foreground: var(--ink);
   --card: var(--paper-raised);
@@ -84,6 +95,10 @@
   --color-ink-muted: var(--ink-muted);
   --color-vermilion: var(--vermilion);
   --color-vermilion-deep: var(--vermilion-deep);
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-deep: var(--cobalt-deep);
+  --color-amber: var(--amber);
+  --color-amber-deep: var(--amber-deep);
   --color-rule: var(--rule);
   --color-scrim: var(--scrim);
 
@@ -230,6 +245,11 @@
   input::-ms-reveal,
   input::-ms-clear {
     display: none;
+  }
+
+  /* Links underline in cobalt on hover. Layered, so buttons and other classed links keep their own colours. */
+  a:hover {
+    text-decoration-color: var(--cobalt);
   }
 
   /* Stops browsers painting autofilled fields in their own colours. */

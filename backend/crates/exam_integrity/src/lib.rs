@@ -426,7 +426,7 @@ async fn monitor(
     .fetch_one(&state.db)
     .await?;
     Ok(ResponseJson(
-        json!({"data":{"serverNow":time::OffsetDateTime::now_utc(),"phase":examcore::phase(&exam.status,exam.starts_at,exam.ends_at,examcore::now()),"enrolled":monitor.1,"notStarted":monitor.4,"inProgress":monitor.2,"submitted":monitor.3,"rows":monitor.0,"announcements":monitor.5}}),
+        json!({"data":{"serverNow":examcore::iso(examcore::now()),"phase":examcore::phase(&exam.status,exam.starts_at,exam.ends_at,examcore::now()),"enrolled":monitor.1,"notStarted":monitor.4,"inProgress":monitor.2,"submitted":monitor.3,"rows":monitor.0,"announcements":monitor.5}}),
     ))
 }
 

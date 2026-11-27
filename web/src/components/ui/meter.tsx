@@ -7,8 +7,8 @@ type MeterProps = {
   label: string;
   /** Spoken value, for example "12 of 20 answered". */
   valueText?: string;
-  /** accent: the bar that needs attention. Use rarely. */
-  tone?: "ink" | "accent" | "muted";
+  /** accent: vermilion, for a failure or the bar that needs attention. info: cobalt, a live or running count. caution: amber, a count that needs review. Use rarely. */
+  tone?: "ink" | "accent" | "muted" | "info" | "caution";
   size?: "sm" | "md";
   className?: string;
 };
@@ -32,7 +32,15 @@ export function Meter({ value, max, label, valueText, tone = "ink", size = "sm",
       <div
         className={cn(
           "absolute inset-0 origin-left transition-transform duration-(--duration-slow) ease-(--ease-enter)",
-          tone === "accent" ? "bg-vermilion-deep" : tone === "muted" ? "bg-ink-muted" : "bg-ink",
+          tone === "accent"
+            ? "bg-vermilion-deep"
+            : tone === "muted"
+              ? "bg-ink-muted"
+              : tone === "info"
+                ? "bg-cobalt"
+                : tone === "caution"
+                  ? "bg-amber"
+                  : "bg-ink",
         )}
         style={{ transform: `scaleX(${ratio})` }}
       />
