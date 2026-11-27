@@ -108,3 +108,12 @@
     min-height: 56px;
   }
 }
+
+/* The exam screen never scrolls as a page: only the question pane scrolls. Without this, focusing a visually
+   hidden option input could scroll the window and push the questions out of view under the pinned header. */
+html:has(#ws-questions),
+html:has(#ws-questions) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
