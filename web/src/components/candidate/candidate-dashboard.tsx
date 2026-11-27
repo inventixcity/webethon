@@ -8,7 +8,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import type { CandidateDashboard as Dashboard, CandidateExamCard, CandidateResult } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
 import { useApiData } from "./use-api-data";
-import { VelocityMarquee } from "@/components/effects/velocity-marquee";
 import { MagneticCta } from "@/components/app-shell/magnetic-cta";
 import { useTick, serverOffset } from "./clock";
 import { ACCESS_LABEL, describeError, formatClock, formatCountdown, formatDuration, formatWindow } from "./format";
@@ -317,10 +316,6 @@ export function CandidateDashboard() {
 
       {total > 0 ? (
         <>
-          <VelocityMarquee
-            text={`${data.available.length} open now · ${data.upcoming.length} scheduled · ${data.completed.length} completed · results verifiable by code`}
-            className="border-b border-rule py-3 text-[clamp(1.1rem,2vw,1.5rem)] font-medium tracking-[-0.02em] uppercase"
-          />
           <dl className="grid grid-cols-3 gap-px border border-rule bg-rule">
             <Stat label="Open now" value={data.available.length} tone="live" />
             <Stat label="Scheduled" value={data.upcoming.length} />

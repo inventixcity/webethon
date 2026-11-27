@@ -7,7 +7,6 @@ import { Check } from "lucide-react";
 import { useTick } from "@/components/candidate/clock";
 import { formatCountdown } from "@/components/candidate/format";
 import { useToast } from "@/components/feedback/toaster";
-import { VelocityMarquee } from "@/components/effects/velocity-marquee";
 import { MagneticCta } from "@/components/app-shell/magnetic-cta";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -117,10 +116,6 @@ export function ExaminerHome() {
         </EmptyState>
       ) : (
         <>
-          <VelocityMarquee
-            text={`${ongoing.length} running · ${enrolled} candidates enrolled · ${attempts} attempts · ${toPublish.length} awaiting results · results verifiable by code`}
-            className="border-b border-rule py-3 text-[clamp(1.1rem,2vw,1.5rem)] font-medium tracking-[-0.02em] uppercase"
-          />
           <LiveBoard ongoing={ongoing} />
           <dl className="grid grid-cols-2 gap-px border border-rule bg-rule md:grid-cols-5">
             <Tile label="Exams" value={exams.length} note={data.nextCursor ? "First page only" : "All exams"} />
