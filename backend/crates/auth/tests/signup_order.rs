@@ -80,7 +80,7 @@ async fn signup(state: &AppState, email: &str, password: &str) -> (StatusCode, V
             json!({"name":"Test","email":email,"password":password}).to_string(),
         ))
         .unwrap();
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(state.clone())
         .oneshot(request)
         .await

@@ -98,10 +98,14 @@ pub fn email_sender(config: &Config) -> anyhow::Result<Arc<dyn EmailSender>> {
 pub fn router() -> Router<AppState> {
     routes::router()
 }
+
+/// The auth router with self-signup, demo sign-in and OAuth enabled (tests, and institutions that opt in).
+pub fn router_with_self_service() -> Router<AppState> {
+    routes::router_with(true)
+}
 mod codes;
 mod emails;
 mod mfa;
-#[allow(dead_code)] // OAuth is not offered; kept for institutions that enable it later.
 mod oauth;
 pub mod password;
 mod pending;

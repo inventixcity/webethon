@@ -733,6 +733,11 @@ async fn demo(State(state): State<AppState>, meta: RequestMeta) -> AppResult<Res
 /// self-signup, email-code verification for signup and one-click demo sign-in are off unless
 /// `ALLOW_SELF_SIGNUP=true`. OAuth is not offered.
 pub fn router() -> Router<AppState> {
+    router_with(std::env::var("ALLOW_SELF_SIGNUP").is_ok_and(|v| v == "true"))
+}
+
+/// The full auth router. `self_service` adds self-signup, its email-code verification, demo sign-in and OAuth.
+pub fn router_with(self_service: bool) -> Router<AppState> {
     let router = Router::new()
         .route("/signin", post(signin))
         .route("/signout", post(signout))
@@ -747,12 +752,13 @@ pub fn router() -> Router<AppState> {
         .route("/sessions", get(sessions))
         .route("/sessions/{id}", axum::routing::delete(delete_session))
         .merge(crate::mfa::router());
-    if std::env::var("ALLOW_SELF_SIGNUP").is_ok_and(|v| v == "true") {
+    if self_service {
         router
             .route("/signup", post(signup))
             .route("/verify-email", post(verify_email))
             .route("/resend-code", post(resend))
             .route("/demo", post(demo))
+            .merge(crate::oauth::router())
     } else {
         router
     }

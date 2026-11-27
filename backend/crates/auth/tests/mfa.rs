@@ -34,7 +34,7 @@ async fn call(
     if let Some(token) = token {
         req = req.header("authorization", format!("Bearer {token}"));
     }
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s.clone())
         .oneshot(req.body(Body::from(body.to_string())).unwrap())
         .await
@@ -732,7 +732,7 @@ async fn user_budget_spans_ips_and_challenges_and_ignores_expired(db: PgPool) {
                     .to_string(),
             ))
             .unwrap();
-        let res = auth::router()
+        let res = auth::router_with_self_service()
             .with_state(s.clone())
             .oneshot(req)
             .await

@@ -52,7 +52,7 @@ async fn call(
     if let Some(token) = token {
         req = req.header("authorization", format!("Bearer {token}"));
     }
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(state.clone())
         .oneshot(req.body(Body::from(body.to_string())).unwrap())
         .await
@@ -222,7 +222,7 @@ async fn duplicate_and_long_password(db: PgPool) {
 async fn rate_limit_has_retry_after(db: PgPool) {
     let (s, _) = setup(db);
     for _ in 0..20 {
-        let response = auth::router()
+        let response = auth::router_with_self_service()
             .with_state(s.clone())
             .oneshot(
                 Request::builder()
@@ -239,7 +239,7 @@ async fn rate_limit_has_retry_after(db: PgPool) {
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s)
         .oneshot(
             Request::builder()
@@ -438,7 +438,7 @@ async fn oauth_start_and_bad_state(db: PgPool) {
         client_id: "client-id".into(),
         client_secret: secrecy::SecretString::from("secret"),
     });
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s.clone())
         .oneshot(
             Request::builder()
@@ -464,7 +464,7 @@ async fn oauth_start_and_bad_state(db: PgPool) {
         .next()
         .unwrap()
         .to_owned();
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s.clone())
         .oneshot(
             Request::builder()
@@ -482,7 +482,7 @@ async fn oauth_start_and_bad_state(db: PgPool) {
             .unwrap()
             .ends_with("/login?error=oauth")
     );
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s)
         .oneshot(
             Request::builder()
@@ -570,7 +570,7 @@ async fn auth_password_hash(s: &AppState, password: &str) -> String {
 async fn signup_cookie_only_and_bounded_tokens(db: PgPool) {
     let (mut s, c) = setup(db);
     Arc::make_mut(&mut s.config).secure_cookies = true;
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s.clone())
         .oneshot(
             Request::builder()
@@ -623,7 +623,7 @@ async fn signup_cookie_only_and_bounded_tokens(db: PgPool) {
     )
     .await;
     assert_eq!(oversized.1["error"]["code"], "VALIDATION_FAILED");
-    let response = auth::router()
+    let response = auth::router_with_self_service()
         .with_state(s.clone())
         .oneshot(
             Request::builder()

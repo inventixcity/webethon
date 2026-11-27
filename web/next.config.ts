@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
 const isProd = process.env.NODE_ENV === "production";
 
 /*
@@ -24,8 +23,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
     return [
-      { source: "/:path*", headers: [...securityHeaders, { key: "Cache-Control", value: "no-store" }] },
-      { source: "/_next/static/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+      // Security headers everywhere. Pages and API responses are never cached; Next.js already serves its own
+      // content-hashed build assets as immutable in production, so they are left to the framework (a custom
+      // immutable rule here would also pin stale assets in development).
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/((?!_next/|images/|lottie/|samples/|vendor/|favicon|icon).*)", headers: [{ key: "Cache-Control", value: "no-store" }] },
     ];
   },
 };
