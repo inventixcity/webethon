@@ -235,7 +235,7 @@ fn median(x: &[f64]) -> Option<f64> {
     if x.is_empty() {
         None
     } else {
-        Some(if x.len() % 2 == 0 {
+        Some(if x.len().is_multiple_of(2) {
             (x[x.len() / 2 - 1] + x[x.len() / 2]) / 2.
         } else {
             x[x.len() / 2]
@@ -415,6 +415,7 @@ async fn question_stats(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use axum::{body::Body, http::Request};

@@ -301,9 +301,9 @@ async fn journal(
             reason = Some("future");
         } else if entry.written_at > examcore::unix_ms(deadline)
             || entry.written_at > entry.lease.deadline_at
+            // Received after the deadline from a device that was online at the deadline: not a verified outage.
+            || (now > deadline && !offline_at_deadline)
         {
-            reason = Some("late");
-        } else if now > deadline && !offline_at_deadline {
             reason = Some("late");
         } else if entry.seq <= seq {
             reason = Some("stale");
@@ -651,9 +651,11 @@ async fn time_credit(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod security_tests;
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     #[test]
     fn journal_chain_fixed_vector() {

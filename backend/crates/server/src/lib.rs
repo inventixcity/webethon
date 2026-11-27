@@ -477,6 +477,7 @@ fn too_deep(bytes: &[u8]) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::{contract_error_status, is_import_path, too_deep};
     use axum::http::StatusCode;

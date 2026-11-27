@@ -9,9 +9,6 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
-flags = { path = "crates/flags" }
-shares = { path = "crates/shares" }
-transfer = { path = "crates/transfer" }
 webhooks = { path = "crates/webhooks" }
 csv = "1.4.0"
 jobs = { path = "crates/jobs" }
@@ -37,12 +34,10 @@ exam_analytics = { path = "crates/exam_analytics" }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 admin = { path = "crates/admin" }
 places = { path = "crates/places" }
-booking = { path = "crates/booking" }
 payments = { path = "crates/payments" }
 teams = { path = "crates/teams" }
 social = { path = "crates/social" }
 assist = { path = "crates/assist" }
-analytics = { path = "crates/analytics" }
 auth = { path = "crates/auth" }
 records = { path = "crates/records" }
 files = { path = "crates/files" }

@@ -48,7 +48,9 @@ export function normaliseCode(raw: string, numeric = false): string {
 // The same cell as the reset-code design: a bordered row of cells, the active one paper-raised, a filled one inverted.
 // In dark mode bg-ink resolves to the graphite fill (see globals.css), and the text is on-fill ivory.
 const cellBase =
-  "leading-none transition-colors duration-(--duration-slow) data-[active]:bg-paper-raised data-[filled]:bg-ink data-[filled]:text-on-fill";
+  // Filled cells use the sunken surface with ink text, so characters read in both themes (an ink fill turns ivory in
+  // dark mode and would hide them). The active cell carries a cobalt outline inside its frame.
+  "leading-none text-ink transition-colors duration-(--duration-slow) data-[active]:bg-paper-raised data-[active]:outline-2 data-[active]:-outline-offset-2 data-[active]:outline-cobalt data-[filled]:bg-paper-sunk";
 
 const cellSize = {
   display: "aspect-square text-[clamp(2.25rem,9vw,8.5rem)] md:aspect-auto md:h-[clamp(5.5rem,24dvh,15rem)]",
@@ -105,7 +107,7 @@ export function CodeGrid({
     groups.push(
       <div
         key={start}
-        className="grid min-w-0 divide-x divide-ink border-y border-ink sm:flex-1"
+        className="grid min-w-0 divide-x divide-ink border border-ink sm:flex-1"
         style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` } satisfies CSSProperties}
       >
         {Array.from({ length: count }, (_, offset) => {

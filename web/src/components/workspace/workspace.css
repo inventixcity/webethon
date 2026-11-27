@@ -77,3 +77,9 @@
     transform: none;
   }
 }
+
+/* Top bar rows and banners share the workspace gutter, so nothing sits flush against the screen edge. */
+.ws-bar,
+.ws-banner {
+  padding-inline: clamp(16px, 3vw, 32px);
+}

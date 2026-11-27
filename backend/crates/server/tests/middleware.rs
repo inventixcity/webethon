@@ -178,18 +178,12 @@ async fn middleware_contract(db: PgPool) {
             get(|| async { ([(header::CACHE_CONTROL, "private, max-age=3600")], "file") }),
         );
     let app = server::finish_router(router, state, storage, hub);
+    // Invigil routes that must reject an unauthenticated caller before any handler work.
     for (method, uri, content_type) in [
-        ("GET", "/api/v1/webhooks", "application/json"),
-        (
-            "GET",
-            "/api/v1/entities/books/export?format=json&scope=mine",
-            "application/json",
-        ),
-        (
-            "POST",
-            "/api/v1/entities/books/import",
-            "multipart/form-data; boundary=x",
-        ),
+        ("GET", "/api/v1/questions", "application/json"),
+        ("GET", "/api/v1/exams", "application/json"),
+        ("GET", "/api/v1/me/exams", "application/json"),
+        ("GET", "/api/v1/admin/users", "application/json"),
     ] {
         let response = app
             .clone()
@@ -369,21 +363,7 @@ async fn middleware_contract(db: PgPool) {
         .await
         .expect("response");
     assert_eq!(response.headers()["cache-control"], "private, max-age=3600");
-    let file_id: String = sqlx::query_scalar("with owner as (insert into users (email) values ('file@example.com') returning id) insert into files (id, owner_id, key, content_type, size_bytes, sha256, visibility) select gen_random_uuid(), id, 'test', 'image/png', 1, decode(repeat('00',32),'hex'), 'public' from owner returning id::text")
-        .fetch_one(&db).await.expect("file fixture");
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .uri(format!("/api/v1/files/{file_id}/content"))
-                .header("if-none-match", format!("\"{}\"", "00".repeat(32)))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response");
-    assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-    assert_eq!(response.headers()["cache-control"], "public, max-age=3600");
+    // File downloads are not mounted in Invigil (no upload surface), so their caching is not exercised here.
     let response = app
         .clone()
         .oneshot(
@@ -398,10 +378,6 @@ async fn middleware_contract(db: PgPool) {
     let rendered = metrics.render();
     assert!(
         rendered.contains("route=\"/test/items/{id}\""),
-        "{rendered}"
-    );
-    assert!(
-        rendered.contains("route=\"/api/v1/files/{id}/content\""),
         "{rendered}"
     );
     assert!(rendered.contains("route=\"<unmatched>\""), "{rendered}");
@@ -453,7 +429,7 @@ async fn middleware_contract(db: PgPool) {
         let value: serde_json::Value = serde_json::from_slice(&body).expect("JSON error");
         assert!(value["error"]["code"].is_string());
     }
-    for uri in ["/api/v1/flags", "/api/v1/public/shares/invalid"] {
+    for uri in ["/api/v1/exams", "/api/v1/verify/INVALID-CODE"] {
         let response = app
             .clone()
             .oneshot(
@@ -471,9 +447,6 @@ async fn middleware_contract(db: PgPool) {
             .expect("cache-control");
         let directives: Vec<_> = cache_control.split(',').map(str::trim).collect();
         assert!(directives.contains(&"no-store"));
-        if uri == "/api/v1/flags" {
-            assert!(directives.contains(&"private"));
-        }
     }
     let multipart = format!(
         "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.png\"\r\nContent-Type: image/png\r\n\r\n{}\r\n--boundary--\r\n",

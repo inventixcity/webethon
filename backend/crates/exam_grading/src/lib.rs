@@ -308,7 +308,7 @@ async fn publish_results(
     if owner.is_none_or(|owner| owner != viewer.id && !viewer.is_admin()) {
         return Err(AppError::not_found());
     }
-    let blockers = publication_blockers(&mut *tx, exam_id).await?;
+    let blockers = publication_blockers(&mut tx, exam_id).await?;
     if !blockers.is_empty() {
         return Err(conflict(
             "grading_incomplete",
@@ -330,7 +330,7 @@ async fn publish_results(
         let score: f64 = candidate.try_get("total_score")?;
         let display_name: String = candidate.try_get("display_name")?;
         issue_certificate(
-            &mut *tx,
+            &mut tx,
             attempt_id,
             &exam_title,
             &display_name,
@@ -695,7 +695,7 @@ async fn exam_report(
         .get("totalMarks")
         .and_then(Value::as_f64)
         .unwrap_or(0.0);
-    let mut distribution = vec![0_i32; 10];
+    let mut distribution = [0_i32; 10];
     for score in &scores {
         let percent = if total_marks > 0.0 {
             score / total_marks * 100.0
@@ -733,7 +733,105 @@ async fn exam_report(
     Ok(examcore::ok(report))
 }
 
+/// Recalculate an attempt's objective and written scores from its frozen paper.
+/// Safe to call repeatedly; manual marks are preserved and objective marks are replaced.
+pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> AppResult<()> {
+    let order: Option<Vec<Uuid>> =
+        sqlx::query_scalar("select item_order from attempts where id = $1")
+            .bind(attempt_id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    let order = order.ok_or_else(AppError::not_found)?;
+
+    let mut auto_score = 0.0_f64;
+    let mut manual_score = 0.0_f64;
+    let mut written_count = 0_i64;
+    let mut graded_count = 0_i64;
+
+    for item_id in order {
+        let row = sqlx::query(
+            "select i.kind, i.correct, i.options, i.marks::float8 as marks, \
+                    i.negative_marks::float8 as negative_marks, i.multi_rule, \
+                    a.response, a.manual_marks::float8 as manual_marks \
+             from exam_items i left join answers a on a.item_id = i.id and a.attempt_id = $1 \
+             where i.id = $2",
+        )
+        .bind(attempt_id)
+        .bind(item_id)
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(AppError::not_found)?;
+
+        let kind: String = row.try_get("kind")?;
+        if kind == "written" {
+            written_count += 1;
+            let manual_marks: Option<f64> = row.try_get("manual_marks")?;
+            if let Some(marks) = manual_marks {
+                graded_count += 1;
+                manual_score += marks;
+            }
+            continue;
+        }
+
+        let correct: Vec<String> = serde_json::from_value(row.try_get("correct")?)
+            .map_err(|_| AppError::internal("Stored answer key is invalid."))?;
+        let options: Value = row.try_get("options")?;
+        let option_count = options.as_array().map_or(0, Vec::len);
+        let response: Option<Value> = row.try_get("response")?;
+        let selected = response
+            .as_ref()
+            .and_then(|value| value.get("selected"))
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let scheme = MarkingScheme {
+            kind,
+            correct,
+            option_count,
+            marks: row.try_get("marks")?,
+            negative_marks: row.try_get("negative_marks")?,
+            multi_rule: row.try_get("multi_rule")?,
+        };
+        let marks = score_objective(&scheme, &selected).unwrap_or(0.0);
+        sqlx::query("update answers set auto_marks = $3 where attempt_id = $1 and item_id = $2")
+            .bind(attempt_id)
+            .bind(item_id)
+            .bind(marks)
+            .execute(&mut *conn)
+            .await?;
+        auto_score += marks;
+    }
+
+    let status = if written_count == 0 || graded_count == written_count {
+        "complete"
+    } else if graded_count > 0 {
+        "partial"
+    } else {
+        "pending"
+    };
+    let total_score = round2((auto_score + manual_score).max(0.0));
+    sqlx::query(
+        "update attempts set auto_score = $2, manual_score = $3, total_score = $4, \
+         grading_status = $5, updated_at = now() where id = $1",
+    )
+    .bind(attempt_id)
+    .bind(round2(auto_score))
+    .bind(round2(manual_score))
+    .bind(total_score)
+    .bind(status)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use examcore::kernel::crypto::sha256;
@@ -985,101 +1083,4 @@ mod tests {
         );
         Ok(())
     }
-}
-
-/// Recalculate an attempt's objective and written scores from its frozen paper.
-/// Safe to call repeatedly; manual marks are preserved and objective marks are replaced.
-pub async fn autograde_attempt(conn: &mut PgConnection, attempt_id: Uuid) -> AppResult<()> {
-    let order: Option<Vec<Uuid>> =
-        sqlx::query_scalar("select item_order from attempts where id = $1")
-            .bind(attempt_id)
-            .fetch_optional(&mut *conn)
-            .await?;
-    let order = order.ok_or_else(AppError::not_found)?;
-
-    let mut auto_score = 0.0_f64;
-    let mut manual_score = 0.0_f64;
-    let mut written_count = 0_i64;
-    let mut graded_count = 0_i64;
-
-    for item_id in order {
-        let row = sqlx::query(
-            "select i.kind, i.correct, i.options, i.marks::float8 as marks, \
-                    i.negative_marks::float8 as negative_marks, i.multi_rule, \
-                    a.response, a.manual_marks::float8 as manual_marks \
-             from exam_items i left join answers a on a.item_id = i.id and a.attempt_id = $1 \
-             where i.id = $2",
-        )
-        .bind(attempt_id)
-        .bind(item_id)
-        .fetch_optional(&mut *conn)
-        .await?
-        .ok_or_else(AppError::not_found)?;
-
-        let kind: String = row.try_get("kind")?;
-        if kind == "written" {
-            written_count += 1;
-            let manual_marks: Option<f64> = row.try_get("manual_marks")?;
-            if let Some(marks) = manual_marks {
-                graded_count += 1;
-                manual_score += marks;
-            }
-            continue;
-        }
-
-        let correct: Vec<String> = serde_json::from_value(row.try_get("correct")?)
-            .map_err(|_| AppError::internal("Stored answer key is invalid."))?;
-        let options: Value = row.try_get("options")?;
-        let option_count = options.as_array().map_or(0, Vec::len);
-        let response: Option<Value> = row.try_get("response")?;
-        let selected = response
-            .as_ref()
-            .and_then(|value| value.get("selected"))
-            .and_then(Value::as_array)
-            .map(|values| {
-                values
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        let scheme = MarkingScheme {
-            kind,
-            correct,
-            option_count,
-            marks: row.try_get("marks")?,
-            negative_marks: row.try_get("negative_marks")?,
-            multi_rule: row.try_get("multi_rule")?,
-        };
-        let marks = score_objective(&scheme, &selected).unwrap_or(0.0);
-        sqlx::query("update answers set auto_marks = $3 where attempt_id = $1 and item_id = $2")
-            .bind(attempt_id)
-            .bind(item_id)
-            .bind(marks)
-            .execute(&mut *conn)
-            .await?;
-        auto_score += marks;
-    }
-
-    let status = if written_count == 0 || graded_count == written_count {
-        "complete"
-    } else if graded_count > 0 {
-        "partial"
-    } else {
-        "pending"
-    };
-    let total_score = round2((auto_score + manual_score).max(0.0));
-    sqlx::query(
-        "update attempts set auto_score = $2, manual_score = $3, total_score = $4, \
-         grading_status = $5, updated_at = now() where id = $1",
-    )
-    .bind(attempt_id)
-    .bind(round2(auto_score))
-    .bind(round2(manual_score))
-    .bind(total_score)
-    .bind(status)
-    .execute(&mut *conn)
-    .await?;
-    Ok(())
 }

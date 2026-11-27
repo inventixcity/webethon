@@ -149,31 +149,38 @@ export default function LandingPage() {
             amplitude={120}
             direction="left"
           />
-          {/* Hero figure: framed in the ink area beside the headline, sized explicitly so it can never collapse. */}
-          <figure className="pointer-events-none absolute top-[15%] right-[4vw] z-10 hidden w-[min(30vw,480px)] lg:block">
-            <figcaption
-              data-theme="dark"
-              className="mb-3 flex justify-between gap-6 bg-transparent font-mono text-[11px] tracking-[0.14em] text-ink-muted uppercase"
-            >
-              <span className="text-ink tabular-nums">FIG. 00</span>
-              <span>Answer paper, ink and light</span>
-            </figcaption>
-            <Art
-              name="hero"
-              darkName="hero-dark"
-              alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
-              sizes="(min-width: 1024px) 30vw, 90vw"
-              priority
-              position="object-right"
-              className="grain h-[min(46vh,520px)] w-full border border-paper/40 shadow-none"
-            />
+          {/* Hero figure: a slightly tilted answer sheet on a small stack of offset frames (cobalt, amber), sealed
+              with a vermilion figure stamp. Sized explicitly, so it can never collapse. */}
+          <figure className="pointer-events-none absolute top-[14%] right-[5vw] z-10 hidden w-[min(28vw,440px)] lg:block">
+            <div className="relative -rotate-2">
+              <div aria-hidden="true" className="absolute inset-0 translate-x-6 translate-y-6 border border-amber" />
+              <div aria-hidden="true" className="absolute inset-0 translate-x-3 translate-y-3 border border-cobalt bg-paper-sunk" />
+              <Art
+                name="hero"
+                darkName="hero-dark"
+                alt="A sheet of exam answer paper on a desk, with a fountain pen and a vermilion ribbon bookmark"
+                sizes="(min-width: 1024px) 28vw, 90vw"
+                priority
+                position="object-right"
+                className="grain h-[min(44vh,480px)] w-full border border-ink bg-paper"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute -top-5 -left-5 grid size-16 place-items-center bg-vermilion-deep font-mono text-[11px] tracking-[0.14em] text-paper uppercase"
+                data-theme="light"
+              >
+                Fig. 00
+              </span>
+            </div>
+            <figcaption className="sr-only">Figure 00: answer paper, ink and light.</figcaption>
           </figure>
-          {/* Actions sit on the paper-coloured water, so they use the light palette in both themes. */}
-          <div data-theme="light" className="absolute bottom-[17%] left-5 z-10 flex flex-wrap items-center gap-4 bg-transparent md:left-8">
-            <Button asChild size="lg">
+          {/* Actions sit on the water, which is always the inverse of the page colour, so they use the inverse
+              buttons: cream on ink in light mode, ink on cream in dark mode. */}
+          <div className="absolute bottom-[17%] left-5 z-10 flex flex-wrap items-center gap-4 md:left-8">
+            <Button asChild variant="inverse" size="lg">
               <Link href="/login">Sign in</Link>
             </Button>
-            <Button asChild variant="secondary" size="lg">
+            <Button asChild variant="outline-inverse" size="lg">
               <Link href="/verify">Verify a result</Link>
             </Button>
           </div>

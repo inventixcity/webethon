@@ -784,6 +784,7 @@ async fn audit(
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use examcore::kernel::{Viewer, viewer::Role};

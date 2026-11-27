@@ -302,7 +302,7 @@ async fn seed_demo_accounts(db: &sqlx::PgPool, config: &Arc<Config>) -> anyhow::
     }
     seed_demo_exams(&mut tx, &people).await?;
     tx.commit().await?;
-    println!("{:<32} {:<24} {}", "Email", "Name", "Password");
+    println!("{:<32} {:<24} Password", "Email", "Name");
     for (email, name, _) in people {
         println!("{email:<32} {name:<24} Invigil#Demo2026");
     }
@@ -326,7 +326,7 @@ async fn seed_demo_exams(
     let mut question_ids = Vec::with_capacity(inputs.len());
     for question in &inputs {
         question_ids.push(
-            exam_questions::insert_question(&mut **tx, owner, question)
+            exam_questions::insert_question(tx, owner, question)
                 .await?
                 .id,
         );
@@ -439,6 +439,7 @@ async fn seed_demo_exams(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // Seed fixture: one call per demo exam keeps the fixtures readable.
 async fn create_seed_exam(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     owner: sqlx::types::Uuid,
@@ -540,12 +541,12 @@ async fn seed_attempt(
         sqlx::query("insert into answers(attempt_id,item_id,response,client_seq,manual_marks,feedback,graded_by,graded_at) values($1,$2,$3,$4,$5,$6,$7,case when $5::float8 is null then null else now() end)")
             .bind(attempt).bind(item_id).bind(response).bind(position as i64).bind(manual_marks).bind(feedback).bind(grader).execute(&mut **tx).await?;
     }
-    if identical_wrong || profile % 4 == 0 {
+    if identical_wrong || profile.is_multiple_of(4) {
         sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'focus_lost','notice',$2),($1,'paste','warning',$2)")
             .bind(attempt).bind(serde_json::json!({"count":1})).execute(&mut **tx).await?;
     }
-    exam_attempts::submit_tx(&mut **tx, attempt).await?;
-    exam_grading::autograde_attempt(&mut **tx, attempt).await?;
+    exam_attempts::submit_tx(tx, attempt).await?;
+    exam_grading::autograde_attempt(tx, attempt).await?;
     Ok(())
 }
 
@@ -708,6 +709,7 @@ async fn shutdown_signal() {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod hashing_tests {
     #[test]
     fn hashing_is_bounded() {
