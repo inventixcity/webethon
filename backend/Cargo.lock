@@ -17,7 +17,7 @@ dependencies = [
  "async-trait",
  "auth",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "files",
  "futures",
@@ -255,7 +255,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hex",
  "hmac",
  "kernel",
@@ -443,7 +443,7 @@ name = "booking"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "chrono-tz",
  "kernel",
@@ -1022,7 +1022,7 @@ name = "exam_assist"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "examcore",
  "kernel",
  "rand 0.8.8",
@@ -1042,7 +1042,7 @@ name = "exam_attempts"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "exam_grading",
  "examcore",
  "kernel",
@@ -1098,7 +1098,7 @@ name = "exam_disputes"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "exam_grading",
  "examcore",
  "kernel",
@@ -1138,7 +1138,7 @@ name = "exam_grading"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "examcore",
  "hex",
  "kernel",
@@ -1180,7 +1180,7 @@ name = "exam_questions"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "examcore",
  "kernel",
  "reqwest 0.12.28",
@@ -1199,7 +1199,7 @@ name = "exam_resilience"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "exam_attempts",
  "exam_grading",
  "examcore",
@@ -1240,7 +1240,7 @@ name = "examcore"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "ed25519-dalek",
  "hex",
  "kernel",
@@ -2067,7 +2067,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "kernel",
  "rand 0.8.8",
  "secrecy",
@@ -2160,7 +2160,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hex",
  "hmac",
  "rand 0.8.8",
@@ -3151,7 +3151,7 @@ dependencies = [
  "anyhow",
  "auth",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "jsonschema",
  "kernel",
  "reqwest 0.12.28",
@@ -3613,7 +3613,7 @@ dependencies = [
  "assist",
  "auth",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "exam_analytics",
  "exam_assist",
@@ -3685,7 +3685,7 @@ name = "shares"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "kernel",
  "records",
  "reqwest 0.12.28",
@@ -4117,7 +4117,7 @@ name = "teams"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "kernel",
  "rand 0.8.8",
  "reqwest 0.12.28",
@@ -4722,7 +4722,7 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hmac",
  "jobs",
  "kernel",
