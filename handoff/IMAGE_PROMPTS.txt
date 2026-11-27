@@ -1,0 +1,89 @@
+INVENTIX INVIGIL: IMAGE PROMPTS
+================================
+Generate each image, save it with the EXACT file name shown, and drop all of them into:
+    web/public/images/
+Then tell the lead "images added". The lead converts them to .webp, sizes them and wires them in.
+
+Shared style (already included in every prompt, so don't change it):
+- The palette is strict: warm ivory paper (#F3EEE3), deep ink black (#12110E), and ONE small vermilion red accent (#D23A1C).
+  No other colours, no purple, no blue, no gradients, no glow, no glassmorphism.
+- Editorial print look: a fashion-magazine / Swiss-poster feel, risograph or halftone grain, crisp hairline rules,
+  generous negative space, square corners, high contrast, matte paper texture.
+- No text, letters, numbers, logos or watermarks in the image (the UI adds its own type).
+- No people's faces in close-up (privacy theme). Hands, silhouettes, objects and spaces are fine.
+
+------------------------------------------------------------------
+1) hero.png   (landscape 2400x1350, 16:9): the landing-page hero
+------------------------------------------------------------------
+Editorial still-life photograph printed as a two-colour risograph: a single sheet of exam answer paper lying on a
+matte ivory desk, a fountain pen resting diagonally across it, a thin vermilion red ribbon bookmark trailing off
+the edge as the only accent colour. Strong top-left window light casting long, crisp ink-black shadows. Halftone dot
+grain, generous empty ivory space on the right third for headline text. Palette strictly warm ivory #F3EEE3, deep
+ink black #12110E, one vermilion #D23A1C accent. Swiss poster composition, square corners, no text, no logos.
+
+------------------------------------------------------------------
+2) feature-resilience.png   (square 1600x1600): "Pull the plug. Lose nothing. Gain nothing." (offline-resilient exams)
+------------------------------------------------------------------
+Minimal editorial risograph illustration-photograph hybrid: an ink-black network cable unplugged and lying in a
+gentle S-curve on warm ivory paper, its plug end resting beside a small stack of neatly squared paper index cards
+held together by a single vermilion red paper clip (the only accent). Hard directional light, deep black shadows,
+halftone grain, lots of negative space. Calm, confident, nothing broken. Palette strictly ivory #F3EEE3, ink
+#12110E, one vermilion #D23A1C accent. No text, no logos, square corners.
+
+------------------------------------------------------------------
+3) feature-integrity.png   (square 1600x1600): privacy-light integrity in the AI era
+------------------------------------------------------------------
+Editorial two-colour risograph still life: a magnifying glass lying on an ivory sheet covered with faint, abstract,
+illegible ink hatch lines (no readable text). Through the lens a tiny hidden pattern of fine dots becomes visible,
+suggesting an invisible watermark; one dot in the lens is vermilion red (the only accent). Crisp black shadow,
+halftone texture, Swiss minimal composition, generous negative space. Palette strictly ivory #F3EEE3, ink #12110E,
+one vermilion #D23A1C accent. No camera, no eye imagery, no text, no logos.
+
+------------------------------------------------------------------
+4) feature-verify.png   (landscape 1600x1000): verifiable result certificates (QR / signature)
+------------------------------------------------------------------
+Overhead editorial photograph printed as risograph: a crisp ivory certificate card with a square, abstract,
+QR-like grid of black squares (not a real scannable code) in one corner, a vermilion red wax seal pressed beside it
+as the only accent, on a matte ivory surface with a fine black hairline ruler alongside. Hard light, long shadow,
+halftone grain, precise grid composition. Palette strictly ivory #F3EEE3, ink #12110E, one vermilion #D23A1C. No
+text, no letters, no logos.
+
+------------------------------------------------------------------
+5) login-side.png   (portrait 1200x1800): image panel beside the sign-in form
+------------------------------------------------------------------
+Tall editorial risograph composition: a quiet, empty examination hall seen from a low angle, rows of simple square
+wooden desks receding into ivory space, tall windows throwing long parallel ink-black shadows across the floor. One
+desk has a single vermilion red pencil on it (the only accent). Grainy halftone, high contrast, lots of empty
+ivory in the top half. Palette strictly ivory #F3EEE3, ink #12110E, one vermilion #D23A1C. No people, no text.
+
+------------------------------------------------------------------
+6) empty-state.png   (landscape 1200x800): friendly empty states ("No exams yet")
+------------------------------------------------------------------
+Minimal editorial risograph still life: a single blank ivory sheet of paper, perfectly square-cornered, slightly
+lifted at one corner casting a soft but crisp black shadow, a short vermilion red pencil lying parallel to its
+bottom edge (the only accent). Vast negative space, halftone grain, calm and optimistic. Palette strictly ivory
+#F3EEE3, ink #12110E, one vermilion #D23A1C. No text, no logos.
+
+------------------------------------------------------------------
+7) og-image.png   (landscape 1200x630): link preview / social share card
+------------------------------------------------------------------
+Bold Swiss-poster composition in two-colour risograph: a large ink-black square block occupying the left half on a
+warm ivory background, a thin vermilion red horizontal rule crossing the full width at the lower third (the only
+accent), a fountain pen nib silhouette in the black block rendered in ivory negative space. Strong geometric
+balance, halftone grain, generous margins. Palette strictly ivory #F3EEE3, ink #12110E, one vermilion #D23A1C. No
+text (the title is overlaid later), no logos.
+
+------------------------------------------------------------------
+8) dark-hero.png   (landscape 2400x1350): dark-mode version of the hero
+------------------------------------------------------------------
+Same scene as hero.png but in a dark editorial key: a sheet of answer paper and a fountain pen on a deep ink-black
+desk (#12110E), lit by a single narrow beam of warm ivory light, with paper and highlights in ivory (#F3EEE3) and the
+ribbon bookmark in vermilion (#D23A1C) as the only accent. Halftone grain, deep shadows, empty dark space on the
+right third. No text, no logos.
+
+------------------------------------------------------------------
+9) favicon-mark.png   (square 1024x1024): app icon source (optional)
+------------------------------------------------------------------
+A flat, geometric mark: a bold ink-black square on warm ivory, with a single vermilion red square tick-mark notch
+cut into its lower-right corner. Perfectly flat, no texture, no gradient, no text, centered with 12% margin.
+Palette strictly ivory #F3EEE3, ink #12110E, vermilion #D23A1C.

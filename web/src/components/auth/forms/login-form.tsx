@@ -5,12 +5,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import { signIn, signInAsDemo, signInWithProvider } from "@/features/auth/client";
+import { signIn } from "@/features/auth/client";
 import { type LoginValues, loginSchema } from "@/features/auth/schemas";
 import { useAuthAction } from "@/features/auth/use-auth-action";
 import { useAuthRoutes } from "@/features/auth/use-auth-routes";
 import { Field, PasswordField } from "../field";
-import { SocialButtons } from "../social-buttons";
 import { SubmitButton } from "../submit-button";
 
 const quietLink =
@@ -149,30 +148,12 @@ export function LoginForm({
       >
         Sign in
       </SubmitButton>
-      <SocialButtons
-        disabled={pending !== null}
-        pending={pending}
-        onSelect={(provider) => attempt(provider, () => signInWithProvider(provider))}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={pending !== null}
-        loading={pending === "demo"}
-        onClick={() => attempt("demo", signInAsDemo)}
-      >
-        {pending === "demo" ? "Opening the demo" : "Try the demo, no account needed"}
-      </Button>
     </>
   );
 
   const signup = (
     <p className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
-      New here?{" "}
-      <Link href={routes.signup} className="text-ink underline underline-offset-4 hover:text-vermilion-deep">
-        Open an account
-      </Link>
+      Accounts are created by your institution.
     </p>
   );
 

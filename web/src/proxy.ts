@@ -11,6 +11,7 @@ import { signedVisitorHeaders } from "@/lib/api/forward";
  */
 
 const APP = "/app";
+const EXAM = "/exam";
 const SIGN_IN_PAGES = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {
@@ -19,15 +20,14 @@ export async function proxy(request: NextRequest) {
   requestHeaders.delete("x-app-pathname");
   requestHeaders.set("x-app-pathname", request.nextUrl.pathname);
   const next = () => NextResponse.next({ request: { headers: requestHeaders } });
-  if (process.env.NEXT_PUBLIC_API_ENABLED !== "true") return next();
-
   const { pathname, search, searchParams } = request.nextUrl;
   const signedIn = SESSION_COOKIES.some((name) => request.cookies.has(name));
 
-  if (pathname === APP || pathname.startsWith(`${APP}/`)) {
+  if (pathname === APP || pathname.startsWith(`${APP}/`) || pathname === EXAM || pathname.startsWith(`${EXAM}/`)) {
     if (signedIn) {
       // Shared layouts are reused on client navigation, so enforce this on each route request too.
       if (!isOnboardingExempt(pathname)) {
+        if (process.env.NEXT_PUBLIC_API_ENABLED !== "true") return next();
         const origin = process.env.API_ORIGIN?.replace(/\/+$/, "");
         if (!origin) return new NextResponse("Service unavailable", { status: 503 });
         try {

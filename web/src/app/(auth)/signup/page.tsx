@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
-import { AuthScreen } from "@/components/auth/auth-screen";
-import { siteConfig } from "@/config/site";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Open an account" };
-
-export default function Page() {
-  return <AuthScreen set={siteConfig.authSet} screen="signup" />;
+/** Accounts are provisioned by an institution (admin or examiner invites), so self-signup is closed. */
+export default function SignupPage() {
+  redirect("/login");
 }

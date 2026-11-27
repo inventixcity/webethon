@@ -167,7 +167,7 @@ pub fn router_with_catalog(catalog: payments_catalog::Catalog) -> Router<AppStat
         .route("/comments/{id}/hide", post(comments::hide))
         .route("/comments/{id}/unhide", post(comments::unhide))
         .route("/comments/{id}/delete", post(comments::delete))
-        .route("/users", get(users::list))
+        .route("/users", get(users::list).post(users::create))
         .route("/users/{id}", get(users::detail))
         .route("/users/{id}/suspend", post(users::suspend))
         .route("/users/{id}/unsuspend", post(users::unsuspend))

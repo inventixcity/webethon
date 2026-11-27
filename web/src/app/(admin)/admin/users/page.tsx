@@ -1,2 +1,5 @@
-import { UsersPage } from "@/components/admin/workspace";
-export default function Page() { return <UsersPage />; }
+import { UsersAdmin } from "./users-admin";
+
+export default function Page() {
+  return <UsersAdmin />;
+}

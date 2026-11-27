@@ -74,7 +74,7 @@ Shared read-only for all: `web/src/lib/api/client.ts` (`api<T>(path, {method, bo
 
 ## 4. API contract (all under `/api/v1`, JSON, `{data}` envelope; types in `web/src/lib/exam/types.ts`)
 
-Errors use the kernel envelope `{error:{code,message,details,requestId}}`. Not authorized to see = **404** (never
+Success responses are ALWAYS `{"data": payload}`: use `examcore::ok(payload)` / `examcore::ApiJson` (`ResponseJson` does not wrap). Errors use the kernel envelope `{error:{code,message,details,requestId}}`. Not authorized to see = **404** (never
 leak existence). Authorized to see but not act = 403. Validation = 422 `VALIDATION_FAILED` with
 `details:[{path,message}]`. State conflicts = 409 with `details.reason`.
 
@@ -128,6 +128,23 @@ Library functions crossing crates (keep signatures stable):
 - `exam_attempts::finalize(tx, attempt_id, by: &str) -> AppResult<()>`: idempotent; sets status, calls autograde.
 - `exam_attempts::sweep(db: &PgPool) -> AppResult<u64>`: finalizes attempts past `deadline_at + JOURNAL_GRACE` (C9 calls it from housekeeping every 20 s).
 - `exam_attempts::store::upsert_answer(tx, attempt_id, item_id, response, flagged, seq, source, written_at, typing)`: the only answer writer (C5 journal uses it).
+
+### 4b. Web routes (link only to these)
+
+| Route | Who | Owner |
+| --- | --- | --- |
+| `/` landing · `/login` (demo-credential buttons) · `/invite/[token]` · `/verify` · `/verify/[code]` | public | H1, H1, C3, C6, C6 |
+| `/app` → redirects by role: admin `/admin`, examiner `/app/examiner`, candidate `/app/candidate` | signed in | H1 |
+| `/app/candidate` dashboard · `/app/candidate/exams/[examId]` lobby · `/app/candidate/results/[attemptId]` | candidate | H1 |
+| `/exam/[attemptId]` full-screen workspace (no app header; also used for sandbox) | attempt owner | H2 |
+| `/app/examiner` overview · `/app/examiner/questions` · `/app/examiner/questions/import` | examiner | H4, H3, H3 |
+| `/app/examiner/exams` · `/app/examiner/exams/new` · `/app/examiner/exams/[examId]` (tabs: Overview, Questions, Candidates, Review & publish) | examiner | H4 |
+| `/app/examiner/exams/[examId]/monitor` · `/grading` · `/results` · `/analytics` | examiner | H5 |
+| `/admin` · `/admin/users` · `/admin/audit` | admin | existing, H5 (users) |
+| `/api/reports/attempt/[attemptId]` · `/api/reports/exam/[examId]` (PDF) | as API | C6 |
+| `/app/settings` (account) | signed in | existing |
+
+Examiner exam pages share a tab bar component `web/src/components/exams/exam-tabs.tsx` (H4 builds it; H5 imports it) with tabs: Overview, Questions, Candidates, Review, Monitor, Grading, Results, Analytics.
 
 ## 5. Security rules (non-negotiable)
 

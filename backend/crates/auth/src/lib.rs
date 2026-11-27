@@ -101,8 +101,9 @@ pub fn router() -> Router<AppState> {
 mod codes;
 mod emails;
 mod mfa;
+#[allow(dead_code)] // OAuth is not offered; kept for institutions that enable it later.
 mod oauth;
-mod password;
+pub mod password;
 mod pending;
 mod routes;
 pub mod totp;

@@ -15,7 +15,8 @@ use std::sync::OnceLock;
 use axum::{extract::FromRequestParts, http::request::Parts};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-use kernel::{AppError, AppResult, AppState, ErrorCode, Viewer, crypto};
+pub use kernel::{AppError, AppResult, AppState, ErrorCode, Viewer};
+use kernel::crypto;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -23,6 +24,17 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub use kernel;
+
+// ------------------------------------------------------------------ responses
+
+/// Wraps a successful payload in the API envelope `{"data": ...}`. EVERY success response must use this
+/// (the web client's `api()` unwraps `data`).
+pub fn ok<T: Serialize>(value: T) -> axum::Json<Value> {
+    axum::Json(json!({ "data": value }))
+}
+
+/// Result alias for handlers returning the envelope.
+pub type ApiJson = AppResult<axum::Json<Value>>;
 
 // ------------------------------------------------------------------ errors
 

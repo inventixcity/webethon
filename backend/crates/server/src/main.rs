@@ -20,6 +20,8 @@ async fn main() {
     }
 }
 async fn run() -> anyhow::Result<()> {
+    validate_exam_secrets()?;
+    examcore::init_keys();
     let config = Arc::new(Config::from_env()?);
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,tower_http=info"));
@@ -47,7 +49,7 @@ async fn run() -> anyhow::Result<()> {
             .error_for_status()?;
         return Ok(());
     }
-    if command != "serve" && command != "migrate" {
+    if command != "serve" && command != "migrate" && command != "seed-demo" {
         anyhow::bail!("Unknown command: {command}");
     }
     let options = PgPoolOptions::new()
@@ -86,6 +88,11 @@ async fn run() -> anyhow::Result<()> {
         sqlx::migrate!("../../migrations").run(&db).await?;
     }
     if command == "migrate" {
+        db.close().await;
+        return Ok(());
+    }
+    if command == "seed-demo" {
+        seed_demo_accounts(&db, &config).await?;
         db.close().await;
         return Ok(());
     }
@@ -152,11 +159,19 @@ async fn run() -> anyhow::Result<()> {
     let mut housekeeping_shutdown = shutdown_tx.subscribe();
     let housekeeping_db = db.clone();
     tokio::spawn(async move {
-        let mut every = tokio::time::interval(Duration::from_secs(600));
+        let mut attempt_sweep = tokio::time::interval(Duration::from_secs(20));
+        let mut retention = tokio::time::interval(Duration::from_secs(600));
         loop {
             tokio::select! {
                 _ = housekeeping_shutdown.recv() => break,
-                _ = every.tick() => housekeeping::run(&housekeeping_db).await,
+                _ = retention.tick() => housekeeping::run(&housekeeping_db).await,
+                _ = attempt_sweep.tick() => {
+                    match exam_attempts::sweep(&housekeeping_db).await {
+                        Ok(count) if count > 0 => tracing::info!(count, "expired exam attempts finalized"),
+                        Ok(_) => {},
+                        Err(error) => tracing::warn!(%error, "exam attempt sweep failed; will retry"),
+                    }
+                },
             }
         }
     });
@@ -220,6 +235,103 @@ async fn run() -> anyhow::Result<()> {
     tokio::time::sleep(Duration::from_secs(3)).await;
     embedding_worker.abort();
     db.close().await;
+    Ok(())
+}
+
+async fn seed_demo_accounts(db: &sqlx::PgPool, config: &Arc<Config>) -> anyhow::Result<()> {
+    let exists: bool = sqlx::query_scalar(
+        "select exists(select 1 from users where lower(email::text)='admin@invigil.app')",
+    )
+    .fetch_one(db)
+    .await?;
+    if exists {
+        println!("Demo seed skipped: admin@invigil.app already exists.");
+        return Ok(());
+    }
+    let state = AppState {
+        db: db.clone(),
+        config: config.clone(),
+        http: reqwest::Client::new(),
+        email: Arc::new(kernel::email::LogSender),
+        hashing: hashing_semaphore(),
+    };
+    let hash = auth::password::hash(&state, "Invigil#Demo2026".to_owned()).await?;
+    let mut people = vec![
+        ("admin@invigil.app", "Invigil Admin", "admin"),
+        ("examiner@invigil.app", "Dr. Ayesha Malik", "examiner"),
+        ("examiner2@invigil.app", "Dr. Hamza Khan", "examiner"),
+        ("candidate@invigil.app", "Ali Raza", "user"),
+    ];
+    let names = [
+        "Sara Ahmed",
+        "Omar Farooq",
+        "Fatima Noor",
+        "Bilal Hussain",
+        "Ayesha Siddiqui",
+        "Zainab Malik",
+        "Hassan Ali",
+        "Mariam Khan",
+        "Usman Tariq",
+        "Noor Fatima",
+        "Daniel Smith",
+        "Emily Chen",
+        "Lucas Martin",
+        "Sofia Garcia",
+        "Arjun Patel",
+        "Maya Johnson",
+        "Ethan Brown",
+        "Lina Haddad",
+        "Kenji Sato",
+        "Amara Okafor",
+        "Ibrahim Saleh",
+        "Anika Sharma",
+        "Yusuf Demir",
+        "Chloe Wilson",
+    ];
+    for (i, name) in names.iter().enumerate() {
+        people.push((
+            Box::leak(format!("candidate{:02}@invigil.app", i + 1).into_boxed_str()),
+            name,
+            "user",
+        ));
+    }
+    let mut tx = db.begin().await?;
+    for (email, name, role) in &people {
+        sqlx::query("insert into users(email,display_name,role,password_hash,email_verified_at) values($1,$2,$3,$4,now()) on conflict(email) do nothing").bind(email).bind(name).bind(role).bind(&hash).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    println!("{:<32} {:<24} {}", "Email", "Name", "Password");
+    for (email, name, _) in people {
+        println!("{email:<32} {name:<24} Invigil#Demo2026");
+    }
+    println!(
+        "Demo accounts are seeded. Exam and attempt fixtures are not part of this command yet."
+    );
+    Ok(())
+}
+
+fn validate_exam_secrets() -> anyhow::Result<()> {
+    if std::env::var("APP_ENV").as_deref() != Ok("production") {
+        return Ok(());
+    }
+    let lease = std::env::var("EXAM_LEASE_KEY").unwrap_or_default();
+    anyhow::ensure!(
+        lease.len() >= 32,
+        "EXAM_LEASE_KEY is required in production and must be at least 32 characters"
+    );
+    let signing = std::env::var("RESULT_SIGNING_KEY").unwrap_or_default();
+    use base64::Engine;
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(signing)
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "RESULT_SIGNING_KEY is required in production and must be valid base64 of 32 bytes"
+            )
+        })?;
+    anyhow::ensure!(
+        decoded.len() == 32,
+        "RESULT_SIGNING_KEY is required in production and must be valid base64 of 32 bytes"
+    );
     Ok(())
 }
 

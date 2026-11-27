@@ -14,12 +14,8 @@ serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 time.workspace = true
-tokio.workspace = true
-tracing.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tower = { workspace = true, features = ["util"] }
+rand.workspace = true
 
 [lints]
 workspace = true

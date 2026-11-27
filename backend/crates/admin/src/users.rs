@@ -47,7 +47,7 @@ pub(crate) async fn list(
     }
     if q.role
         .as_deref()
-        .is_some_and(|x| !["user", "admin"].contains(&x))
+        .is_some_and(|x| !["user", "candidate", "examiner", "admin"].contains(&x))
     {
         return Err(invalid("role"));
     }
@@ -70,7 +70,7 @@ pub(crate) async fn list(
             return Err(invalid("cursor"));
         }
     }
-    let rows: Vec<Value> = sqlx::query_scalar(r#"select jsonb_build_object('id',u.id,'email',u.email::text,'displayName',u.display_name,'role',case when u.role='admin' or lower(u.email::text)=any($9::text[]) then 'admin' else 'user' end,'storedRole',u.role,'status',u.status,'emailVerifiedAt',u.email_verified_at,'createdAt',u.created_at,'deletedAt',u.deleted_at,'mfa',exists(select 1 from mfa_totp m where m.user_id=u.id and m.enabled_at is not null)) from users u where ($1::text is null or position(lower($1) in lower(u.email::text))>0 or position(lower($1) in lower(u.display_name))>0) and ($2::text is null or (case when u.role='admin' or lower(u.email::text)=any($9::text[]) then 'admin' else 'user' end)=$2) and ($3::text is null or case when $3='deleted' then u.deleted_at is not null else u.deleted_at is null and u.status=$3 end) and ($4::boolean is null or (u.email_verified_at is not null)=$4) and ($5::boolean is null or exists(select 1 from mfa_totp m where m.user_id=u.id and m.enabled_at is not null)=$5) and ($6::uuid is null or case when $7='newest' then (u.created_at,u.id)<(select created_at,id from users where id=$6) else (u.created_at,u.id)>(select created_at,id from users where id=$6) end) order by case when $7='newest' then u.created_at end desc,case when $7='newest' then u.id end desc,case when $7='oldest' then u.created_at end asc,case when $7='oldest' then u.id end asc limit $8"#).bind(q.q).bind(q.role).bind(q.status).bind(q.verified).bind(q.mfa).bind(q.cursor).bind(sort).bind(limit+1).bind(state.config.admin_emails.iter().cloned().collect::<Vec<_>>()).fetch_all(&state.db).await?;
+    let rows: Vec<Value> = sqlx::query_scalar(r#"select jsonb_build_object('id',u.id,'email',u.email::text,'displayName',u.display_name,'role',case when u.role='admin' or lower(u.email::text)=any($9::text[]) then 'admin' when u.role='examiner' then 'examiner' else 'candidate' end,'storedRole',u.role,'status',u.status,'emailVerifiedAt',u.email_verified_at,'createdAt',u.created_at,'deletedAt',u.deleted_at,'mfa',exists(select 1 from mfa_totp m where m.user_id=u.id and m.enabled_at is not null)) from users u where ($1::text is null or position(lower($1) in lower(u.email::text))>0 or position(lower($1) in lower(u.display_name))>0) and ($2::text is null or (case when u.role='admin' or lower(u.email::text)=any($9::text[]) then 'admin' when u.role='examiner' then 'examiner' else 'candidate' end)=$2) and ($3::text is null or case when $3='deleted' then u.deleted_at is not null else u.deleted_at is null and u.status=$3 end) and ($4::boolean is null or (u.email_verified_at is not null)=$4) and ($5::boolean is null or exists(select 1 from mfa_totp m where m.user_id=u.id and m.enabled_at is not null)=$5) and ($6::uuid is null or case when $7='newest' then (u.created_at,u.id)<(select created_at,id from users where id=$6) else (u.created_at,u.id)>(select created_at,id from users where id=$6) end) order by case when $7='newest' then u.created_at end desc,case when $7='newest' then u.id end desc,case when $7='oldest' then u.created_at end asc,case when $7='oldest' then u.id end asc limit $8"#).bind(q.q).bind(q.role.as_deref().map(|r| if r == "user" { "candidate" } else { r })).bind(q.status).bind(q.verified).bind(q.mfa).bind(q.cursor).bind(sort).bind(limit+1).bind(state.config.admin_emails.iter().cloned().collect::<Vec<_>>()).fetch_all(&state.db).await?;
     let more = rows.len() > limit as usize;
     let mut rows = rows;
     rows.truncate(limit as usize);
@@ -86,13 +86,45 @@ pub(crate) async fn detail(
     AdminViewer(_): AdminViewer,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Value>> {
-    let data: Option<Value> = sqlx::query_scalar(r#"select jsonb_build_object('user',jsonb_build_object('id',u.id,'email',u.email::text,'displayName',u.display_name,'avatarUrl',u.avatar_url,'role',case when u.role='admin' or lower(u.email::text)=any($2::text[]) then 'admin' else 'user' end,'storedRole',u.role,'status',u.status,'emailVerifiedAt',u.email_verified_at,'createdAt',u.created_at,'updatedAt',u.updated_at,'deletedAt',u.deleted_at,'mfa',exists(select 1 from mfa_totp where user_id=u.id and enabled_at is not null)), 'sessions',coalesce((select jsonb_agg(x) from (select id,created_at as "createdAt",last_seen_at as "lastSeenAt",expires_at as "expiresAt",revoked_at as "revokedAt",ip,user_agent as "userAgent" from sessions where user_id=u.id order by created_at desc limit 50) x),'[]'::jsonb), 'audit',coalesce((select jsonb_agg(x) from (select id,at,action,target_type as "targetType",target_id as "targetId" from audit_log where actor_id=u.id or (target_type='user' and target_id=u.id::text) order by id desc limit 50) x),'[]'::jsonb), 'teams',coalesce((select jsonb_agg(x) from (select t.id,t.name,t.slug,m.role from team_members m join teams t on t.id=m.team_id where m.user_id=u.id and t.deleted_at is null order by t.id limit 50) x),'[]'::jsonb), 'files',coalesce((select jsonb_agg(x) from (select id,original_name as "originalName",content_type as "contentType",size_bytes as "sizeBytes",created_at as "createdAt",deleted_at as "deletedAt" from files where owner_id=u.id order by created_at desc limit 50) x),'[]'::jsonb), 'entitlements',coalesce((select jsonb_agg(x) from (select product_id as "productId",case when admin_override_status='active' and admin_override_expires_at <= now() then 'expired' else coalesce(admin_override_status,status) end as status,case when admin_override_status is not null then admin_override_expires_at else current_period_end end as "currentPeriodEnd" from entitlements where user_id=u.id order by product_id limit 50) x),'[]'::jsonb)) from users u where u.id=$1"#).bind(id).bind(state.config.admin_emails.iter().cloned().collect::<Vec<_>>()).fetch_optional(&state.db).await?;
+    let data: Option<Value> = sqlx::query_scalar(r#"select jsonb_build_object('user',jsonb_build_object('id',u.id,'email',u.email::text,'displayName',u.display_name,'avatarUrl',u.avatar_url,'role',case when u.role='admin' or lower(u.email::text)=any($2::text[]) then 'admin' when u.role='examiner' then 'examiner' else 'candidate' end,'storedRole',u.role,'status',u.status,'emailVerifiedAt',u.email_verified_at,'createdAt',u.created_at,'updatedAt',u.updated_at,'deletedAt',u.deleted_at,'mfa',exists(select 1 from mfa_totp where user_id=u.id and enabled_at is not null)), 'sessions',coalesce((select jsonb_agg(x) from (select id,created_at as "createdAt",last_seen_at as "lastSeenAt",expires_at as "expiresAt",revoked_at as "revokedAt",ip,user_agent as "userAgent" from sessions where user_id=u.id order by created_at desc limit 50) x),'[]'::jsonb), 'audit',coalesce((select jsonb_agg(x) from (select id,at,action,target_type as "targetType",target_id as "targetId" from audit_log where actor_id=u.id or (target_type='user' and target_id=u.id::text) order by id desc limit 50) x),'[]'::jsonb), 'teams',coalesce((select jsonb_agg(x) from (select t.id,t.name,t.slug,m.role from team_members m join teams t on t.id=m.team_id where m.user_id=u.id and t.deleted_at is null order by t.id limit 50) x),'[]'::jsonb), 'files',coalesce((select jsonb_agg(x) from (select id,original_name as "originalName",content_type as "contentType",size_bytes as "sizeBytes",created_at as "createdAt",deleted_at as "deletedAt" from files where owner_id=u.id order by created_at desc limit 50) x),'[]'::jsonb), 'entitlements',coalesce((select jsonb_agg(x) from (select product_id as "productId",case when admin_override_status='active' and admin_override_expires_at <= now() then 'expired' else coalesce(admin_override_status,status) end as status,case when admin_override_status is not null then admin_override_expires_at else current_period_end end as "currentPeriodEnd" from entitlements where user_id=u.id order by product_id limit 50) x),'[]'::jsonb)) from users u where u.id=$1"#).bind(id).bind(state.config.admin_emails.iter().cloned().collect::<Vec<_>>()).fetch_optional(&state.db).await?;
     Ok(Json(json!({"data":data.ok_or_else(AppError::not_found)?})))
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RoleInput {
     role: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CreateInput { email: String, display_name: String, role: String }
+
+pub(crate) async fn create(
+    State(state): State<AppState>, meta: RequestMeta, AdminViewer(viewer): AdminViewer,
+    JsonBody(input): JsonBody<CreateInput>,
+) -> AppResult<Json<Value>> {
+    let email=input.email.trim().to_ascii_lowercase();
+    let display=input.display_name.trim();
+    let role=if input.role=="candidate" {"user"} else {input.role.as_str()};
+    if email.len()>254 || email.matches('@').count()!=1 || email.chars().any(char::is_control)
+        || !email.split_once('@').is_some_and(|(a,b)|!a.is_empty()&&b.contains('.')&& !b.starts_with('.')&&!b.ends_with('.')) {
+        return Err(invalid("email"));
+    }
+    if !(1..=120).contains(&display.chars().count()) || display.chars().any(char::is_control) { return Err(invalid("displayName")); }
+    if !["user","examiner"].contains(&role) { return Err(invalid("role")); }
+    security::enforce_rate_limit(&state.db,&format!("admin:users:create:ip:{}",meta.ip),limits::API_WRITE_PER_SUBJECT).await?;
+    security::enforce_rate_limit(&state.db,&format!("admin:users:create:user:{}",viewer.id),limits::API_WRITE_PER_SUBJECT).await?;
+    let (token,hash)=kernel::crypto::new_token();
+    let mut tx=state.db.begin().await?;
+    admin_security::require_step_up(&mut tx,&state,&viewer).await?;
+    let id:Uuid=sqlx::query_scalar("insert into users(email,display_name,role) values($1,$2,$3) on conflict(email) do nothing returning id").bind(&email).bind(display).bind(role).fetch_optional(&mut *tx).await?.ok_or_else(||AppError::new(ErrorCode::Conflict,"An account with this email already exists."))?;
+    sqlx::query("insert into account_invites(token_hash,user_id,invited_by,expires_at) values($1,$2,$3,now()+interval '7 days')").bind(hash.as_slice()).bind(id).bind(viewer.id).execute(&mut *tx).await?;
+    let link=format!("{}/invite/{}",state.config.app_origin,token);
+    audit::audit_before_after(&mut tx,&meta,&viewer,"admin.user.create",("user",&id.to_string()),json!({}),json!({"id":id,"email":email,"role":role})).await?;
+    tx.commit().await?;
+    let msg=kernel::email::Email{to:email.clone(),subject:"You are invited to Inventix Invigil".into(),html:format!("<p>Your Invigil account is ready.</p><p><a href=\"{link}\">Set your password</a></p>"),text:format!("Set your Invigil password: {link}")};
+    if let Err(error)=state.email.send(&msg).await { tracing::warn!(error=%error,"admin invite email delivery failed"); }
+    Ok(Json(json!({"data":{"id":id,"email":email,"displayName":display,"role":if role=="user"{"candidate"}else{role},"inviteLink":link}})))
 }
 pub(crate) async fn role(
     State(state): State<AppState>,
@@ -101,10 +133,11 @@ pub(crate) async fn role(
     Path(id): Path<Uuid>,
     JsonBody(input): JsonBody<RoleInput>,
 ) -> AppResult<axum::http::StatusCode> {
-    if !["user", "admin"].contains(&input.role.as_str()) {
+    if !["user", "candidate", "examiner", "admin"].contains(&input.role.as_str()) {
         return Err(invalid("role"));
     }
-    mutate(state, meta, viewer, id, "role", Some(input.role)).await
+    let role = if input.role == "candidate" { "user".to_owned() } else { input.role };
+    mutate(state, meta, viewer, id, "role", Some(role)).await
 }
 macro_rules! action {
     ($name:ident,$action:literal) => {
@@ -166,6 +199,13 @@ async fn mutate(
             ErrorCode::Conflict,
             "This administrator is configured by the server.",
         ));
+    }
+    if action == "role" && role.as_deref().is_some_and(|r| r != "admin") && before["role"] == "admin" {
+        sqlx::query("select pg_advisory_xact_lock(hashtext('invigil-admin-role-change'))")
+            .execute(&mut *tx).await?;
+        let remaining:i64=sqlx::query_scalar("select count(*) from users where role='admin' and status='active' and deleted_at is null and id<>$1")
+            .bind(id).fetch_one(&mut *tx).await?;
+        if remaining==0 { return Err(AppError::new(ErrorCode::Conflict,"The last active administrator cannot be demoted.")); }
     }
     match action {
         "suspend" => {
@@ -594,3 +634,5 @@ mod tests {
         );
     }
 }
+
+

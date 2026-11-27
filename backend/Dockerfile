@@ -74,7 +74,7 @@ ENTRYPOINT ["/app/api"]
 CMD ["serve"]
 
 LABEL org.opencontainers.image.title="invigil-api" \
-      org.opencontainers.image.description="Auth and config-driven data API for the invigil kit" \
+      org.opencontainers.image.description="Secure examination API for Inventix Invigil" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \

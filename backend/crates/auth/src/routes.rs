@@ -729,11 +729,11 @@ async fn demo(State(state): State<AppState>, meta: RequestMeta) -> AppResult<Res
     }
     response
 }
+/// Accounts are provisioned (admins create examiners, examiners enroll candidates, both send invites), so
+/// self-signup, email-code verification for signup and one-click demo sign-in are off unless
+/// `ALLOW_SELF_SIGNUP=true`. OAuth is not offered.
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/signup", post(signup))
-        .route("/verify-email", post(verify_email))
-        .route("/resend-code", post(resend))
+    let router = Router::new()
         .route("/signin", post(signin))
         .route("/signout", post(signout))
         .route("/signout-all", post(signout_all))
@@ -744,7 +744,14 @@ pub fn router() -> Router<AppState> {
         .route("/password/change", post(change_password))
         .route("/sessions", get(sessions))
         .route("/sessions/{id}", axum::routing::delete(delete_session))
-        .route("/demo", post(demo))
-        .merge(crate::oauth::router())
-        .merge(crate::mfa::router())
+        .merge(crate::mfa::router());
+    if std::env::var("ALLOW_SELF_SIGNUP").is_ok_and(|v| v == "true") {
+        router
+            .route("/signup", post(signup))
+            .route("/verify-email", post(verify_email))
+            .route("/resend-code", post(resend))
+            .route("/demo", post(demo))
+    } else {
+        router
+    }
 }

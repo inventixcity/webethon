@@ -6,7 +6,7 @@ name: invigil
 #   docker compose up -d --build api        Rust API on http://localhost:8080
 #   docker compose --profile full up -d     also the Next.js dev server on http://localhost:3000
 #
-# Development defaults are not secrets. Production uses deploy/k8s with real secrets.
+# Development defaults are not secrets. Production uses Azure Container Apps with managed secrets.
 
 services:
   postgres:
@@ -86,7 +86,7 @@ services:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
     volumes:
       - type: bind
-        source: ./ui components
+        source: ./web
         target: /app
       # Keeps Linux node_modules out of the Windows/macOS folder, since native binaries differ by OS.
       - web-node-modules:/app/node_modules
