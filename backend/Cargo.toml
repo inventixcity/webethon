@@ -66,7 +66,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 serde_path_to_error = "0.1.20"
 serde_urlencoded = "0.7.1"
 sha1 = "0.10"
-sha2 = "0.10"
+sha2 = "0.11"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "time", "json", "macros", "migrate"] }
 subtle = "2"
 thiserror = "2"
