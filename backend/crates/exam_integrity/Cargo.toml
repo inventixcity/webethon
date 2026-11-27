@@ -15,12 +15,15 @@ serde_json.workspace = true
 sqlx.workspace = true
 time.workspace = true
 tokio.workspace = true
+async-stream = "0.3.6"
+futures-core = "0.3"
 tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 reqwest.workspace = true
 tower = { workspace = true, features = ["util"] }
+futures-util = "0.3"
 
 [lints]
 workspace = true

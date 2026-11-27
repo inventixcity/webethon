@@ -305,6 +305,100 @@ async fn voluntary_submit_is_final_but_timer_expiry_allows_grace_recovery(
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn bulk_credit_only_grants_verified_overlaps_and_audits(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    let other: Uuid = sqlx::query_scalar(
+        "insert into users(email) values('bulk-other@resilience.test') returning id",
+    )
+    .fetch_one(&f.state.db)
+    .await?;
+    let other_attempt: Uuid = sqlx::query_scalar("insert into attempts(exam_id,candidate_id,deadline_at,seed,item_order,journal_genesis) values($1,$2,now()+interval '1 hour',2,'{}',decode(repeat('00',32),'hex')) returning id").bind(f.exam).bind(other).fetch_one(&f.state.db).await?;
+    let capped_candidate: Uuid = sqlx::query_scalar(
+        "insert into users(email) values('bulk-capped@resilience.test') returning id",
+    )
+    .fetch_one(&f.state.db)
+    .await?;
+    let capped_attempt: Uuid = sqlx::query_scalar("insert into attempts(exam_id,candidate_id,deadline_at,seed,item_order,journal_genesis) values($1,$2,now()+interval '3 hours'-interval '10 seconds',3,'{}',decode(repeat('00',32),'hex')) returning id").bind(f.exam).bind(capped_candidate).fetch_one(&f.state.db).await?;
+    sqlx::query("update attempts set started_at=now()-interval '120 seconds' where id=$1")
+        .bind(f.id)
+        .execute(&f.state.db)
+        .await?;
+    sqlx::query("update attempts set started_at=now()-interval '120 seconds' where id=$1")
+        .bind(capped_attempt)
+        .execute(&f.state.db)
+        .await?;
+    sqlx::query("insert into attempt_heartbeats(attempt_id,at) values($1,now()-interval '90 seconds'),($1,now()-interval '30 seconds')").bind(f.id).execute(&f.state.db).await?;
+    sqlx::query("insert into attempt_heartbeats(attempt_id,at) values($1,now()-interval '90 seconds'),($1,now()-interval '30 seconds')").bind(capped_attempt).execute(&f.state.db).await?;
+    let from = examcore::now() - time::Duration::seconds(180);
+    let to = examcore::now() - time::Duration::seconds(20);
+    let stamp = |x: OffsetDateTime| x.format(&Rfc3339).unwrap_or_default();
+    let body = json!({"from":stamp(from),"to":stamp(to),"reason":"Regional network outage"});
+    let (status, result) = request(
+        &f,
+        &format!("/exams/{}/outage-credit", f.exam),
+        "POST",
+        &f.owner,
+        OLD,
+        body,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["data"]["credited"], 2);
+    assert_eq!(result["data"]["skipped"], 1);
+    let total = result["data"]["secondsTotal"]
+        .as_i64()
+        .ok_or("secondsTotal")?;
+    assert!((61..=70).contains(&total));
+    let credits: i64 = sqlx::query_scalar(
+        "select coalesce(sum(seconds),0)::bigint from time_credits where attempt_id=$1",
+    )
+    .bind(f.id)
+    .fetch_one(&f.state.db)
+    .await?;
+    assert_eq!(credits, 60);
+    let capped_credit: i64 = sqlx::query_scalar(
+        "select coalesce(sum(seconds),0)::bigint from time_credits where attempt_id=$1",
+    )
+    .bind(capped_attempt)
+    .fetch_one(&f.state.db)
+    .await?;
+    assert!((1..=10).contains(&capped_credit));
+    assert_eq!(total, credits + capped_credit);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("select count(*) from time_credits where attempt_id=$1")
+            .bind(other_attempt)
+            .fetch_one(&f.state.db)
+            .await?,
+        0
+    );
+    let event: Value = sqlx::query_scalar("select detail from attempt_events where attempt_id=$1 and kind='time_credit' order by id desc limit 1").bind(f.id).fetch_one(&f.state.db).await?;
+    assert_eq!(event["bulk"], true);
+    let audit: Value = sqlx::query_scalar("select meta from audit_log where target_id=$1 and action='exam.time_credit' order by at desc limit 1").bind(f.id.to_string()).fetch_one(&f.state.db).await?;
+    assert_eq!(audit["bulk"], true);
+    let (status, _) = request(
+        &f,
+        &format!("/exams/{}/outage-credit", f.exam),
+        "POST",
+        &f.stranger,
+        OLD,
+        json!({"from":stamp(from),"to":stamp(to),"reason":"Regional network outage"}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = request(
+        &f,
+        &format!("/exams/{}/outage-credit", f.exam),
+        "POST",
+        &f.candidate,
+        OLD,
+        json!({"from":stamp(from),"to":stamp(to),"reason":"Regional network outage"}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    Ok(())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn post_deadline_journal_requires_offline_proof_and_is_visible(db: PgPool) -> TestResult {
     let f = fixture(db).await?;
     let lease = examcore::issue_lease(f.id, examcore::now() + time::Duration::hours(1));

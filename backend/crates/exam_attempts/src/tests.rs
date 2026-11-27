@@ -1137,3 +1137,50 @@ async fn sweep_drains_multiple_batches(db: PgPool) -> TestResult {
     assert_eq!(count, 205);
     Ok(())
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn blueprint_draw_stores_required_items_marks_and_facility(db: PgPool) -> TestResult {
+    let f = fixture(db).await?;
+    sqlx::query("insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,true,$2,0.05)")
+        .bind(f.exam)
+        .bind(json!([{"topic":"Security","minDifficulty":3,"maxDifficulty":3,"count":2,"marksEach":15.0}]))
+        .execute(&f.db).await?;
+    let mut ids = Vec::new();
+    for n in 0..50 {
+        let candidate: Uuid = if n == 0 {
+            f.candidate.id
+        } else {
+            sqlx::query_scalar("insert into users(email) values($1) returning id")
+                .bind(format!("blueprint-{n}@attempts.test"))
+                .fetch_one(&f.db)
+                .await?
+        };
+        if n > 0 {
+            sqlx::query("insert into enrollments(exam_id,candidate_id) values($1,$2)")
+                .bind(f.exam)
+                .bind(candidate)
+                .execute(&f.db)
+                .await?;
+        }
+        let mut tx = f.db.begin().await?;
+        ids.push(start_attempt_tx(&mut tx, f.exam, candidate, None).await?);
+        tx.commit().await?;
+    }
+    let mut predicted = Vec::new();
+    for id in ids {
+        let (count, facility, marks):(i64,Option<f64>,Value)=sqlx::query_as("select cardinality(item_order)::bigint,predicted_facility::float8,item_marks from attempts where id=$1").bind(id).fetch_one(&f.db).await?;
+        assert_eq!(count, 2);
+        assert!(facility.is_some());
+        assert_eq!(marks.as_object().map(serde_json::Map::len), Some(2));
+        assert!(
+            marks
+                .as_object()
+                .is_some_and(|m| m.values().all(|v| v.as_f64() == Some(15.0)))
+        );
+        predicted.push(facility.unwrap_or_default());
+    }
+    let spread = predicted.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - predicted.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(spread <= 0.05);
+    Ok(())
+}

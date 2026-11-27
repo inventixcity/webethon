@@ -311,6 +311,7 @@ async fn workspace(
     let sandbox = row.try_get("sandbox")?;
     let settings: Value = row.try_get("settings")?;
     let order: Vec<Uuid> = row.try_get("item_order")?;
+    let item_marks: Value = row.try_get("item_marks")?;
     let option_order: Value = row.try_get("option_order")?;
     let frozen = snapshot(&mut tx, exam_id, sandbox, row.try_get("version")?, &order).await?;
     let by_id: HashMap<Uuid, &SnapshotItem> = frozen.iter().map(|item| (item.id, item)).collect();
@@ -341,7 +342,7 @@ async fn workspace(
         };
         items.push(json!({
             "id": item.id, "position": position, "kind": item.kind, "stem": stem, "options": options,
-            "marks": item.marks, "negativeMarks": item.negative_marks, "multiRule": item.multi_rule,
+            "marks": item_marks.get(item.id.to_string()).and_then(Value::as_f64).unwrap_or(item.marks), "negativeMarks": item.negative_marks, "multiRule": item.multi_rule,
             "maxWords": item.max_words, "topic": item.topic,
         }));
     }

@@ -2,6 +2,10 @@
 use axum::{
     Router,
     extract::State,
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
 use kernel::{
@@ -14,6 +18,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{PgConnection, PgPool};
 use std::time::Duration;
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+    sync::{Mutex, OnceLock},
+};
 use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
@@ -21,6 +30,7 @@ pub fn router() -> Router<AppState> {
         .route("/attempts/{id}/events", post(events))
         .route("/attempts/{id}/integrity", get(integrity))
         .route("/exams/{id}/monitor", get(monitor))
+        .route("/exams/{id}/monitor/stream", get(monitor_stream))
         .route(
             "/exams/{id}/announcements",
             get(announcements).post(create_announcement),
@@ -418,16 +428,125 @@ async fn monitor(
     viewer: Viewer,
 ) -> AppResult<ResponseJson<Value>> {
     viewer.require_examiner()?;
-    let exam = examcore::load_exam_for_examiner(&state.db, &viewer, exam_id).await?;
+    let payload = monitor_snapshot(&state, &viewer, exam_id).await?;
+    Ok(ResponseJson(json!({"data":payload})))
+}
+
+async fn monitor_snapshot(state: &AppState, viewer: &Viewer, exam_id: Uuid) -> AppResult<Value> {
+    let exam = examcore::load_exam_for_examiner(&state.db, viewer, exam_id).await?;
     let monitor: (Value, i64, i64, i64, i64, Value) = sqlx::query_as(
         "with enrolled as (select en.candidate_id,a.id,a.status from enrollments en left join attempts a on a.exam_id=en.exam_id and a.candidate_id=en.candidate_id and not a.sandbox where en.exam_id=$1 and en.status='enrolled'), attempts_json as (select coalesce(jsonb_agg(jsonb_build_object('attemptId',a.id,'candidateId',u.id,'displayName',u.display_name,'email',u.email,'status',a.status,'startedAt',a.started_at,'deadlineAt',a.deadline_at,'answered',coalesce(ans.answered,0),'flagged',coalesce(ans.flagged,0),'total',coalesce(total.n,0),'lastHeartbeatAt',a.last_heartbeat_at,'online',coalesce(a.last_heartbeat_at>=now()-interval '40 seconds',false),'incidents',coalesce(ev.incidents,0),'reviewPriority',a.review_priority,'sandbox',false) order by a.started_at),'[]'::jsonb) rows from attempts a join users u on u.id=a.candidate_id left join lateral(select count(*) filter(where ((response->>'text') is not null and response->>'text'<>'') or jsonb_array_length(coalesce(response->'selected','[]'::jsonb))>0) answered,count(*) filter(where flagged) flagged from answers where attempt_id=a.id) ans on true left join lateral(select count(*) n from exam_items where exam_id=a.exam_id and not sandbox) total on true left join lateral(select count(*) incidents from attempt_events where attempt_id=a.id and severity in ('notice','warning')) ev on true where a.exam_id=$1 and not a.sandbox), announcement_json as (select coalesce(jsonb_agg(jsonb_build_object('id',id,'body',body,'createdAt',created_at) order by created_at desc),'[]'::jsonb) items from (select id,body,created_at from announcements where exam_id=$1 order by created_at desc limit 100) x) select j.rows,(select count(*) from enrolled),(select count(*) from enrolled where status='in_progress'),(select count(*) from enrolled where status in ('submitted','expired')),(select count(*) from enrolled where id is null),n.items from attempts_json j cross join announcement_json n"
     )
-    .bind(exam_id)
+        .bind(exam_id)
     .fetch_one(&state.db)
     .await?;
-    Ok(ResponseJson(
-        json!({"data":{"serverNow":examcore::iso(examcore::now()),"phase":examcore::phase(&exam.status,exam.starts_at,exam.ends_at,examcore::now()),"enrolled":monitor.1,"notStarted":monitor.4,"inProgress":monitor.2,"submitted":monitor.3,"rows":monitor.0,"announcements":monitor.5}}),
-    ))
+    Ok(
+        json!({"serverNow":examcore::iso(examcore::now()),"phase":examcore::phase(&exam.status,exam.starts_at,exam.ends_at,examcore::now()),"enrolled":monitor.1,"notStarted":monitor.4,"inProgress":monitor.2,"submitted":monitor.3,"rows":monitor.0,"announcements":monitor.5}),
+    )
+}
+
+// Process-local cap; each running API process allows five simultaneous streams per examiner.
+static STREAMS: OnceLock<Mutex<HashMap<Uuid, usize>>> = OnceLock::new();
+struct StreamPermit(Uuid);
+impl Drop for StreamPermit {
+    fn drop(&mut self) {
+        if let Ok(mut map) = STREAMS.get_or_init(|| Mutex::new(HashMap::new())).lock()
+            && let Some(count) = map.get_mut(&self.0)
+        {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                map.remove(&self.0);
+            }
+        }
+    }
+}
+fn acquire_stream(id: Uuid) -> AppResult<StreamPermit> {
+    let mut map = STREAMS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map_err(|_| AppError::internal("monitor stream counter lock poisoned"))?;
+    let count = map.entry(id).or_default();
+    if *count >= 5 {
+        return Err(AppError::new(
+            kernel::ErrorCode::RateLimited,
+            "Too many monitor streams.",
+        ));
+    }
+    *count += 1;
+    Ok(StreamPermit(id))
+}
+async fn monitor_stream(
+    State(state): State<AppState>,
+    Path(exam_id): Path<Uuid>,
+    viewer: Viewer,
+) -> AppResult<Response> {
+    viewer.require_examiner()?;
+    // Check visibility before consuming a stream slot.
+    let owner: Option<Uuid> = sqlx::query_scalar("select owner_id from exams where id=$1")
+        .bind(exam_id)
+        .fetch_optional(&state.db)
+        .await?;
+    if owner != Some(viewer.id) {
+        return Err(AppError::not_found());
+    }
+    let initial = monitor_snapshot(&state, &viewer, exam_id).await?;
+    let permit = acquire_stream(viewer.id)?;
+    let stream_viewer = viewer.clone();
+    let owner_id = viewer.id;
+    let started = tokio::time::Instant::now();
+    let stream = async_stream::stream! {
+        let _permit = permit;
+        let mut initial_for_hash = initial.clone();
+        if let Some(object) = initial_for_hash.as_object_mut() {
+            object.remove("serverNow");
+        }
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        initial_for_hash.to_string().hash(&mut hasher);
+        let mut previous = Some(hasher.finish());
+        if let Ok(data) = serde_json::to_string(&initial) {
+            yield Ok::<Event, std::convert::Infallible>(Event::default().event("snapshot").data(data));
+        }
+        let started = started;
+        let mut check = tokio::time::interval(Duration::from_secs(3));
+        check.tick().await;
+        let mut recheck = tokio::time::interval(Duration::from_secs(60));
+        recheck.tick().await;
+        loop {
+            if started.elapsed() >= Duration::from_secs(1800) { break; }
+            tokio::select! {
+                _ = check.tick() => {
+                    let payload = match monitor_snapshot(&state, &stream_viewer, exam_id).await { Ok(value) => value, Err(_) => break };
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    let mut comparable = payload.clone();
+                    if let Some(object) = comparable.as_object_mut() { object.remove("serverNow"); }
+                    comparable.to_string().hash(&mut hasher);
+                    let hash = hasher.finish();
+                    if previous != Some(hash) {
+                        previous = Some(hash);
+                        if let Ok(data) = serde_json::to_string(&payload) { yield Ok::<Event, std::convert::Infallible>(Event::default().event("snapshot").data(data)); }
+                    }
+                },
+                _ = recheck.tick() => {
+                    // Re-authenticate the session and verify ownership at least once a minute.
+                    let valid: bool = sqlx::query_scalar("select exists(select 1 from sessions s join users u on u.id=s.user_id join exams e on e.id=$3 where s.id=$1 and s.user_id=$2 and s.revoked_at is null and s.expires_at>now() and u.suspended_at is null and u.role in ('examiner','admin') and e.owner_id=$2)")
+                        .bind(stream_viewer.session_id).bind(owner_id).bind(exam_id).fetch_one(&state.db).await.unwrap_or(false);
+                    if !valid { break; }
+                }
+            }
+        }
+    };
+    let mut response = Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text(""))
+        .into_response();
+    response.headers_mut().insert(
+        "cache-control",
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response.headers_mut().insert(
+        "x-accel-buffering",
+        axum::http::HeaderValue::from_static("no"),
+    );
+    Ok(response)
 }
 
 /// Whether count-only typing telemetry is unusual for a written response.
@@ -645,11 +764,15 @@ mod tests {
             role: Role::User,
             via_cookie: false,
         };
-        let mut request = Request::get(format!("/exams/{}/monitor", Uuid::new_v4()))
+        let mut request = Request::get(format!("/exams/{}/monitor/stream", Uuid::new_v4()))
             .body(Body::empty())
             .unwrap();
         request.extensions_mut().insert(candidate);
-        let response = router().with_state(state).oneshot(request).await.unwrap();
+        let response = router()
+            .with_state(state.clone())
+            .oneshot(request)
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -702,12 +825,74 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         request.extensions_mut().insert(viewer);
-        let response = router().with_state(state).oneshot(request).await.unwrap();
+        let response = router()
+            .with_state(state.clone())
+            .oneshot(request)
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), 1_000_000).await.unwrap();
         let value: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(value["data"]["rows"].as_array().map(Vec::len), Some(1));
         assert_eq!(value["data"]["rows"][0]["sandbox"], false);
         assert_eq!(value["data"]["inProgress"], 1);
+
+        let app = router().with_state(state.clone());
+        let mut stream_request = Request::get(format!("/exams/{exam}/monitor/stream"))
+            .body(Body::empty())
+            .unwrap();
+        stream_request.extensions_mut().insert(Viewer {
+            id: owner,
+            session_id: Uuid::new_v4(),
+            email: "monitor-owner@example.test".into(),
+            display_name: "Owner".into(),
+            role: Role::Examiner,
+            via_cookie: false,
+        });
+        let stream_response = app.clone().oneshot(stream_request).await.unwrap();
+        assert_eq!(stream_response.status(), StatusCode::OK);
+        assert_eq!(
+            stream_response
+                .headers()
+                .get("content-type")
+                .and_then(|h| h.to_str().ok()),
+            Some("text/event-stream")
+        );
+        let mut chunks = stream_response.into_body().into_data_stream();
+        let frame = tokio::time::timeout(
+            Duration::from_secs(2),
+            futures_util::StreamExt::next(&mut chunks),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+        let frame = String::from_utf8(frame.to_vec()).unwrap();
+        assert!(frame.contains("event: snapshot"));
+        let data = frame
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .unwrap();
+        let snapshot: Value = serde_json::from_str(data).unwrap();
+        assert_eq!(snapshot["rows"].as_array().map(Vec::len), Some(1));
+        assert_eq!(snapshot["inProgress"], 1);
+
+        let mut stranger_request = Request::get(format!("/exams/{exam}/monitor/stream"))
+            .body(Body::empty())
+            .unwrap();
+        stranger_request.extensions_mut().insert(Viewer {
+            id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
+            email: "stranger@example.test".into(),
+            display_name: "Stranger".into(),
+            role: Role::Examiner,
+            via_cookie: false,
+        });
+        let denied = router()
+            .with_state(state)
+            .oneshot(stranger_request)
+            .await
+            .unwrap();
+        assert_eq!(denied.status(), StatusCode::NOT_FOUND);
     }
 }

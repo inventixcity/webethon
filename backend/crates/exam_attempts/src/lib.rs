@@ -12,6 +12,23 @@ use uuid::Uuid;
 
 pub const JOURNAL_GRACE_SECS: i64 = 120;
 
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlueprintDrawRow {
+    topic: String,
+    min_difficulty: i16,
+    max_difficulty: i16,
+    count: i32,
+    marks_each: f64,
+}
+#[derive(Clone)]
+struct DrawItem {
+    id: Uuid,
+    topic: String,
+    difficulty: i16,
+    facility: f64,
+}
+
 /// Shared online/journal validation. `item` contains `kind`, `options`, and `max_words` columns.
 pub fn validate_response(item: &PgRow, response: &Value) -> AppResult<()> {
     validate_response_fields(
@@ -205,13 +222,109 @@ pub async fn start_attempt_tx(
     let mut genesis = vec![0_u8; 32];
     OsRng.fill_bytes(&mut genesis);
     let items = sqlx::query(
-        "select id,position,kind,options from exam_items where exam_id=$1 and not sandbox order by position",
+        "select id,position,kind,options,topic,difficulty,predicted_facility::float8 predicted_facility from exam_items where exam_id=$1 and not sandbox order by position",
     ).bind(exam_id).fetch_all(&mut **tx).await?;
+    let blueprint = sqlx::query(
+        "select rows,tolerance::float8 tolerance from exam_blueprints where exam_id=$1 and enabled",
+    )
+    .bind(exam_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let mut predicted_facility: Option<f64> = None;
+    let mut item_marks = serde_json::Map::new();
     let mut item_ids: Vec<Uuid> = items
         .iter()
         .map(|i| i.try_get("id"))
         .collect::<Result<_, _>>()?;
-    if settings["shuffleQuestions"].as_bool().unwrap_or(false) {
+    if let Some(blueprint) = blueprint {
+        let rows: Vec<BlueprintDrawRow> =
+            serde_json::from_value(blueprint.try_get("rows")?).map_err(AppError::internal)?;
+        let tolerance: f64 = blueprint.try_get("tolerance")?;
+        let mut choices = Vec::new();
+        for item in &items {
+            choices.push(DrawItem {
+                id: item.try_get("id")?,
+                topic: item.try_get("topic")?,
+                difficulty: item.try_get("difficulty")?,
+                facility: item
+                    .try_get::<Option<f64>, _>("predicted_facility")?
+                    .unwrap_or(0.55),
+            });
+        }
+        let mut target = 0.0;
+        let mut total = 0usize;
+        for row in &rows {
+            let pool: Vec<f64> = choices
+                .iter()
+                .filter(|item| {
+                    item.topic == row.topic
+                        && (row.min_difficulty..=row.max_difficulty).contains(&item.difficulty)
+                })
+                .map(|item| item.facility)
+                .collect();
+            if pool.len() < row.count as usize {
+                return Err(examcore::conflict(
+                    "blueprint_pool",
+                    "The published blueprint no longer has enough items.",
+                ));
+            }
+            target += pool.iter().sum::<f64>() / pool.len() as f64 * row.count as f64;
+            total += row.count as usize;
+        }
+        target /= total.max(1) as f64;
+        let mut best_selected = None;
+        let mut best_distance = f64::INFINITY;
+        for variant in 0..200u64 {
+            let mut selected = Vec::new();
+            let mut used = std::collections::HashSet::new();
+            let mut facilities = Vec::new();
+            for (ri, row) in rows.iter().enumerate() {
+                let mut pool: Vec<DrawItem> = choices
+                    .iter()
+                    .filter(|item| {
+                        item.topic == row.topic
+                            && (row.min_difficulty..=row.max_difficulty).contains(&item.difficulty)
+                            && !used.contains(&item.id)
+                    })
+                    .cloned()
+                    .collect();
+                examcore::shuffle(
+                    &mut pool,
+                    (seed as u64)
+                        .wrapping_add(variant)
+                        .wrapping_add((ri as u64).wrapping_mul(0x9e3779b97f4a7c15)),
+                );
+                for item in pool.into_iter().take(row.count as usize) {
+                    used.insert(item.id);
+                    facilities.push(item.facility);
+                    selected.push((item.id, item.facility, row.marks_each));
+                }
+            }
+            if selected.len() != total {
+                return Err(examcore::conflict(
+                    "blueprint_pool",
+                    "Blueprint rows cannot be filled with distinct questions.",
+                ));
+            }
+            let mean = facilities.iter().sum::<f64>() / facilities.len().max(1) as f64;
+            let distance = (mean - target).abs();
+            if distance < best_distance {
+                best_distance = distance;
+                best_selected = Some(selected.clone());
+            }
+            if distance <= tolerance {
+                best_selected = Some(selected);
+                break;
+            }
+        }
+        let selected = best_selected.ok_or_else(|| AppError::internal("Blueprint draw failed."))?;
+        predicted_facility =
+            Some(selected.iter().map(|(_, f, _)| *f).sum::<f64>() / selected.len().max(1) as f64);
+        item_ids = selected.iter().map(|(id, _, _)| *id).collect();
+        for (id, _, marks) in selected {
+            item_marks.insert(id.to_string(), json!(marks));
+        }
+    } else if settings["shuffleQuestions"].as_bool().unwrap_or(false) {
         examcore::shuffle(&mut item_ids, seed as u64);
     }
     let mut orders = serde_json::Map::new();
@@ -237,11 +350,11 @@ pub async fn start_attempt_tx(
         + i64::from(row.try_get::<i32, _>("extra_minutes")?);
     let deadline = (now + time::Duration::minutes(duration)).min(ends);
     let inserted: Option<Uuid> = sqlx::query_scalar(
-        "insert into attempts(exam_id,candidate_id,started_at,deadline_at,seed,item_order,option_order,journal_genesis,active_device)
-         values($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        "insert into attempts(exam_id,candidate_id,started_at,deadline_at,seed,item_order,option_order,journal_genesis,active_device,predicted_facility,item_marks)
+         values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          on conflict(exam_id,candidate_id) where not sandbox do nothing returning id",
     ).bind(exam_id).bind(candidate_id).bind(now).bind(deadline).bind(seed).bind(item_ids)
-        .bind(Value::Object(orders)).bind(genesis).bind(device).fetch_optional(&mut **tx).await?;
+        .bind(Value::Object(orders)).bind(genesis).bind(device).bind(predicted_facility).bind(Value::Object(item_marks)).fetch_optional(&mut **tx).await?;
     let id = if let Some(id) = inserted {
         id
     } else {

@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
         .route("/attempts/{id}/takeover", post(takeover))
         .route("/attempts/{id}/outages", get(outages))
         .route("/attempts/{id}/time-credit", post(time_credit))
+        .route("/exams/{id}/outage-credit", post(bulk_credit))
 }
 
 #[derive(Deserialize)]
@@ -84,6 +85,13 @@ struct CreditInput {
     reason: String,
     outage_from: Option<String>,
     outage_to: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BulkCreditInput {
+    from: String,
+    to: String,
+    reason: String,
 }
 
 async fn owner_attempt(db: &sqlx::PgPool, viewer: &Viewer, id: Uuid) -> AppResult<(Uuid, Uuid)> {
@@ -648,6 +656,164 @@ async fn time_credit(
     )
     .await;
     Ok(examcore::ok(json!({"deadlineAt":stamp(new_deadline)})))
+}
+
+async fn bulk_credit(
+    State(s): State<AppState>,
+    Path(exam_id): Path<Uuid>,
+    ExaminerViewer(v): ExaminerViewer,
+    meta: RequestMeta,
+    Json(input): Json<BulkCreditInput>,
+) -> AppResult<Json<Value>> {
+    examcore::load_exam_for_examiner(&s.db, &v, exam_id).await?;
+    security::enforce_rate_limit(
+        &s.db,
+        &format!("exam-resilience:bulk-time-credit:{}", v.id),
+        Limit {
+            limit: 10,
+            window: Duration::from_secs(3600),
+        },
+    )
+    .await?;
+    let from = OffsetDateTime::parse(&input.from, &Rfc3339)
+        .map_err(|_| invalid("from", "Invalid timestamp."))?;
+    let to = OffsetDateTime::parse(&input.to, &Rfc3339)
+        .map_err(|_| invalid("to", "Invalid timestamp."))?;
+    if from >= to || to - from > time::Duration::hours(2) {
+        return Err(invalid(
+            "from",
+            "The outage window must be ordered and at most two hours.",
+        ));
+    }
+    if !(3..=500).contains(&input.reason.trim().chars().count()) || input.reason.contains('\0') {
+        return Err(invalid("reason", "Provide a 3–500 character reason."));
+    }
+    let mut tx = s.db.begin().await?;
+    let window: (OffsetDateTime, OffsetDateTime) =
+        sqlx::query_as("select starts_at,ends_at from exams where id=$1 for update")
+            .bind(exam_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if from < window.0 || to > window.1 {
+        return Err(invalid(
+            "from",
+            "The outage window must be inside the exam window.",
+        ));
+    }
+    let now: OffsetDateTime = sqlx::query_scalar("select clock_timestamp()")
+        .fetch_one(&mut *tx)
+        .await?;
+    let attempts: Vec<Uuid> = sqlx::query_scalar("select id from attempts where exam_id=$1 and not sandbox and (status='in_progress' or (status='expired' and deadline_at>= $2 - interval '30 minutes')) order by id for update")
+        .bind(exam_id).bind(now).fetch_all(&mut *tx).await?;
+    let mut credited = 0_i64;
+    let mut skipped = 0_i64;
+    let mut seconds_total = 0_i64;
+    let mut audit_ids = Vec::new();
+    for id in attempts {
+        let row = sqlx::query("select status,deadline_at,started_at,least(deadline_at,coalesce(submitted_at,deadline_at)) stop from attempts where id=$1")
+            .bind(id).fetch_one(&mut *tx).await?;
+        let status: String = row.try_get("status")?;
+        let deadline: OffsetDateTime = row.try_get("deadline_at")?;
+        let started: OffsetDateTime = row.try_get("started_at")?;
+        let stop: OffsetDateTime = row.try_get("stop")?;
+        if status != "in_progress"
+            && !(status == "expired" && now <= deadline + time::Duration::minutes(30))
+        {
+            skipped += 1;
+            continue;
+        }
+        let points: Vec<OffsetDateTime> = sqlx::query_scalar("select at from (select $2::timestamptz at union select at from attempt_heartbeats where attempt_id=$1) p order by at")
+            .bind(id).bind(started).fetch_all(&mut *tx).await?;
+        let mut available = 0_i64;
+        let mut ranges = Vec::new();
+        for pair in points.windows(2) {
+            let lo = std::cmp::max(std::cmp::max(pair[0], started), from);
+            let hi = std::cmp::min(std::cmp::min(pair[1], stop), to);
+            if pair[1] - pair[0] < time::Duration::seconds(45) || hi <= lo {
+                continue;
+            }
+            let gap_seconds = (hi - lo).whole_seconds();
+            let exact_hi = lo + time::Duration::seconds(gap_seconds);
+            let credited: Vec<(OffsetDateTime, OffsetDateTime)> = sqlx::query_as("select outage_from,outage_to from time_credits where attempt_id=$1 and outage_from<$3 and outage_to>$2 order by outage_from")
+                .bind(id).bind(lo).bind(exact_hi).fetch_all(&mut *tx).await?;
+            let mut cursor = lo;
+            for (credit_from, credit_to) in credited {
+                let start = std::cmp::max(credit_from, lo);
+                let end = std::cmp::min(credit_to, exact_hi);
+                if start > cursor {
+                    let seconds = (start - cursor).whole_seconds();
+                    if seconds > 0 {
+                        available += seconds;
+                        ranges.push((cursor, cursor + time::Duration::seconds(seconds), seconds));
+                    }
+                }
+                cursor = std::cmp::max(cursor, end);
+            }
+            if exact_hi > cursor {
+                let seconds = (exact_hi - cursor).whole_seconds();
+                if seconds > 0 {
+                    available += seconds;
+                    ranges.push((cursor, cursor + time::Duration::seconds(seconds), seconds));
+                }
+            }
+        }
+        if available <= 0 {
+            skipped += 1;
+            continue;
+        }
+        let cap = (window.1 + time::Duration::hours(1) - deadline)
+            .whole_seconds()
+            .max(0);
+        let grant = available.min(cap);
+        if grant <= 0 {
+            skipped += 1;
+            continue;
+        }
+        let mut remaining = grant;
+        for (credit_from, credit_to, free) in ranges {
+            if remaining <= 0 {
+                break;
+            }
+            let this_credit = remaining.min(free);
+            let credited_to = credit_from + time::Duration::seconds(this_credit);
+            let bounded_to = std::cmp::min(credit_to, credited_to);
+            sqlx::query("insert into time_credits(attempt_id,seconds,reason,outage_from,outage_to,granted_by) values($1,$2,$3,$4,$5,$6)")
+                .bind(id).bind(i32::try_from(this_credit).map_err(|_| AppError::internal("credit exceeds storage range"))?).bind(input.reason.trim()).bind(credit_from).bind(bounded_to).bind(v.id).execute(&mut *tx).await?;
+            remaining -= this_credit;
+        }
+        let new_deadline = deadline + time::Duration::seconds(grant);
+        if status == "expired" {
+            sqlx::query("update attempts set status='in_progress',finalized_by=null,submitted_at=null,deadline_at=$2 where id=$1").bind(id).bind(new_deadline).execute(&mut *tx).await?;
+        } else {
+            sqlx::query("update attempts set deadline_at=$2 where id=$1")
+                .bind(id)
+                .bind(new_deadline)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query("insert into attempt_events(attempt_id,kind,severity,detail) values($1,'time_credit','warning',$2)").bind(id).bind(json!({"seconds":grant,"bulk":true})).execute(&mut *tx).await?;
+        credited += 1;
+        seconds_total += grant;
+        audit_ids.push((id, grant));
+    }
+    tx.commit().await?;
+    for (id, seconds) in audit_ids {
+        security::audit(
+            &s.db,
+            &meta,
+            AuditEntry {
+                action: "exam.time_credit",
+                actor_id: Some(v.id),
+                target_type: Some("attempt"),
+                target_id: Some(id.to_string()),
+                meta: json!({"seconds":seconds,"bulk":true}),
+            },
+        )
+        .await;
+    }
+    Ok(examcore::ok(
+        json!({"credited":credited,"skipped":skipped,"secondsTotal":seconds_total}),
+    ))
 }
 
 #[cfg(test)]

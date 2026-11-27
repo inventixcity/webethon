@@ -132,6 +132,12 @@ pub fn router() -> Router<AppState> {
         .route("/exams/{id}", get(get_exam).patch(update).delete(remove))
         .route("/exams/{id}/questions", put(assign))
         .route("/exams/{id}/review", get(review))
+        .route(
+            "/exams/{id}/blueprint",
+            get(get_blueprint).put(put_blueprint),
+        )
+        .route("/exams/{id}/blueprint/preview", get(blueprint_preview))
+        .route("/exams/{id}/fairness", get(fairness))
         .route("/exams/{id}/publish", post(publish))
         .route("/exams/{id}/unpublish", post(unpublish))
         .route("/exams/{id}/complete", post(complete))
@@ -285,14 +291,43 @@ pub async fn publish_tx(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> AppResu
             "Only draft exams can be published.",
         ));
     }
-    let ready:bool=sqlx::query_scalar("select e.ends_at>now() and count(q.id)>0 and count(q.id)=count(eq.question_id) and abs(e.total_marks::float8-coalesce(sum(coalesce(eq.marks,q.marks))::float8,0))<0.009 and e.duration_minutes*60<=extract(epoch from(e.ends_at-e.starts_at)) and count(*) filter(where q.kind in ('single','multi') and jsonb_array_length(q.correct)=0)=0 from exams e left join exam_questions eq on eq.exam_id=e.id left join questions q on q.id=eq.question_id and q.deleted_at is null where e.id=$1 group by e.id").bind(id).fetch_one(&mut **tx).await?;
+    let (ready,marks_ok):(bool,bool)=sqlx::query_as("select e.ends_at>now() and count(q.id)>0 and count(q.id)=count(eq.question_id) and e.duration_minutes*60<=extract(epoch from(e.ends_at-e.starts_at)) and count(*) filter(where q.kind in ('single','multi') and jsonb_array_length(q.correct)=0)=0, abs(e.total_marks::float8-coalesce(sum(coalesce(eq.marks,q.marks))::float8,0))<0.009 from exams e left join exam_questions eq on eq.exam_id=e.id left join questions q on q.id=eq.question_id and q.deleted_at is null where e.id=$1 group by e.id").bind(id).fetch_one(&mut **tx).await?;
+    let bp = sqlx::query("select enabled,rows from exam_blueprints where exam_id=$1")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?;
+    let mut blueprint_ready = true;
+    // With a blueprint the assigned questions are a pool larger than one paper, so the blueprint's marks (not the
+    // pool's) must equal the exam total; without one, the assigned marks must.
+    let blueprint_enabled = bp.as_ref().is_some_and(|r| r.get::<bool, _>("enabled"));
+    if let Some(bp) = bp.filter(|r| r.get::<bool, _>("enabled")) {
+        let rows: Vec<BlueprintRow> =
+            serde_json::from_value(bp.try_get("rows")?).map_err(AppError::internal)?;
+        let total: f64 = sqlx::query_scalar("select total_marks::float8 from exams where id=$1")
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await?;
+        blueprint_ready = !rows.is_empty()
+            && (rows
+                .iter()
+                .map(|r| f64::from(r.count) * r.marks_each)
+                .sum::<f64>()
+                - total)
+                .abs()
+                < 0.009;
+        for row in rows {
+            let available: i64 = sqlx::query_scalar("select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 and q.topic=$2 and q.difficulty between $3 and $4").bind(id).bind(row.topic).bind(row.min_difficulty as i16).bind(row.max_difficulty as i16).fetch_one(&mut **tx).await?;
+            blueprint_ready &= available >= i64::from(row.count);
+        }
+    }
+    let ready = ready && blueprint_ready && (blueprint_enabled || marks_ok);
     if !ready {
         return Err(examcore::conflict(
             "review",
             "Exam is not ready to publish.",
         ));
     }
-    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 order by eq.position").bind(id).execute(&mut **tx).await?;
+    sqlx::query("insert into exam_items(exam_id,question_id,sandbox,position,topic,difficulty,kind,stem,options,correct,marks,negative_marks,multi_rule,rubric,max_words,explanation,predicted_facility) select $1,q.id,false,eq.position,q.topic,q.difficulty,q.kind,q.stem,q.options,q.correct,coalesce(eq.marks,q.marks),q.negative_marks,q.multi_rule,q.rubric,q.max_words,q.explanation,case when q.observed_count>=5 and q.observed_facility is not null then q.observed_facility else (array[0.85,0.7,0.55,0.4,0.25]::numeric[])[q.difficulty] end from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 order by eq.position").bind(id).execute(&mut **tx).await?;
     sqlx::query("update exams set status='published',published_at=now(),version=version+1,updated_at=now() where id=$1").bind(id).execute(&mut **tx).await?;
     Ok(())
 }
@@ -563,6 +598,304 @@ async fn publish(
     audit(&s, &m, v.0.id, "exam.published", id, json!({})).await;
     Ok(examcore::ok(get_data(&s.db, &v.0, id).await?))
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlueprintRow {
+    topic: String,
+    min_difficulty: i32,
+    max_difficulty: i32,
+    count: i32,
+    marks_each: f64,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BlueprintInput {
+    enabled: bool,
+    rows: Vec<BlueprintRow>,
+    tolerance: f64,
+}
+
+fn validate_blueprint(input: &BlueprintInput, total: f64) -> AppResult<()> {
+    let mut errors = Vec::new();
+    if !input.tolerance.is_finite() || !(0.01..=0.3).contains(&input.tolerance) {
+        errors.push((
+            "tolerance".into(),
+            "Tolerance must be between 0.01 and 0.3.".into(),
+        ));
+    }
+    if input.rows.len() > 100 {
+        errors.push(("rows".into(), "At most 100 rows are allowed.".into()));
+    }
+    for (i, row) in input.rows.iter().enumerate() {
+        let p = format!("rows[{i}]");
+        if row.topic.trim().is_empty() || row.topic.chars().count() > 80 {
+            errors.push((
+                format!("{p}.topic"),
+                "Topic must contain 1 to 80 characters.".into(),
+            ));
+        }
+        if !(1..=5).contains(&row.min_difficulty)
+            || !(1..=5).contains(&row.max_difficulty)
+            || row.min_difficulty > row.max_difficulty
+        {
+            errors.push((
+                format!("{p}.minDifficulty"),
+                "Difficulty bounds must be 1–5 with minimum no greater than maximum.".into(),
+            ));
+        }
+        if !(1..=500).contains(&row.count) {
+            errors.push((format!("{p}.count"), "Count must be from 1 to 500.".into()));
+        }
+        if !row.marks_each.is_finite()
+            || row.marks_each <= 0.0
+            || row.marks_each > 1000.0
+            || (row.marks_each * 4.0 - (row.marks_each * 4.0).round()).abs() > 1e-8
+        {
+            errors.push((
+                format!("{p}.marksEach"),
+                "Marks must be positive and in 0.25 steps.".into(),
+            ));
+        }
+    }
+    if input.enabled {
+        let marks: f64 = input
+            .rows
+            .iter()
+            .map(|r| f64::from(r.count) * r.marks_each)
+            .sum();
+        if (marks - total).abs() >= 0.009 {
+            errors.push((
+                "rows".into(),
+                "Blueprint marks must equal exam total marks.".into(),
+            ));
+        }
+        if input.rows.is_empty() {
+            errors.push((
+                "rows".into(),
+                "An enabled blueprint needs at least one row.".into(),
+            ));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(invalid_many(errors))
+    }
+}
+
+async fn get_blueprint(
+    State(s): State<AppState>,
+    v: ExaminerViewer,
+    Path(id): Path<Uuid>,
+) -> examcore::ApiJson {
+    let e = examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
+    let row = sqlx::query(
+        "select enabled,rows,tolerance::float8 tolerance from exam_blueprints where exam_id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&s.db)
+    .await?;
+    let payload = row.map(|r| json!({"enabled":r.get::<bool,_>("enabled"),"rows":r.get::<Value,_>("rows"),"tolerance":r.get::<f64,_>("tolerance")})).unwrap_or_else(|| json!({"enabled":false,"rows":[],"tolerance":0.05}));
+    let _ = e;
+    Ok(examcore::ok(payload))
+}
+
+async fn put_blueprint(
+    State(s): State<AppState>,
+    v: ExaminerViewer,
+    m: RequestMeta,
+    Path(id): Path<Uuid>,
+    Json(input): Json<BlueprintInput>,
+) -> examcore::ApiJson {
+    let e = examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
+    let mut tx = s.db.begin().await?;
+    let status: Option<String> = sqlx::query_scalar(
+        "select status from exams where id=$1 and deleted_at is null for update",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if status.as_deref() != Some("draft") {
+        return Err(examcore::conflict(
+            "state",
+            "Blueprints can only be changed while the exam is a draft.",
+        ));
+    }
+    validate_blueprint(&input, e.total_marks)?;
+    let rows = serde_json::to_value(&input.rows).map_err(AppError::internal)?;
+    let topics: Vec<String> = input.rows.iter().map(|r| r.topic.clone()).collect();
+    let found: Vec<String> = sqlx::query_scalar("select distinct q.topic from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 and q.topic=any($2)").bind(id).bind(&topics).fetch_all(&mut *tx).await?;
+    if input.rows.iter().any(|r| !found.contains(&r.topic)) {
+        return Err(invalid(
+            "rows.topic",
+            "Each blueprint topic must exist in the exam question pool.",
+        ));
+    }
+    sqlx::query("insert into exam_blueprints(exam_id,enabled,rows,tolerance) values($1,$2,$3,$4) on conflict(exam_id) do update set enabled=excluded.enabled,rows=excluded.rows,tolerance=excluded.tolerance,updated_at=now()")
+        .bind(id).bind(input.enabled).bind(rows).bind(input.tolerance).execute(&mut *tx).await?;
+    tx.commit().await?;
+    audit(
+        &s,
+        &m,
+        v.0.id,
+        "exam.blueprint_updated",
+        id,
+        json!({"enabled":input.enabled}),
+    )
+    .await;
+    Ok(examcore::ok(
+        json!({"enabled":input.enabled,"rows":input.rows,"tolerance":input.tolerance}),
+    ))
+}
+
+async fn blueprint_preview(
+    State(s): State<AppState>,
+    v: ExaminerViewer,
+    Path(id): Path<Uuid>,
+) -> examcore::ApiJson {
+    examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
+    let b = sqlx::query(
+        "select enabled,rows,tolerance::float8 tolerance from exam_blueprints where exam_id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&s.db)
+    .await?;
+    let (enabled, rows, tolerance) = b
+        .map(|r| {
+            (
+                r.get::<bool, _>("enabled"),
+                r.get::<Value, _>("rows"),
+                r.get::<f64, _>("tolerance"),
+            )
+        })
+        .unwrap_or((false, json!([]), 0.05));
+    let spec: Vec<BlueprintRow> = serde_json::from_value(rows).map_err(AppError::internal)?;
+    // The pool is the published paper once it exists; while the exam is a draft it is the assigned bank questions,
+    // with the same difficulty estimate publish snapshots (observed facility once 5+ answers exist, else declared).
+    let pool = sqlx::query(
+        "select id,topic,difficulty,predicted_facility::float8 facility from exam_items where exam_id=$1 and not sandbox          union all          select q.id,q.topic,q.difficulty,(case when q.observed_count >= 5 and q.observed_facility is not null then q.observed_facility            else case q.difficulty when 1 then 0.85 when 2 then 0.7 when 3 then 0.55 when 4 then 0.4 else 0.25 end end)::float8 facility          from exam_questions eq join questions q on q.id=eq.question_id          where eq.exam_id=$1 and q.deleted_at is null            and not exists(select 1 from exam_items i where i.exam_id=$1 and not i.sandbox)          order by id",
+    )
+    .bind(id)
+    .fetch_all(&s.db)
+    .await?;
+    let mut problems = Vec::new();
+    let mut needed = 0usize;
+    let mut target_sum = 0.0;
+    for row in &spec {
+        let matching: Vec<f64> = pool
+            .iter()
+            .filter(|q| {
+                q.get::<String, _>("topic") == row.topic
+                    && (row.min_difficulty..=row.max_difficulty)
+                        .contains(&i32::from(q.get::<i16, _>("difficulty")))
+            })
+            .map(|q| q.get::<Option<f64>, _>("facility").unwrap_or(0.55))
+            .collect();
+        if matching.len() < row.count as usize {
+            problems.push(format!(
+                "Topic '{}' needs {} items in difficulty {}–{}, but only {} are available.",
+                row.topic,
+                row.count,
+                row.min_difficulty,
+                row.max_difficulty,
+                matching.len()
+            ));
+        }
+        needed += row.count.max(0) as usize;
+        if !matching.is_empty() {
+            target_sum +=
+                matching.iter().sum::<f64>() / matching.len() as f64 * row.count.max(0) as f64;
+        }
+    }
+    let target = if needed == 0 {
+        0.0
+    } else {
+        target_sum / needed as f64
+    };
+    let mut simulated = Vec::new();
+    if enabled && problems.is_empty() {
+        for seed in 0..50u64 {
+            let mut best_mean = target;
+            let mut best_distance = f64::INFINITY;
+            for variant in 0..200u64 {
+                let mut selected = Vec::new();
+                let mut used = std::collections::HashSet::new();
+                for (ri, row) in spec.iter().enumerate() {
+                    let mut subset: Vec<(Uuid, f64)> = pool
+                        .iter()
+                        .filter(|q| {
+                            q.get::<String, _>("topic") == row.topic
+                                && (row.min_difficulty..=row.max_difficulty)
+                                    .contains(&i32::from(q.get::<i16, _>("difficulty")))
+                                && !used.contains(&q.get::<Uuid, _>("id"))
+                        })
+                        .map(|q| {
+                            (
+                                q.get("id"),
+                                q.get::<Option<f64>, _>("facility").unwrap_or(0.55),
+                            )
+                        })
+                        .collect();
+                    examcore::shuffle(
+                        &mut subset,
+                        seed.wrapping_add(variant)
+                            .wrapping_add((ri as u64).wrapping_mul(0x9e3779b97f4a7c15)),
+                    );
+                    for (item, facility) in subset.into_iter().take(row.count as usize) {
+                        used.insert(item);
+                        selected.push(facility);
+                    }
+                }
+                if selected.len() != needed {
+                    break;
+                }
+                let mean = selected.iter().sum::<f64>() / selected.len().max(1) as f64;
+                let distance = (mean - target).abs();
+                if distance < best_distance {
+                    best_distance = distance;
+                    best_mean = mean;
+                }
+                if distance <= tolerance {
+                    best_mean = mean;
+                    break;
+                }
+            }
+            simulated.push(best_mean);
+        }
+    }
+    let spread = if simulated.is_empty() {
+        0.0
+    } else {
+        simulated.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+            - simulated.iter().copied().fold(f64::INFINITY, f64::min)
+    };
+    Ok(examcore::ok(
+        json!({"feasible":problems.is_empty(),"problems":problems,"poolSize":pool.len(),"paperSize":needed,"totalMarks":spec.iter().map(|r|f64::from(r.count)*r.marks_each).sum::<f64>(),"simulated":simulated,"spread":spread,"fairnessScore":(100.0*(1.0-(spread/0.3).min(1.0))).round()}),
+    ))
+}
+
+async fn fairness(
+    State(s): State<AppState>,
+    v: ExaminerViewer,
+    Path(id): Path<Uuid>,
+) -> examcore::ApiJson {
+    examcore::load_exam_for_examiner(&s.db, &v.0, id).await?;
+    let rows = sqlx::query("select a.id,a.predicted_facility::float8 predicted,u.display_name,case when a.total_score is not null then a.total_score::float8/e.total_marks::float8*100 else null end observed from attempts a join users u on u.id=a.candidate_id join exams e on e.id=a.exam_id where a.exam_id=$1 and not a.sandbox and a.predicted_facility is not null order by a.started_at,a.id").bind(id).fetch_all(&s.db).await?;
+    let values: Vec<f64> = rows.iter().map(|r| r.get("predicted")).collect();
+    let mean = values.iter().sum::<f64>() / values.len().max(1) as f64;
+    let spread = if values.is_empty() {
+        0.0
+    } else {
+        values.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+            - values.iter().copied().fold(f64::INFINITY, f64::min)
+    };
+    let output: Vec<Value> = rows.iter().map(|r|json!({"attemptId":r.get::<Uuid,_>("id"),"candidate":r.get::<String,_>("display_name"),"predictedFacility":r.get::<f64,_>("predicted"),"observedPercent":r.get::<Option<f64>,_>("observed")})).collect();
+    Ok(examcore::ok(
+        json!({"papers":values.len(),"meanPredicted":mean,"spread":spread,"fairnessScore":(100.0*(1.0-(spread/0.3).min(1.0))).round(),"rows":output}),
+    ))
+}
+
 async fn review(
     State(s): State<AppState>,
     v: ExaminerViewer,
@@ -572,9 +905,28 @@ async fn review(
     let marks:f64=sqlx::query_scalar("select coalesce(sum(coalesce(eq.marks,q.marks)),0)::float8 from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1").bind(id).fetch_one(&s.db).await?;
     let (total,start,end,duration,count,candidates):(f64,OffsetDateTime,OffsetDateTime,i32,i64,i64)=sqlx::query_as("select total_marks::float8,starts_at,ends_at,duration_minutes,(select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1),(select count(*) from enrollments where exam_id=$1 and status='enrolled') from exams where id=$1").bind(id).fetch_one(&s.db).await?;
     let missing_keys:i64=sqlx::query_scalar("select count(*) from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 and q.kind in ('single','multi') and jsonb_array_length(q.correct)=0").bind(id).fetch_one(&s.db).await?;
+    let blueprint = sqlx::query(
+        "select enabled,rows,tolerance::float8 tolerance from exam_blueprints where exam_id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&s.db)
+    .await?;
     let topic:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('topic',topic,'count',count,'marks',marks) order by topic),'[]'::jsonb) from (select q.topic,count(*)::int count,sum(coalesce(eq.marks,q.marks))::float8 marks from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 group by q.topic) t").bind(id).fetch_one(&s.db).await?;
     let difficulty:Value=sqlx::query_scalar("select coalesce(jsonb_agg(jsonb_build_object('difficulty',difficulty,'count',count) order by difficulty),'[]'::jsonb) from (select q.difficulty,count(*)::int count from exam_questions eq join questions q on q.id=eq.question_id and q.deleted_at is null where eq.exam_id=$1 group by q.difficulty) t").bind(id).fetch_one(&s.db).await?;
-    let checks = json!([{"key":"title","ok":true,"message":"Exam has a title."},{"key":"questions","ok":count>0,"message":format!("Exam has {} questions.",count)},{"key":"marks","ok":(marks-total).abs()<0.01,"message":format!("Assigned marks: {} of {}.",marks,total)},{"key":"window","ok":end>examcore::now(),"message":"The exam window ends in the future."},{"key":"duration","ok":i64::from(duration)*60<=(end-start).whole_seconds(),"message":"The duration fits within the exam window."},{"key":"candidates","ok":candidates>0,"message":format!("{} candidates enrolled.",candidates)},{"key":"objectiveKeys","ok":missing_keys==0,"message":if missing_keys==0{"Objective questions have answer keys.".to_owned()}else{format!("{} objective questions are missing answer keys.",missing_keys)}}]);
+    let bp_enabled = blueprint
+        .as_ref()
+        .is_some_and(|r| r.get::<bool, _>("enabled"));
+    let bp_rows = blueprint
+        .as_ref()
+        .map(|r| r.get::<Value, _>("rows"))
+        .unwrap_or_else(|| json!([]));
+    let bp_spec: Vec<BlueprintRow> = serde_json::from_value(bp_rows).map_err(AppError::internal)?;
+    let bp_marks: f64 = bp_spec
+        .iter()
+        .map(|r| f64::from(r.count) * r.marks_each)
+        .sum();
+    let bp_ok = !bp_enabled || ((bp_marks - total).abs() < 0.009 && !bp_spec.is_empty());
+    let checks = json!([{"key":"title","ok":true,"message":"Exam has a title."},{"key":"questions","ok":count>0,"message":format!("Exam has {} questions.",count)},{"key":"marks","ok":bp_enabled||(marks-total).abs()<0.01,"message":if bp_enabled{format!("Question pool holds {} marks; each candidate's paper is drawn by the blueprint.",marks)}else{format!("Assigned marks: {} of {}.",marks,total)}},{"key":"blueprint","ok":bp_ok,"message":if !bp_enabled{"No enabled blueprint.".to_owned()}else if bp_ok{format!("Blueprint marks: {} of {}.",bp_marks,total)}else{format!("Enabled blueprint marks: {} of {}; they must equal the exam total.",bp_marks,total)}},{"key":"window","ok":end>examcore::now(),"message":"The exam window ends in the future."},{"key":"duration","ok":i64::from(duration)*60<=(end-start).whole_seconds(),"message":"The duration fits within the exam window."},{"key":"candidates","ok":candidates>0,"message":format!("{} candidates enrolled.",candidates)},{"key":"objectiveKeys","ok":missing_keys==0,"message":if missing_keys==0{"Objective questions have answer keys.".to_owned()}else{format!("{} objective questions are missing answer keys.",missing_keys)}}]);
     let ready = checks.as_array().is_some_and(|a| {
         a.iter()
             .filter(|c| c["key"] != "candidates")
@@ -790,6 +1142,29 @@ mod tests {
     use examcore::kernel::{Viewer, viewer::Role};
     use sqlx::PgPool;
 
+    #[test]
+    fn blueprint_validation_enforces_tolerance_marks_and_bounds() {
+        let valid = BlueprintInput {
+            enabled: true,
+            rows: vec![BlueprintRow {
+                topic: "algebra".into(),
+                min_difficulty: 1,
+                max_difficulty: 3,
+                count: 2,
+                marks_each: 2.5,
+            }],
+            tolerance: 0.05,
+        };
+        assert!(validate_blueprint(&valid, 5.0).is_ok());
+        assert!(validate_blueprint(&valid, 4.0).is_err());
+        let mut invalid = valid.clone();
+        invalid.tolerance = 0.5;
+        assert!(validate_blueprint(&invalid, 5.0).is_err());
+        let mut invalid = valid;
+        invalid.rows[0].min_difficulty = 4;
+        assert!(validate_blueprint(&invalid, 5.0).is_err());
+    }
+
     async fn fixture(db: &PgPool, total: f64, marks: f64) -> (Uuid, Uuid, Uuid) {
         let owner: Uuid =
             sqlx::query_scalar("insert into users(email,role) values($1,'examiner') returning id")
@@ -924,6 +1299,14 @@ mod tests {
             .await
             .expect("ready exam publishes");
         tx.commit().await.expect("commit publish");
+        let predicted: f64 = sqlx::query_scalar(
+            "select predicted_facility::float8 from exam_items where exam_id=$1 and not sandbox",
+        )
+        .bind(ready_exam)
+        .fetch_one(&db)
+        .await
+        .expect("snapshot predicted facility");
+        assert!((predicted - 0.7).abs() < 0.0001);
         let published_version: i32 = sqlx::query_scalar("select version from exams where id=$1")
             .bind(ready_exam)
             .fetch_one(&db)
