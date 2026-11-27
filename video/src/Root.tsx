@@ -5,6 +5,7 @@ import { Close, Opening, ScreenScene, Stack } from "./scenes";
 import type { Shot } from "./parts";
 import durations from "../durations.json";
 import shots from "../shots.json";
+import { V2 } from "./v2";
 
 type SceneDef = { id: string; kind: "opening" | "stack" | "screen" | "close"; index?: string; label?: string; title?: string; pad?: number };
 
@@ -65,5 +66,8 @@ const Walkthrough: React.FC = () => {
 };
 
 export const RemotionRoot: React.FC = () => (
-  <Composition id="Walkthrough" component={Walkthrough} durationInFrames={TOTAL} fps={FPS} width={1920} height={1080} />
+  <>
+    <Composition id="Walkthrough" component={Walkthrough} durationInFrames={TOTAL} fps={FPS} width={1920} height={1080} />
+    <V2 />
+  </>
 );

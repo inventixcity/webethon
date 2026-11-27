@@ -1,0 +1,18 @@
+{
+ "admin": 16.53,
+ "bank": 10.87,
+ "candidate": 17.33,
+ "exam": 13.57,
+ "grading": 18.33,
+ "landing": 17.6,
+ "mobile-landscape": 5.77,
+ "mobile-portrait": 5.73,
+ "monitor": 13.03,
+ "offline": 19.87,
+ "paper": 8.37,
+ "publish": 12.5,
+ "results": 17.33,
+ "signin": 12.83,
+ "verify": 10.9,
+ "workspace": 20.03
+}

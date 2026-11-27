@@ -1,0 +1,20 @@
+[
+  {"id": "a01-open", "text": "Online exams break at the worst possible moment. The Wi-Fi drops. A tab switches. A result gets questioned. This is Inventix Invigil. Exams that hold up."},
+  {"id": "a02-stack", "text": "Here's what's under the hood. A Rust core on Axum and SQLx. PostgreSQL seventeen on Supabase, with row level security on every table. A Next.js sixteen and React nineteen front end. HTTP-only host cookies, CSRF checks, rate limits, Argon2 passwords, two-step sign-in and admin step-up. Results signed with Ed25519. Gemini for grading help. Five hundred and fifty automated tests, shipped on Vercel and Render."},
+  {"id": "a03-landing", "text": "This is the live site. One clear promise, the method, resilience, integrity and security, all on a single page, with a way for institutes to reach us."},
+  {"id": "a04-signin", "text": "Sign in is one screen. Accounts are created by the institution, so there's no open sign-up to abuse."},
+  {"id": "a05-bank", "text": "Examiners start in the question bank. Filter by topic, difficulty and type, preview any question, and see how it performed in past exams."},
+  {"id": "a06-exam", "text": "Creating an exam takes a minute. Title, instructions, the window, duration, marks, and the integrity rules, each in its own clear card."},
+  {"id": "a07-paper", "text": "Then build the paper. Pick questions from the bank, set marks, and watch the total. Turn on fair papers, and every candidate draws a different paper of equal difficulty."},
+  {"id": "a08-publish", "text": "Enrol candidates by email or CSV. Review and publish checks every rule, flags anything to fix, and freezes the paper only when it's ready."},
+  {"id": "a09-candidate", "text": "Now, the candidate. The dashboard shows what's next, with a countdown driven by the server clock. The lobby explains exactly what is recorded, and nothing more."},
+  {"id": "a10-workspace", "text": "Inside the exam, every answer saves within a second. Flag questions, use the scratchpad, jump around with the navigator."},
+  {"id": "a11-offline", "text": "Now pull the plug. The exam keeps going. Answers are sealed into a hash-chained journal on the device. The moment the network returns, everything syncs, and the server confirms it. The deadline lives on the server, so time can't be gamed."},
+  {"id": "a12-monitor", "text": "Back in the control room, the examiner sees every candidate live. Progress, connection, integrity signals, and activity charts that move as the exam runs. Send an announcement, or credit a verified outage, in one click."},
+  {"id": "a13-grading", "text": "Grading is blind. Scripts show labels, not names. For written answers, the AI assistant suggests a mark against the rubric, with its reasoning. The examiner always has the final say."},
+  {"id": "a14-results", "text": "Results publish with full analytics: score distribution, topic performance, and item analysis that spots questions that are too hard or misleading. Export a branded PDF report or a CSV, named properly."},
+  {"id": "a15-verify", "text": "Every result comes with a certificate code. Anyone can check it in seconds. The statement is signed, masked, and tamper evident."},
+  {"id": "a16-admin", "text": "Admins see the whole platform. Sign-ins, sessions and accounts in live charts, every action in the audit trail, and institute requests in one queue."},
+  {"id": "a17-mobile", "text": "And it all works on a phone, in portrait and in landscape."},
+  {"id": "a18-close", "text": "Resilient. Fair. Verifiable. Inventix Invigil. Exams that hold up."}
+]

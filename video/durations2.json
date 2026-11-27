@@ -1,0 +1,20 @@
+{
+ "a01-open": 10.2,
+ "a02-stack": 29.59,
+ "a03-landing": 10.06,
+ "a04-signin": 6.34,
+ "a05-bank": 8.76,
+ "a06-exam": 9.46,
+ "a07-paper": 10.49,
+ "a08-publish": 9.43,
+ "a09-candidate": 9.48,
+ "a10-workspace": 7.63,
+ "a11-offline": 13.68,
+ "a12-monitor": 14.81,
+ "a13-grading": 12.02,
+ "a14-results": 12.98,
+ "a15-verify": 7.7,
+ "a16-admin": 9.53,
+ "a17-mobile": 3.34,
+ "a18-close": 5.62
+}

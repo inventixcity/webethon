@@ -2,5 +2,7 @@ node_modules
 out
 .remotion
 public/shots
+public/clips
 public/sfx/*.wav
 public/vo/*.mp3
+public/vo2/*.mp3
