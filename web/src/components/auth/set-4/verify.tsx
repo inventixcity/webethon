@@ -46,7 +46,7 @@ export default function Verify({ email, next }: { email?: string; next?: string 
                   ? `Six digits are on their way to ${maskEmail(email)}.`
                   : "Six digits are on their way."}
             </p>
-            <VerifyPanel verify={verify} next={next} cellClassName="font-heading text-3xl italic" />
+            <VerifyPanel verify={verify} next={next} />
           </div>
         </section>
       </div>

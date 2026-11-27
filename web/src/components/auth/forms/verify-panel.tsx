@@ -1,14 +1,12 @@
 "use client";
 
-import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { CodeLockField } from "@/components/auth/code-lock";
 import { Button } from "@/components/ui/button";
-import { InputOTP, InputOTPSlot } from "@/components/ui/input-otp";
-import { CODE_LENGTH, type useVerify } from "@/features/auth/use-verify";
-import { cn } from "@/lib/utils";
+import { CODE_LENGTH, CODE_ERROR_ID, type useVerify } from "@/features/auth/use-verify";
 import { CodeError } from "./code-error";
 
 const linkStyle = "cursor-pointer underline underline-offset-4 hover:text-vermilion-deep disabled:text-ink-soft disabled:no-underline";
@@ -27,48 +25,35 @@ type VerifyPanelProps = {
   verify: ReturnType<typeof useVerify>;
   /** Hides the Continue button, for the password reset path that moves on by itself. */
   next?: string;
-  /** Extra classes for each digit cell. */
-  cellClassName?: string;
   className?: string;
 };
 
-/** The code input with its status line, for sets that show their drama elsewhere on the page. */
-export function VerifyPanel({ verify, next, cellClassName, className }: VerifyPanelProps) {
+/**
+ * The six digit code entry, in the same lock style as the certificate check: a padlock that turns while the code is
+ * checked, opens when it is right and the row shakes when it is wrong.
+ */
+export function VerifyPanel({ verify, next, className }: VerifyPanelProps) {
   const { verified, routes } = verify;
+  const lockState = verify.checking ? "pending" : verified ? "ok" : verify.codeError ? "wrong" : "idle";
 
   return (
     <div className={className}>
-      <InputOTP
-        // Remounting clears the input and replays the shake after a wrong code.
-        key={verify.attempt}
-        autoFocus
-        maxLength={CODE_LENGTH}
-        pattern={REGEXP_ONLY_DIGITS}
-        inputMode="numeric"
+      <CodeLockField
+        id="verify-code"
+        label="Verification code"
+        numeric
+        length={CODE_LENGTH}
+        groupSize={3}
         value={verify.code}
         onChange={verify.change}
         onComplete={verify.complete}
+        state={lockState}
+        shakeKey={verify.attempt}
+        autoFocus
         disabled={verify.checking || verified || verify.locked > 0}
-        aria-label="Verification code"
-        {...verify.codeInputProps}
-        containerClassName="block w-full has-disabled:opacity-100"
-      >
-        <div className={cn("grid w-full grid-cols-6 gap-2", verify.attempt > 0 && "animate-shake motion-reduce:animate-none")}>
-          {Array.from({ length: CODE_LENGTH }, (_, index) => (
-            <InputOTPSlot
-              key={index}
-              index={index}
-              style={{ transitionDelay: verified ? `${index * 60}ms` : undefined }}
-              className={cn(
-                "aspect-square border border-ink/30 text-2xl leading-none transition-colors duration-(--duration-base) motion-reduce:transition-none",
-                "data-[active]:border-ink data-[filled]:border-ink",
-                verified && "border-vermilion-deep! text-vermilion-deep!",
-                cellClassName,
-              )}
-            />
-          ))}
-        </div>
-      </InputOTP>
+        invalid={Boolean(verify.codeError)}
+        describedBy={verify.codeError ? CODE_ERROR_ID : undefined}
+      />
 
       <div className="mt-5 min-h-14 font-mono text-[11px] tracking-[0.12em] uppercase">
         {verified && next !== "reset" ? (

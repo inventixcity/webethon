@@ -47,7 +47,7 @@ export default function Verify({ email, next }: { email?: string; next?: string 
       }
     >
       <div className="mx-auto w-full max-w-xl px-5 py-6">
-        <VerifyPanel verify={verify} next={next} cellClassName="font-heading font-extrabold" />
+        <VerifyPanel verify={verify} next={next} />
       </div>
     </Shell>
   );

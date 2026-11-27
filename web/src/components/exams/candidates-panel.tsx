@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CsvParseError, parseCsv, rowsToObjects } from "@/components/import/csv";
+import { AccessLinkReveal, resetAccessMessage, type IssuedAccessLink } from "@/components/auth/access-link";
 import { api } from "@/lib/api/client";
 import { messageFor } from "@/lib/errors/describe";
 import type { CandidateImportRow, Enrollment, ImportResult, ImportRowError } from "@/lib/exam/types";
@@ -36,6 +37,7 @@ export function CandidatesPanel({ examId }: { examId: string }) {
   const [pending, setPending] = useState<PendingRow[]>([]);
   const [inviteLinks, setInviteLinks] = useState<Array<{ email: string; url: string }> | null>(null);
   const [announce, setAnnounce] = useState("");
+  const [accessLink, setAccessLink] = useState<{ email: string; link: IssuedAccessLink } | null>(null);
 
   function queue(rows: PendingRow[]) {
     setPending((current) => [...current, ...rows]);
@@ -72,9 +74,14 @@ export function CandidatesPanel({ examId }: { examId: string }) {
             onReenroll={(row) => {
               queue([{ email: row.email, displayName: row.displayName, extraMinutes: row.extraMinutes, origin: "manual" }]);
             }}
+            onIssued={(email, link) => setAccessLink({ email, link })}
           />
         ) : null}
       </section>
+
+      {accessLink ? (
+        <AccessLinkReveal email={accessLink.email} link={accessLink.link} onDismiss={() => setAccessLink(null)} />
+      ) : null}
 
       <section aria-labelledby="add-heading" className="grid gap-8">
         <h2 id="add-heading" className="border-b border-ink pb-4 font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -108,14 +115,18 @@ function EnrollmentTable({
   rows,
   onChanged,
   onReenroll,
+  onIssued,
 }: {
   examId: string;
   rows: Enrollment[];
   onChanged: () => void;
   onReenroll: (row: Enrollment) => void;
+  onIssued: (email: string, link: IssuedAccessLink) => void;
 }) {
   const [revoking, setRevoking] = useState<Enrollment | null>(null);
   const [revokePending, setRevokePending] = useState(false);
+  const [resetting, setResetting] = useState<Enrollment | null>(null);
+  const [resetPending, setResetPending] = useState(false);
   const toast = useToast();
 
   async function revoke() {
@@ -130,6 +141,22 @@ function EnrollmentTable({
       toast.error(messageFor(cause));
     } finally {
       setRevokePending(false);
+    }
+  }
+
+  async function resetAccess() {
+    if (!resetting) return;
+    setResetPending(true);
+    try {
+      const link = await api<IssuedAccessLink>(`/exams/${encodeURIComponent(examId)}/enrollments/${encodeURIComponent(resetting.candidateId)}/reset-access`, { method: "POST" });
+      onIssued(resetting.email, link);
+      setResetting(null);
+      onChanged();
+    } catch (cause) {
+      setResetting(null);
+      toast.error(resetAccessMessage(cause, "candidate"));
+    } finally {
+      setResetPending(false);
     }
   }
 
@@ -162,6 +189,7 @@ function EnrollmentTable({
                 row={row}
                 onChanged={onChanged}
                 onRevoke={() => setRevoking(row)}
+                onReset={() => setResetting(row)}
                 onReenroll={() => onReenroll(row)}
               />
             ))}
@@ -181,6 +209,19 @@ function EnrollmentTable({
         <p>{revoking ? `${revoking.displayName} (${revoking.email}) can no longer start or continue this exam.` : ""}</p>
         <p>This applies even mid-exam. You can enrol them again later.</p>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={resetting !== null}
+        title="Reset access?"
+        confirmLabel="Reset access"
+        destructive
+        pending={resetPending}
+        onCancel={() => setResetting(null)}
+        onConfirm={resetAccess}
+      >
+        <p>{resetting ? `${resetting.displayName} (${resetting.email}) will be signed out everywhere and their current password stops working.` : ""}</p>
+        <p>You get a new access link to hand over. No email is sent, and the link is shown once.</p>
+      </ConfirmDialog>
     </>
   );
 }
@@ -190,12 +231,14 @@ function EnrollmentRow({
   row,
   onChanged,
   onRevoke,
+  onReset,
   onReenroll,
 }: {
   examId: string;
   row: Enrollment;
   onChanged: () => void;
   onRevoke: () => void;
+  onReset: () => void;
   onReenroll: () => void;
 }) {
   const toast = useToast();
@@ -304,6 +347,9 @@ function EnrollmentRow({
             <>
               <Button variant="ghost" size="sm" loading={sending} onClick={resend}>
                 Resend invite
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onReset}>
+                Reset access
               </Button>
               <Button variant="ghost" size="sm" onClick={onRevoke}>
                 Revoke

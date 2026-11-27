@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { formatDateTime, messageOf } from "@/components/analytics/format";
+import { AccessLinkReveal, resetAccessMessage, type IssuedAccessLink } from "@/components/auth/access-link";
+import { useCurrentUserId } from "@/features/teams/hooks";
 import { CreateAccount } from "./create-account";
 import {
   listUsers,
@@ -38,6 +40,10 @@ type UserAction = {
   path: `/${string}`;
   body?: unknown;
   tone: "primary" | "danger";
+  /** Receives the reply, when the action returns something to show (the reset access link). */
+  onResult?: (value: unknown) => void;
+  /** Turns a failure into the message to show, when the default mapping is not clear enough. */
+  explain?: (cause: unknown) => string;
 };
 
 type UserDetail = {
@@ -240,6 +246,8 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
   const [stepUpRetry, setStepUpRetry] = useState<UserAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [issued, setIssued] = useState<IssuedAccessLink | null>(null);
+  const currentUserId = useCurrentUserId();
   const titleId = useId();
 
   useEffect(() => {
@@ -268,9 +276,10 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
   async function run(next: UserAction) {
     setBusy(true);
     try {
-      await api(next.path, { method: "POST", body: next.body });
+      const reply = await api<unknown>(next.path, { method: "POST", body: next.body });
       setAction(null);
-      setNotice(`${next.title} completed for ${user.displayName}.`);
+      if (next.onResult) next.onResult(reply);
+      else setNotice(`${next.title} completed for ${user.displayName}.`);
       setDetailVersion((value) => value + 1);
       onChanged();
     } catch (cause) {
@@ -278,7 +287,7 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
       if (needsStepUp(cause)) {
         setStepUpRetry(next);
       } else {
-        toast.error(describeError(cause, { context: "action" }));
+        toast.error(next.explain ? next.explain(cause) : describeError(cause, { context: "action" }));
       }
     } finally {
       setBusy(false);
@@ -294,6 +303,20 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
       path: `${base}/role`,
       body: { role: toApiRole(role) },
       tone: "primary",
+    });
+  }
+  if (!user.deletedAt && currentUserId !== undefined && currentUserId !== user.id) {
+    actions.push({
+      title: "Reset access",
+      description:
+        "Their current password stops working and every session is signed out. You get a new access link to hand over. No email is sent.",
+      path: `${base}/reset-access`,
+      tone: "danger",
+      onResult: (reply) => {
+        setIssued(reply as IssuedAccessLink);
+        setNotice("");
+      },
+      explain: (cause) => resetAccessMessage(cause, "account"),
     });
   }
   if (!user.deletedAt) {
@@ -408,6 +431,10 @@ function UserDrawer({ user, onClose, onChanged }: { user: AdminUserRow; onClose:
             </>
           )}
         </section>
+
+        {issued && (
+          <AccessLinkReveal email={user.email} link={issued} onDismiss={() => setIssued(null)} />
+        )}
 
         <section aria-labelledby={`${titleId}-actions`} className="grid gap-4">
           <h3 id={`${titleId}-actions`} className="font-mono text-[11px] tracking-[0.12em] uppercase">

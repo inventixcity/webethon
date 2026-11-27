@@ -10,6 +10,8 @@ export type PasswordLockState = "idle" | "pending" | "ok" | "wrong";
 type PasswordLockProps = {
   /** Characters typed so far. The shackle travels further as the password grows. */
   length: number;
+  /** Characters that take the shackle to its full travel. 12 for a password, 6 for an email code. */
+  total?: number;
   /** "pending" spins the padlock on a loop while the server checks. */
   state?: PasswordLockState;
   className?: string;
@@ -18,8 +20,6 @@ type PasswordLockProps = {
 const SRC = "/lottie/padlock.json";
 /** The last frame of the shackle's cycle, where the lock is fully travelled. */
 const LAST_FRAME = 165;
-/** Characters at which the shackle has travelled its full range. */
-const FULL_AT = 12;
 
 // The colours baked into /public/lottie, so the lock follows the theme tokens at runtime.
 const BAKED_TOKENS: Record<string, string> = {
@@ -64,7 +64,7 @@ function retheme(root: unknown, host: Element) {
  * along its cycle, so the lock follows the typing. While the server checks, it spins on a loop. Under
  * reduced motion it jumps to each position and never spins.
  */
-export function PasswordLock({ length, state = "idle", className }: PasswordLockProps) {
+export function PasswordLock({ length, total = 12, state = "idle", className }: PasswordLockProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const animation = useRef<AnimationItem | null>(null);
@@ -74,10 +74,11 @@ export function PasswordLock({ length, state = "idle", className }: PasswordLock
   // Set by the load effect once the animation exists: moves the lock toward the target position.
   const settle = useRef<() => void>(() => {});
 
+  // "ok" opens the lock fully; otherwise the shackle follows the characters typed.
   useEffect(() => {
-    target.current = Math.min(1, length / FULL_AT) * LAST_FRAME;
+    target.current = state === "ok" ? LAST_FRAME : Math.min(1, length / total) * LAST_FRAME;
     settle.current();
-  }, [length]);
+  }, [length, total, state]);
 
   useEffect(() => {
     const spin = state === "pending" && !reduced.current;

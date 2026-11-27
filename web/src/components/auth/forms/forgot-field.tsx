@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { requestReset } from "@/features/auth/client";
-import { type ForgotValues, forgotSchema, maskEmail } from "@/features/auth/schemas";
+import { type ForgotValues, forgotSchema } from "@/features/auth/schemas";
 import { useAuthAction } from "@/features/auth/use-auth-action";
 import { useAuthRoutes } from "@/features/auth/use-auth-routes";
 import { Field } from "../field";
@@ -60,7 +60,7 @@ export function ForgotField({ onType, onSent, onError, submitLabel = "Send reset
   if (sentTo) {
     return (
       <div className="flex flex-col gap-5">
-        <p className="text-lg">On its way to {maskEmail(sentTo)}.</p>
+        <p className="text-lg">If an account exists for {sentTo}, a 6-digit code is on its way. It expires in 15 minutes.</p>
         <div className="flex flex-wrap items-center gap-6">
           <Button asChild size="lg" className="justify-between gap-10">
             <Link href={routes.verify(sentTo, "reset")}>

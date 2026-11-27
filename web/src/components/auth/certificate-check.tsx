@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { type RadarStatus, RadarScene } from "@/components/ascii/scenes/radar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api/client";
 import type { VerificationResult } from "@/lib/exam/types";
 import { cn } from "@/lib/utils";
+import { CodeLockField, normaliseCode } from "./code-lock";
+import type { PasswordLockState } from "./password-lock";
 
 /** The radar has six contacts. Each one follows every second character of the 12 character code. */
 const CONTACTS = 6;
@@ -16,13 +17,9 @@ const CODE_CHARS = 12;
 /** How long the radar keeps scanning after the last keystroke. */
 const TYPING_PAUSE_MS = 700;
 
-/** Keeps the code in the XXXX-XXXX-XXXX shape, upper case, with no characters that look alike. */
-function mask(value: string) {
-  const chars = value
-    .toUpperCase()
-    .replace(/[^0-9A-HJKMNPQRSTVWXYZ]/g, "")
-    .slice(0, CODE_CHARS);
-  return [chars.slice(0, 4), chars.slice(4, 8), chars.slice(8, 12)].filter(Boolean).join("-");
+/** Shows the code in the XXXX-XXXX-XXXX shape, for the address bar. */
+function dashed(clean: string) {
+  return [clean.slice(0, 4), clean.slice(4, 8), clean.slice(8, 12)].filter(Boolean).join("-");
 }
 
 /** Turns the typed characters into the radar's contacts, one contact for every second character. */
@@ -72,20 +69,20 @@ const bandStyle = {
 
 /**
  * The public certificate check, laid out for one laptop screen. The code and its result sit on the left, and the
- * radar is the hero on the right. It scans while the code is typed or checked, locks on a valid certificate, and
- * shows a no-match burst for an invalid or revoked one. On phones the radar is a band above the form.
+ * radar is the hero on the right. The code is entered on a combination-style lock: the padlock turns while typing or
+ * checking, opens on a valid certificate, and the row shakes on an invalid one. The radar scans while the code is
+ * typed or checked, locks on a valid certificate, and shows a no-match burst otherwise. On phones the radar is a band
+ * above the form.
  */
 export function CertificateCheck({ code, background }: { code?: string; background?: ReactNode }) {
   const router = useRouter();
   const [radar] = useState(() => new RadarScene());
-  const [value, setValue] = useState(mask(code ?? ""));
+  const [clean, setClean] = useState(() => normaliseCode(code ?? ""));
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(code));
   const [typing, setTyping] = useState(false);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const clean = value.replaceAll("-", "");
 
   useEffect(() => {
     if (!code) return;
@@ -122,8 +119,13 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
     radar.setStatus(radarState);
   }, [radar, radarState]);
 
-  function onChange(event: ChangeEvent<HTMLInputElement>) {
-    setValue(mask(event.target.value));
+  // The padlock turns while typing or checking, opens on a valid certificate, and stays closed otherwise.
+  const lockState: PasswordLockState = loading || typing ? "pending" : result?.valid ? "ok" : "idle";
+  // One shake per wrong outcome: a failed check, or a result that is not valid.
+  const shakeKey = error || (result && !result.valid) ? 1 : 0;
+
+  function onChange(value: string) {
+    setClean(normaliseCode(value).slice(0, CODE_CHARS));
     setTyping(true);
     if (typingTimer.current) clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => setTyping(false), TYPING_PAUSE_MS);
@@ -132,7 +134,7 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (clean.length !== CODE_CHARS) return;
-    router.push(`/verify/${encodeURIComponent(value)}`);
+    router.push(`/verify/${encodeURIComponent(dashed(clean))}`);
   }
 
   const band = loading
@@ -163,32 +165,35 @@ export function CertificateCheck({ code, background }: { code?: string; backgrou
               : "Enter the 12 character certificate code printed on the result statement."}
           </p>
 
-          <form onSubmit={submit} className="mt-7 flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
-            <label className="block min-w-0 flex-1">
-              <span className={cn(label, "text-ink")}>Certificate code</span>
-              <Input
-                aria-label="Certificate code"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                value={value}
+          <form onSubmit={submit} className="mt-7 flex max-w-xl flex-col gap-5">
+            <div className="grid gap-3">
+              <label htmlFor="certificate-code" className={cn(label, "text-ink")}>
+                Certificate code
+              </label>
+              <CodeLockField
+                id="certificate-code"
+                label="Certificate code"
+                length={CODE_CHARS}
+                groupSize={4}
+                value={clean}
                 onChange={onChange}
-                placeholder="XXXX-XXXX-XXXX"
-                className="mt-2 font-mono tracking-[0.18em] uppercase"
+                state={lockState}
+                shakeKey={shakeKey}
+                invalid={Boolean(error)}
+                autoFocus={!code}
+                disabled={loading}
               />
-            </label>
-            <Button type="submit" disabled={clean.length !== CODE_CHARS}>
-              {code ? "Check code" : "Verify code"}
-            </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <Button type="submit" disabled={clean.length !== CODE_CHARS}>
+                {code ? "Check code" : "Verify code"}
+              </Button>
+            </div>
           </form>
 
           <div className="mt-3 flex min-h-10 max-w-md flex-wrap items-center justify-between gap-x-6 gap-y-2">
             {loading || error || result ? null : (
-              <p
-                aria-live="polite"
-                role="status"
-                className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase"
-              >
+              <p aria-live="polite" role="status" className="font-mono text-[11px] tracking-[0.12em] text-ink-muted uppercase">
                 {statusLine(clean, loading, result, error)}
               </p>
             )}

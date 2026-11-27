@@ -1,15 +1,13 @@
 "use client";
 
-import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { LottieLoop } from "@/components/motion/lottie-loop";
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
-import { InputOTP, InputOTPSlot } from "@/components/ui/input-otp";
+import { CodeLockField } from "../code-lock";
 import { maskEmail } from "@/features/auth/schemas";
-import { CODE_LENGTH, useVerify } from "@/features/auth/use-verify";
-import { cn } from "@/lib/utils";
+import { CODE_ERROR_ID, CODE_LENGTH, useVerify } from "@/features/auth/use-verify";
 import { AuthHeader } from "../auth-header";
 import { CodeError } from "../forms/code-error";
 
@@ -46,42 +44,22 @@ export default function Verify({ email, next }: { email?: string; next?: string 
           </div>
         </div>
 
-        <InputOTP
-          // Remounting clears the input and replays the shake after a wrong code.
-          key={verify.attempt}
-          autoFocus
-          maxLength={CODE_LENGTH}
-          pattern={REGEXP_ONLY_DIGITS}
-          inputMode="numeric"
+        <CodeLockField
+          id="verify-code"
+          label="Verification code"
+          numeric
+          length={CODE_LENGTH}
+          groupSize={3}
           value={verify.code}
           onChange={verify.change}
           onComplete={verify.complete}
+          state={verify.checking ? "pending" : verified ? "ok" : verify.codeError ? "wrong" : "idle"}
+          shakeKey={verify.attempt}
+          autoFocus
           disabled={verify.checking || verified || verify.locked > 0}
-          aria-label="Verification code"
-          {...verify.codeInputProps}
-          containerClassName="block w-full has-disabled:opacity-100"
-        >
-          <div
-            className={cn(
-              "grid w-full grid-cols-6 divide-x divide-ink border-y border-ink",
-              verify.attempt > 0 && "animate-shake motion-reduce:animate-none",
-              verify.checking && "animate-pulse motion-reduce:animate-none",
-            )}
-          >
-            {Array.from({ length: CODE_LENGTH }, (_, index) => (
-              <InputOTPSlot
-                key={index}
-                index={index}
-                style={{ transitionDelay: verified ? `${index * 60}ms` : undefined }}
-                className={cn(
-                  "aspect-square text-[clamp(2.25rem,9vw,8.5rem)] leading-none transition-colors duration-(--duration-slow) md:aspect-auto md:h-[clamp(4.5rem,16vh,10rem)]",
-                  "data-[active]:bg-paper-raised data-[filled]:bg-ink data-[filled]:text-paper",
-                  verified && "bg-vermilion-deep! text-paper!",
-                )}
-              />
-            ))}
-          </div>
-        </InputOTP>
+          invalid={Boolean(verify.codeError)}
+          describedBy={verify.codeError ? CODE_ERROR_ID : undefined}
+        />
 
         <div className="flex min-h-16 flex-wrap items-center justify-between gap-x-8 gap-y-3 font-mono text-[11px] tracking-[0.12em] uppercase">
           {verified ? (

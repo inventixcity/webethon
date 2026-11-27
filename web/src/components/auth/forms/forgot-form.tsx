@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { Reveal } from "@/components/motion/reveal";
 import { Button } from "@/components/ui/button";
 import { requestReset } from "@/features/auth/client";
-import { type ForgotValues, forgotSchema, maskEmail } from "@/features/auth/schemas";
+import { type ForgotValues, forgotSchema } from "@/features/auth/schemas";
 import { useAuthAction } from "@/features/auth/use-auth-action";
 import { useAuthRoutes } from "@/features/auth/use-auth-routes";
 import { FieldError } from "../field";
@@ -58,12 +58,18 @@ export function ForgotForm({ onType, onSent, onError }: ForgotFormProps) {
   if (sentTo) {
     return (
       <div className="flex flex-col gap-10">
-        <h1 className={sentenceType}>
-          <Reveal className="block">On its way</Reveal>
-          <Reveal className="block" delay={0.1}>
-            to {maskEmail(sentTo)}
-          </Reveal>
-        </h1>
+        {/* Neutral on purpose: the same answer whether or not an account exists, so nothing is revealed. */}
+        <div>
+          <h1 className={sentenceType}>
+            <Reveal className="block">If an account exists</Reveal>
+            <Reveal className="block" delay={0.1}>
+              for {sentTo},
+            </Reveal>
+          </h1>
+          <p className="mt-6 max-w-[34ch] text-lg text-ink-soft">
+            a 6-digit code is on its way. It expires in 15 minutes.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-6">
           <Button asChild size="lg" className="justify-between gap-10">
             <Link href={routes.verify(sentTo, "reset")}>
