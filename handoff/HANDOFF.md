@@ -201,7 +201,17 @@ Examiner exam pages share a tab bar component `web/src/components/exams/exam-tab
 | 0 | 10:40 | Repo bootstrapped; schema, examcore, contract types and crate scaffolds compile. Workers launching. |
 | 1 | 11:50 | Pushed bf72cc9. Done: C1, C7 (tests pass), C6 nearly done, all H1–H5 screens. Running (Codex): C2, C3, C6, C8 loops, S1 (attempts), S2 (5.3 engine), R1 review. The Opus O1–O5 and X1 agents were STOPPED by the user mid-edit. |
 
-### RESUME HERE (lead ran out of usage at ~11:55)
+
+### DEPLOYMENT (live, 27 Nov 13:10 PKT)
+- Web (Vercel project `invigil`): **https://invigil-ivory.vercel.app**. NOT invigil.vercel.app, which is a different site. Deploy: `cd web && npx vercel deploy --prod --yes`.
+- API (Render web service `invigil-api`, srv id in handoff/run/render-service.txt): https://invigil-api.onrender.com. The image is built by GitHub Actions (`.github/workflows/api-image.yml`) to ghcr.io/inventixcity/invigil-api:latest; then trigger a Render deploy via the API (see the lead's scripts: POST /v1/services/{id}/deploys with RENDER_API_KEY).
+- DB: Supabase Tokyo pooler (DATABASE_URL in .env.production). Migrations run on API boot. Demo data seeded with `api seed-demo` using the production signing key.
+- Email: Resend, verified domain inventixhq.com, sender `Inventix Invigil <info@inventixhq.com>`.
+- Keep-alive: `.github/workflows/keepalive.yml` needs the repo variable `API_HEALTH_URL=https://invigil-api.onrender.com/healthz`.
+- Demo logins are shown only when `NEXT_PUBLIC_DEMO_LOGINS=true` (set on Vercel for judging).
+- Accounts: admin creates examiners (invite link and email); examiners enroll candidates (CSV, invites); a forgotten password uses the emailed code (no enumeration) or an access link re-issued by an admin or examiner (step-up required for admins).
+
+### RESUME HERE (older notes) (lead ran out of usage at ~11:55)
 1. `web/src/components/workspace/workspace.tsx` doesn't typecheck: O3 changed the props of `TopBar` (needs totalMs, queued, failed, answered, total, simulated, helpOpen, onHelpOpenChange, onToggleSimulation), `PaletteItem` (needs failed, queued), the `PaletteTrigger` `answered` prop, and renamed `NetworkBanners` to `ConnectionBanner` and `JournalRejectedNotice`. Update workspace.tsx to the new component APIs (read top-bar.tsx, palette.tsx, network-banner.tsx).
 2. See `handoff/LEAD-TODO.md`: accumulate the typing telemetry in exam_attempts `store::upsert_answer`.
 3. Check each worker log (`handoff/log/*.md`) and reviews (`handoff/reviews/*.md`). Resume an unfinished Codex worker with `bash handoff/loop-worker.sh <ID>`.
