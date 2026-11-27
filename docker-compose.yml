@@ -83,7 +83,7 @@ services:
   # The frontend reaches the API over the compose network through API_ORIGIN, as the Vercel proxy does.
   web:
     profiles: ["full"]
-    image: node:24-bookworm-slim
+    image: node:26-bookworm-slim
     working_dir: /app
     command:
       - sh
