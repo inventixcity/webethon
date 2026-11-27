@@ -212,7 +212,7 @@ async fn exam_analytics(
         .map(|(i, count)| json!({"from":i*10,"to":(i+1)*10,"count":count}))
         .collect();
     Ok(examcore::ok(
-        json!({"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted").count(),"similarPairsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":if capped {"Indicators for review, not evidence. Pair analysis capped at 500 attempts."} else {"Indicators for review, not evidence."}}),
+        json!({"examId":id,"attempts":attempts.len(),"submitted":attempts.iter().filter(|a|a.status=="submitted"||a.status=="expired").count(),"similarPairsCapped":capped,"mean":mean,"median":median(&ordered).unwrap_or(0.),"stdDev":stddev(&scores),"highest":scores.iter().copied().reduce(f64::max).unwrap_or(0.),"lowest":scores.iter().copied().reduce(f64::min).unwrap_or(0.),"passRate":pass,"histogram":histogram,"reliability":reliability,"items":per_item,"topics":topics,"similarPairs":pairs,"similarPairsNote":if capped {"Indicators for review, not evidence. Pair analysis capped at 500 attempts."} else {"Indicators for review, not evidence."}}),
     ))
 }
 
