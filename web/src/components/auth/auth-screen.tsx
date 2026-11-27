@@ -54,14 +54,14 @@ const screens: Record<AuthSetId, Record<AuthScreenId, ComponentType<ScreenProps>
 
 export function AuthScreen({ set, screen, ...props }: { set: AuthSetId; screen: AuthScreenId } & ScreenProps) {
   const Screen = screens[set][screen];
-  // The editorial side panel for the set 1 sign-in. It shows only on wide screens, and falls back to the ASCII field.
+  // The editorial side panel for the set 1 sign-in. It fills its column from md up, and falls back to the ASCII field.
   const side =
     set === 1 && screen === "login" ? (
       <Art
         name="login-side"
         alt=""
-        sizes="(min-width: 1024px) 34vw, 0px"
-        className="h-full min-h-full w-full"
+        sizes="(min-width: 768px) 30vw, 0px"
+        className="absolute inset-0"
         fallback={<DriftField className="size-full" />}
       />
     ) : undefined;

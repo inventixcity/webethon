@@ -4,12 +4,10 @@ import { useRef, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { OwlScene } from "@/components/ascii/scenes/owl";
 import { Reveal } from "@/components/motion/reveal";
-import { Ticker } from "@/components/motion/ticker";
 import { siteConfig } from "@/config/site";
 import { AuthHeader } from "../auth-header";
 import { type LoginEvents, LoginForm } from "../forms/login-form";
 
-const tickerItems = ["Welcome back", siteConfig.tagline, "Members only", "Pick up where you stopped"];
 
 function createOwl() {
   const owl = new OwlScene();
@@ -56,8 +54,6 @@ export default function Login() {
           </div>
         </section>
       </div>
-
-      <Ticker items={tickerItems} className="border-t border-rule py-3" />
     </main>
   );
 }

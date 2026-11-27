@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Ticker } from "@/components/motion/ticker";
 import { AuthHeader } from "../auth-header";
 import { ForgotForm } from "../forms/forgot-form";
 import { PaperPlane } from "./paper-plane";
 import { PaperPlaneCanvas } from "./paper-plane-canvas";
 
-const tickerItems = ["Happens to everyone", "No harm done", "Back in a minute", "Your work is safe"];
 
 export default function Forgot() {
   const [plane] = useState(() => new PaperPlane());
@@ -30,8 +28,6 @@ export default function Forgot() {
           />
         </section>
       </div>
-
-      <Ticker items={tickerItems} reverse className="border-t border-ink py-3" />
     </main>
   );
 }

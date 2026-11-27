@@ -4,13 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { TreeScene } from "@/components/ascii/scenes/tree";
 import { Reveal } from "@/components/motion/reveal";
-import { Ticker } from "@/components/motion/ticker";
 import { useTheme } from "@/components/theme/theme";
 import { siteConfig } from "@/config/site";
 import { AuthHeader } from "../auth-header";
 import { type SignupProgress, SignupForm } from "../forms/signup-form";
-
-const tickerItems = ["Open an account", siteConfig.tagline, "Four lines", "One minute"];
 
 export default function Signup() {
   const [tree] = useState(() => new TreeScene());
@@ -31,7 +28,7 @@ export default function Signup() {
     <main className="flex min-h-dvh flex-col">
       <AuthHeader index="02" section="Membership" />
 
-      <div className="grid flex-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)_3rem]">
+      <div className="grid flex-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <section className="flex flex-col gap-6 border-rule px-5 pt-8 pb-5 md:px-8 lg:border-r">
           <div>
             <h1 className="text-[clamp(2.5rem,4vw,3.75rem)] leading-none font-semibold tracking-[-0.03em]">
@@ -45,16 +42,6 @@ export default function Signup() {
         </section>
 
         <SignupForm onProgress={onProgress} />
-
-        {/* Absolute, so the marquee's length never sets the height of the page. */}
-        <div className="relative hidden border-l border-rule lg:block">
-          <Ticker
-            vertical
-            items={tickerItems}
-            duration={60}
-            className="absolute inset-0 justify-center overflow-hidden"
-          />
-        </div>
       </div>
     </main>
   );

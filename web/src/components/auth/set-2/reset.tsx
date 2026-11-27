@@ -4,12 +4,10 @@ import { useCallback, useState } from "react";
 import { AsciiCanvas } from "@/components/ascii/ascii-canvas";
 import { KeyScene } from "@/components/ascii/scenes/key";
 import { Reveal } from "@/components/motion/reveal";
-import { Ticker } from "@/components/motion/ticker";
 import { siteConfig } from "@/config/site";
 import { AuthHeader } from "../auth-header";
 import { ResetForm } from "../forms/reset-form";
 
-const tickerItems = ["New key", "Same door", siteConfig.tagline, "Keep it somewhere safe"];
 
 export default function Reset() {
   const [lock] = useState(() => new KeyScene());
@@ -38,7 +36,6 @@ export default function Reset() {
             <AsciiCanvas scene={lock} className="absolute inset-0" />
           </div>
         </div>
-        <Ticker items={tickerItems} className="border-t border-rule py-3" />
       </section>
 
       <ResetForm onValues={onValues} />

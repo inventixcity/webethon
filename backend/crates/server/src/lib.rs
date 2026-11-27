@@ -50,7 +50,6 @@ pub fn build_router(registry: Arc<records::EntityRegistry>) -> Router<AppState> 
         .merge(exam_resilience::router())
         .merge(exam_integrity::router())
         .merge(exam_analytics::router())
-        .merge(ai::router())
         // Optional AI grading suggestions remain available; unused product routers are not mounted.
         .layer(Extension(registry));
     // Browsers use the same-origin proxy. For other origins, add tower_http::cors with
